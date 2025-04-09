@@ -1,0 +1,22 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Replace API keys
+        run: |
+          find public -type f -name "*.js" -exec sed -i "s/__FIREBASE_API_KEY__/${{ secrets.FIREBASE_API_KEY }}/g" {} \;
+          
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: public
