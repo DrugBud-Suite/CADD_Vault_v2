@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Computational Chemistry Packages</title>
+	<meta name="description" content="Browse and rate computational chemistry software packages">
+
+	<!-- Material Icons -->
+	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+	<!-- Google Fonts -->
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+	<!-- Custom CSS -->
+	<link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+	<header>
+		<div class="container">
+			<div class="header-content">
+				<h1>Computational Chemistry Packages</h1>
+				<div class="search-container">
+					<input type="text" id="search-input" placeholder="Search packages...">
+					<button id="search-btn">
+						<span class="material-icons">search</span>
+					</button>
+				</div>
+			</div>
+		</div>
+	</header>
+
+	<main>
+		<div class="container">
+			<div class="filters-container">
+				<h2>Filters</h2>
+				<div class="filter-group">
+					<h3>Tags</h3>
+					<div id="tags-filter" class="tag-cloud"></div>
+				</div>
+				<div class="filter-group">
+					<h3>Sort By</h3>
+					<select id="sort-select">
+						<option value="name-asc">Name (A-Z)</option>
+						<option value="name-desc">Name (Z-A)</option>
+						<option value="stars-desc">GitHub Stars (High to Low)</option>
+						<option value="citations-desc">Citations (High to Low)</option>
+						<option value="rating-desc">User Rating (High to Low)</option>
+						<option value="updated-desc">Recently Updated</option>
+					</select>
+				</div>
+			</div>
+
+			<div class="packages-container">
+				<h2>Packages <span id="packages-count">(0)</span></h2>
+				<div id="packages-grid"></div>
+				<div id="loading-indicator">Loading packages...</div>
+				<div id="no-results" style="display: none;">No packages found matching your criteria.</div>
+			</div>
+		</div>
+	</main>
+
+	<!-- Package Detail Modal -->
+	<div id="package-modal" class="modal">
+		<div class="modal-content">
+			<span class="close-modal">&times;</span>
+			<div id="package-detail-content"></div>
+		</div>
+	</div>
+
+	<footer>
+		<div class="container">
+			<p>&copy; 2025 Computational Chemistry Packages Database</p>
+		</div>
+	</footer>
+
+	<!-- Firebase App (the core Firebase SDK) -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.6.0/firebase-app.js"></script>
+
+	<!-- Firebase services -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.6.0/firebase-firestore.js"></script>
+
+	<!-- Application Scripts -->
+	<script src="js/firebase-config.js"></script>
+	<script src="js/packages.js"></script>
+	<script src="js/app.js"></script>
+</body>
+
+</html>
