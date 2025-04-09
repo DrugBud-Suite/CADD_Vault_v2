@@ -26,7 +26,7 @@ console.log("Firebase config loaded:", firebaseConfig);
 console.log('API Key in config:', firebaseConfig.apiKey);
 
 // Validate API key before proceeding
-if (firebaseConfig.apiKey === "AIzaSyDWA7UCprKOEWlaIoSbw-_EcNM9PIO4wow" || !firebaseConfig.apiKey) {
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "missing-api-key") {
 	const error = new Error("Firebase API key is missing or not replaced. Check build configuration.");
 	const errorInfo = errorHandler.handleFirebaseInitError(error);
 
