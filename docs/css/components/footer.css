@@ -1,0 +1,64 @@
+/* 
+===============
+Footer Component Styles
+===============
+*/
+
+.main-footer {
+	background-color: var(--bg-footer);
+	color: var(--color-gray-400);
+	padding: var(--spacing-8) 0;
+}
+
+.footer-content {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--spacing-4);
+	margin-bottom: var(--spacing-6);
+}
+
+.footer-logo {
+	font-size: var(--text-xl);
+	font-weight: var(--font-bold);
+	color: var(--color-white);
+}
+
+.footer-links {
+	display: flex;
+	gap: var(--spacing-6);
+}
+
+.footer-links a {
+	color: var(--color-gray-400);
+	text-decoration: none;
+	font-size: var(--text-sm);
+	transition: all var(--transition-fast);
+}
+
+.footer-links a:hover {
+	color: var(--color-white);
+}
+
+.footer-bottom {
+	text-align: center;
+	font-size: var(--text-xs);
+	color: var(--color-gray-500);
+	padding-top: var(--spacing-4);
+	border-top: 1px solid var(--color-gray-700);
+}
+
+@media (max-width: 768px) {
+	.footer-content {
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+	}
+
+	.footer-links {
+		gap: var(--spacing-4);
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+}

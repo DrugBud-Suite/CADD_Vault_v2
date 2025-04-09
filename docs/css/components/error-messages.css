@@ -1,0 +1,102 @@
+/* 
+===============
+Error Messages Styles
+===============
+*/
+
+.error-message {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: var(--spacing-8);
+	text-align: center;
+	max-width: 600px;
+	margin: 0 auto;
+  }
+  
+  .error-icon {
+	font-size: 48px;
+	color: var(--color-danger);
+	margin-bottom: var(--spacing-4);
+  }
+  
+  .error-message h3 {
+	font-size: var(--text-xl);
+	font-weight: var(--font-semibold);
+	margin-bottom: var(--spacing-2);
+	color: var(--text-primary);
+  }
+  
+  .error-message p {
+	color: var(--text-secondary);
+	margin-bottom: var(--spacing-4);
+	line-height: var(--line-height-relaxed);
+  }
+  
+  .error-details {
+	font-size: var(--text-sm);
+	color: var(--text-secondary);
+	margin-bottom: var(--spacing-6);
+	padding: var(--spacing-4);
+	background-color: var(--color-gray-100);
+	border-radius: var(--radius-md);
+	width: 100%;
+  }
+  
+  /* Technical error details (for development mode) */
+  .error-technical {
+	width: 100%;
+	max-height: 200px;
+	overflow-y: auto;
+	padding: var(--spacing-4);
+	margin-bottom: var(--spacing-6);
+	background-color: var(--color-gray-800);
+	color: var(--color-gray-100);
+	border-radius: var(--radius-md);
+	font-family: var(--font-family-mono);
+	font-size: var(--text-xs);
+	text-align: left;
+	white-space: pre-wrap;
+  }
+  
+  .error-actions {
+	display: flex;
+	gap: var(--spacing-4);
+	margin-top: var(--spacing-4);
+  }
+  
+  /* Warning message variation */
+  .warning-message .error-icon {
+	color: var(--color-warning);
+  }
+  
+  /* Different error types */
+  .error-firebase .error-icon {
+	color: #F57C00; /* Firebase orange */
+  }
+  
+  .error-network .error-icon {
+	color: var(--color-info);
+  }
+  
+  .error-data .error-icon {
+	color: var(--color-secondary);
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 640px) {
+	.error-message {
+	  padding: var(--spacing-4);
+	}
+	
+	.error-actions {
+	  flex-direction: column;
+	  width: 100%;
+	  gap: var(--spacing-3);
+	}
+	
+	.error-actions button {
+	  width: 100%;
+	}
+  }

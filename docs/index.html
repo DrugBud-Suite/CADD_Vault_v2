@@ -1,91 +1,176 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Computational Chemistry Packages</title>
-	<meta name="description" content="Browse and rate computational chemistry software packages">
-
-	<!-- Material Icons -->
-	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-
+	<title>CADD Vault | Computational Chemistry Resources</title>
+	<meta name="description" content="Discover and rate computational chemistry software packages and resources">
 	<!-- Google Fonts -->
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-	<!-- Custom CSS -->
+	<!-- Material Icons -->
+	<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+	
+	<!-- Global CSS -->
 	<link rel="stylesheet" href="css/styles.css">
+	<link rel="stylesheet" href="css/components/landing.css">
+	<link rel="stylesheet" href="css/components/error-messages.css">
 </head>
-
 <body>
-	<header>
-		<div class="container">
-			<div class="header-content">
-				<h1>Computational Chemistry Packages</h1>
-				<div class="search-container">
-					<input type="text" id="search-input" placeholder="Search packages...">
-					<button id="search-btn">
-						<span class="material-icons">search</span>
-					</button>
+	<div class="landing-page">
+		<header>
+			<div class="container">
+				<nav>
+					<div class="logo">CADD Vault</div>
+					<div class="nav-links">
+						<a href="packages.html" class="nav-link">Browse Packages</a>
+						<a href="#about" class="nav-link">About</a>
+						<a href="https://github.com/your-username/cadd-vault" target="_blank" class="nav-link">GitHub</a>
+					</div>
+				</nav>
+				</div>
+				</header>
+				<section class="hero">
+					<div class="container">
+						<div class="hero-content">
+							<h1>Discover & Explore<br>Computational Chemistry Tools</h1>
+							<p class="hero-subtitle">
+								A curated repository of over 1,500 computational chemistry packages,
+								libraries, and resources for researchers and developers.
+							</p>
+							<div class="hero-actions">
+								<a href="packages.html" class="btn btn-primary">Browse Packages</a>
+								<a href="#popular-tags" class="btn btn-outline">Explore Tags</a>
+							</div>
+						</div>
+						<div class="hero-visual">
+							<div class="molecules-graphic">
+								<!-- SVG molecule visualization will go here -->
+								<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" class="molecule-svg">
+									<!-- Simplified molecule visualization -->
+									<circle cx="200" cy="200" r="30" class="atom atom-center" />
+									<circle cx="120" cy="150" r="20" class="atom atom-1" />
+									<circle cx="280" cy="150" r="20" class="atom atom-2" />
+									<circle cx="120" cy="250" r="20" class="atom atom-3" />
+									<circle cx="280" cy="250" r="20" class="atom atom-4" />
+				
+									<line x1="200" y1="200" x2="120" y2="150" class="bond" />
+									<line x1="200" y1="200" x2="280" y2="150" class="bond" />
+									<line x1="200" y1="200" x2="120" y2="250" class="bond" />
+									<line x1="200" y1="200" x2="280" y2="250" class="bond" />
+									</svg>
+									</div>
+									</div>
+									</div>
+									</section>
+									<section id="features" class="features">
+										<div class="container">
+				<h2>Find the Perfect Tools for Your Research</h2>
+				<div class="features-grid">
+					<div class="feature-card">
+						<span class="material-icons-round feature-icon">search</span>
+						<h3>Discover</h3>
+						<p>Search through our extensive database of computational chemistry packages.</p>
+					</div>
+					<div class="feature-card">
+						<span class="material-icons-round feature-icon">filter_alt</span>
+						<h3>Filter</h3>
+						<p>Narrow down options using tags, popularity, and other criteria.</p>
+					</div>
+					<div class="feature-card">
+						<span class="material-icons-round feature-icon">star</span>
+						<h3>Rate</h3>
+						<p>Contribute to the community by rating and reviewing packages.</p>
+					</div>
+					</div>
+			</div>
+		</section>
+		<section id="popular-tags" class="popular-tags">
+			<div class="container">
+				<h2>Popular Categories</h2>
+				<div class="tags-container" id="landing-tags">
+					<!-- Tags will be inserted here by JavaScript -->
+				</div>
+				<div class="section-action">
+					<a href="packages.html" class="btn btn-primary">View All Categories</a>
 				</div>
 			</div>
-		</div>
-	</header>
-
-	<main>
-		<div class="container">
-			<div class="filters-container">
-				<h2>Filters</h2>
-				<div class="filter-group">
-					<h3>Tags</h3>
-					<div id="tags-filter" class="tag-cloud"></div>
-				</div>
-				<div class="filter-group">
-					<h3>Sort By</h3>
-					<select id="sort-select">
-						<option value="name-asc">Name (A-Z)</option>
-						<option value="name-desc">Name (Z-A)</option>
-						<option value="stars-desc">GitHub Stars (High to Low)</option>
-						<option value="citations-desc">Citations (High to Low)</option>
-						<option value="rating-desc">User Rating (High to Low)</option>
-						<option value="updated-desc">Recently Updated</option>
-					</select>
-				</div>
+		</section>
+		
+		<section id="about" class="about">
+			<div class="container">
+				<h2>About CADD Vault</h2>
+				<p>
+					CADD Vault is a comprehensive repository of computational chemistry software packages,
+					libraries, and resources. Our goal is to help researchers, students, and professionals
+					discover tools that can accelerate their work in drug discovery, molecular modeling,
+					and other computational chemistry domains.
+				</p>
+				<p>
+					The database includes information about GitHub repositories, citations,
+					documentation, and user ratings to help you make informed decisions about which
+					tools to use for your specific needs.
+				</p>
 			</div>
-
-			<div class="packages-container">
-				<h2>Packages <span id="packages-count">(0)</span></h2>
-				<div id="packages-grid"></div>
-				<div id="loading-indicator">Loading packages...</div>
-				<div id="no-results" style="display: none;">No packages found matching your criteria.</div>
-			</div>
-		</div>
-	</main>
-
-	<!-- Package Detail Modal -->
-	<div id="package-modal" class="modal">
-		<div class="modal-content">
-			<span class="close-modal">&times;</span>
-			<div id="package-detail-content"></div>
-		</div>
+		</section>
+		<footer>
+			<div class="container">
+				<div class="footer-content">
+					<div class="footer-logo">CADD Vault</div>
+					<div class="footer-links">
+						<a href="packages.html">Packages</a>
+						<a href="#about">About</a>
+						<a href="https://github.com/your-username/cadd-vault" target="_blank">GitHub</a>
+					</div>
+				</div>
+				<div class="footer-bottom">
+					<p>&copy; 2025 CADD Vault - Computational Chemistry Package Database</p>
+				</div>
+				</div>
+				</footer>
 	</div>
-
-	<footer>
-		<div class="container">
-			<p>&copy; 2025 Computational Chemistry Packages Database</p>
-		</div>
-	</footer>
-
-	<!-- Firebase App (the core Firebase SDK) -->
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.6.0/firebase-app.js"></script>
-
-	<!-- Firebase services -->
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.6.0/firebase-firestore.js"></script>
-
+	<!-- Before the Firebase scripts -->
+	<script src="js/utils/ErrorHandler.js"></script>
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+	
 	<!-- Application Scripts -->
 	<script src="js/firebase-config.js"></script>
-	<script src="js/packages.js"></script>
-	<script src="js/app.js"></script>
-</body>
+	<script src="js/services/PackagesService.js"></script>
+	<script>
+		// Simple script to load popular tags for the landing page
+		document.addEventListener('DOMContentLoaded', async function () {
+			// Initialize Firebase from firebase-config.js
+			if (typeof db === 'undefined') {
+				console.error('Firebase database not initialized');
+				return;
+			}
 
+			try {
+				// Get the packages service
+				const packagesService = new PackagesService(db);
+
+				// Get the top tags
+				const topTags = await packagesService.getTopTags(15);
+
+				// Display the top tags
+				const tagsContainer = document.getElementById('landing-tags');
+				topTags.forEach(tag => {
+					const tagElement = document.createElement('a');
+					tagElement.href = `packages.html?tag=${encodeURIComponent(tag.name)}`;
+					tagElement.className = 'tag';
+					tagElement.innerHTML = `
+	                        <span class="tag-name">${tag.name}</span>
+	                        <span class="tag-count">${tag.count}</span>
+	                    `;
+					tagsContainer.appendChild(tagElement);
+				});
+			} catch (error) {
+				console.error('Error loading tags:', error);
+			}
+		});
+				</script>
+</body>
 </html>

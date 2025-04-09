@@ -13,7 +13,7 @@ const errorHandler = new ErrorHandler(isDevelopment);
 let loadingIndicator = document.getElementById('loading-indicator');
 
 const firebaseConfig = {
-	apiKey: "__FIREBASE_API_KEY__",
+	apiKey: "AIzaSyDWA7UCprKOEWlaIoSbw-_EcNM9PIO4wow",
 	authDomain: "cadd-vault-f8fc0.firebaseapp.com",
 	projectId: "cadd-vault-f8fc0",
 	storageBucket: "cadd-vault-f8fc0.firebasestorage.app",
@@ -26,7 +26,7 @@ console.log("Firebase config loaded:", firebaseConfig);
 console.log('API Key in config:', firebaseConfig.apiKey);
 
 // Validate API key before proceeding
-if (firebaseConfig.apiKey === "__FIREBASE_API_KEY__" || !firebaseConfig.apiKey) {
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "missing-api-key") {
 	const error = new Error("Firebase API key is missing or not replaced. Check build configuration.");
 	const errorInfo = errorHandler.handleFirebaseInitError(error);
 
