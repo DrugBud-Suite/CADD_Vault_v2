@@ -1,0 +1,160 @@
+/* index.css */
+/* MUI's CssBaseline and ThemeProvider handle most base styles,
+   but we define global CSS custom properties and base typography here. */
+
+:root {
+	--font-family-sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+		'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+		sans-serif;
+	/* If using Poppins for headings (not in current plan): */
+	/* --font-family-headings: 'Poppins', sans-serif; */
+
+	/* Updated Color Palette */
+	--color-primary: #3B82F6;
+	--color-primary-dark: #2563EB;
+	/* For hover states */
+	--color-accent: #F59E0B;
+	--color-accent-dark: #D97706;
+
+	--color-text: #1F2937;
+	/* Main text */
+	--color-text-secondary: #4B5563;
+	/* Lighter text */
+	--color-background: #F3F4F6;
+	/* App background */
+	--color-surface: #FFFFFF;
+	/* Card/element background */
+	--color-border: #D1D5DB;
+	/* Borders and dividers */
+
+	--color-success: #10B981;
+	--color-error: #EF4444;
+	--color-warning: #FBBF24;
+
+	/* Shadows */
+	--shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+	--shadow-medium: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+	--shadow-large: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+body {
+	margin: 0;
+	font-family: var(--font-family-sans-serif);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	background-color: var(--color-background);
+	color: var(--color-text);
+	line-height: 1.6;
+	/* Default line height for better readability */
+}
+
+/* Headings */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	/* If using a separate heading font: font-family: var(--font-family-headings); */
+	margin-top: 1.5em;
+	/* Add some space above headings */
+	margin-bottom: 0.5em;
+	/* Reduce space below headings */
+	font-weight: 600;
+	/* Semi-bold for headings by default (MUI theme will override for specific levels) */
+	line-height: 1.2;
+	/* Tighter line height for headings */
+	color: var(--color-text);
+	/* Or a slightly darker shade if preferred */
+}
+
+h1 {
+	font-size: 2.441rem;
+	/* Example: Major Third scale (1.250) from 1rem base */
+	font-weight: 700;
+	/* Bolder for h1 */
+}
+
+h2 {
+	font-size: 1.953rem;
+	font-weight: 700;
+}
+
+h3 {
+	font-size: 1.563rem;
+	font-weight: 600;
+}
+
+h4 {
+	font-size: 1.25rem;
+	font-weight: 600;
+}
+
+h5 {
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+h6 {
+	font-size: 0.8rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	/* Optional for smaller utility headings */
+	letter-spacing: 0.05em;
+	/* Optional */
+}
+
+/* Paragraphs / Body Text */
+p {
+	font-size: 1rem;
+	/* Base size (16px) */
+	line-height: 1.6;
+	/* For readability */
+	margin-bottom: 1em;
+	font-weight: 400;
+	/* Regular weight */
+}
+
+/* Links */
+a {
+	color: var(--color-primary);
+	/* Use your primary color */
+	text-decoration: none;
+	/* Modern links often have no underline by default */
+	transition: color 0.2s ease-in-out;
+}
+
+a:hover,
+a:focus {
+	text-decoration: underline;
+	/* Underline on hover/focus for accessibility */
+	color: var(--color-primary-dark);
+}
+
+/* Small text / captions */
+small {
+	font-size: 0.8rem;
+}
+
+/* Lists */
+ul,
+ol {
+	margin-bottom: 1em;
+	padding-left: 1.5em;
+	/* Standard indent */
+}
+
+li {
+	margin-bottom: 0.5em;
+}
+
+/* Input fields, buttons etc. should inherit font or have it set explicitly */
+input,
+select,
+textarea,
+button {
+	font-family: inherit;
+	/* Ensures they use 'Inter' */
+	font-size: 1rem;
+	/* Other base styling for form elements can go here (MUI will also style these) */
+}

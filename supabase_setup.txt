@@ -1,0 +1,151 @@
+## packages table
+
+# definition
+
+create table public.packages (
+  id uuid not null,
+  average_rating double precision null default '0'::double precision,
+  category1 text null,
+  citations bigint null,
+  description text null,
+  folder1 text null,
+  github_owner text null,
+  github_repo text null,
+  github_stars bigint null,
+  jif double precision null,
+  journal text null,
+  last_commit timestamp with time zone null,
+  last_commit_ago text null,
+  license text null,
+  link text null,
+  page_icon text null,
+  primary_language text null,
+  publication text null,
+  ratings_count bigint null default '0'::bigint,
+  ratings_sum bigint null,
+  repo_link text null,
+  webserver text null,
+  tags jsonb null,
+  package_name text null,
+  constraint packages_pkey primary key (id)
+) TABLESPACE pg_default;
+
+# RLS policies
+
+create policy "Enable read access for all users"
+on "public"."packages"
+for SELECT
+to public
+using (
+  true
+);
+
+create policy "Enable ALL for admins only"
+on "public"."packages"
+for ALL
+to public
+using (
+  (auth.uid() IN ( SELECT profiles.id
+   FROM profiles
+  WHERE (profiles.is_admin = true)))
+);
+
+create policy "Allow authenticated users to insert ratings"
+on "public"."packages"
+for INSERT
+to public
+with check (
+  (auth.role() = 'authenticated'::text)
+);
+
+## ratings table
+
+# definition and triggers
+
+create table public.ratings (
+  created_at timestamp with time zone not null default now(),
+  user_id uuid not null,
+  package_id uuid not null,
+  rating bigint not null,
+  id uuid not null default gen_random_uuid (),
+  constraint ratings_pkey primary key (id),
+  constraint user_package_unique unique (user_id, package_id),
+  constraint ratings_package_id_fkey foreign KEY (package_id) references packages (id) on update CASCADE on delete CASCADE,
+  constraint ratings_user_id_fkey foreign KEY (user_id) references auth.users (id) on update CASCADE on delete CASCADE,
+  constraint ratings_rating_check check (
+    (
+      (rating >= 1)
+      and (rating <= 5)
+    )
+  )
+) TABLESPACE pg_default;
+
+create trigger ratings_insert_trigger
+after INSERT on ratings for EACH row
+execute FUNCTION update_package_ratings ();
+
+create trigger ratings_update_trigger
+after
+update on ratings for EACH row
+execute FUNCTION update_package_ratings ();
+
+create trigger ratings_delete_trigger
+after DELETE on ratings for EACH row
+execute FUNCTION update_package_ratings ();
+
+# RLS policies
+
+create policy "Enable delete for users based on user_id"
+on "public"."ratings"
+for DELETE
+to public
+using (
+  ((auth.uid())::text = user_id)
+);
+
+create policy "Enable delete for users based on user_id"
+on "public"."ratings"
+for UPDATE
+to public
+using (
+  ((auth.uid())::text = user_id)
+);
+
+create policy "Enable delete for users based on user_id"
+on "public"."ratings"
+for INSERT
+to public
+using (
+  ((auth.uid())::text = user_id)
+);
+
+create policy "Enable read access for all users"
+on "public"."ratings"
+for SELECT
+to public
+using (
+  true
+);
+
+#package_ratings_summary view
+
+create view public.package_ratings_summary as
+select
+  ratings.package_id,
+  avg(ratings.rating)::numeric(3, 2) as average_rating,
+  count(*)::integer as ratings_count
+from
+  ratings
+group by
+  ratings.package_id;
+
+#update_package_ratings FUNCTION
+
+BEGIN
+  UPDATE public.packages
+  SET
+    average_rating = (SELECT AVG(rating) FROM public.ratings WHERE package_id = NEW.package_id),
+    ratings_count = (SELECT COUNT(*) FROM public.ratings WHERE package_id = NEW.package_id)
+  WHERE id = NEW.package_id;
+  RETURN NEW;
+END;
