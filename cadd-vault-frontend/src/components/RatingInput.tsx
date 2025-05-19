@@ -214,7 +214,7 @@ const RatingInput: React.FC<RatingInputProps> = ({
 				}}
 			>
 				<Box sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-					<Typography variant="subtitle2" gutterBottom>Your Rating</Typography>
+					<Typography variant="subtitle2" gutterBottom sx={{ color: (theme) => theme.palette.text.primary }}>Your Rating</Typography>
 					<Rating
 						name={`rating-${packageId}`}
 						value={popoverRating}
