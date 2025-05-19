@@ -1,15 +1,19 @@
 // src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../supabase'; // Import Supabase client
-import { Session, User, AuthError, SignInWithPasswordCredentials, SignUpWithPasswordCredentials } from '@supabase/supabase-js'; // Import Supabase types
+import { Session, User, AuthError, SignUpWithPasswordCredentials } from '@supabase/supabase-js'; // Import Supabase types
 
+// Re-defining EmailSignUpCredentials as it was in the original file,
+// Supabase's SignUpWithPasswordCredentials might not directly match if custom options were expected.
+// However, it's better to align with Supabase types if possible.
+// For this example, I'll use the interface as defined in your original file.
 interface EmailSignUpCredentials {
 	email: string;
 	password: string;
 	options?: {
 		data?: object;
 		captchaToken?: string;
-		channel?: "sms" | "whatsapp";
+		channel?: "sms" | "whatsapp"; // Optional: if you were using phone signup elsewhere
 	};
 }
 
@@ -46,102 +50,58 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-	const [session, setSession] = useState<Session | null>(null);
 	const [currentUser, setCurrentUser] = useState<User | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [isAdmin, setIsAdmin] = useState(false);
+	const [session, setSession] = useState<Session | null>(null);
+	const [loading, setLoading] = useState<boolean>(true); // Start loading as true
+	const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
-	// Function to check admin status from profiles table
-	const checkAdminStatus = async (userId: string | undefined) => {
-		if (!userId) return false;
-		const { data, error } = await supabase
-			.from('profiles')
-			.select('is_admin')
-			.eq('id', userId)
-			.maybeSingle(); // Changed from .single() to .maybeSingle()
-
-		if (error) {
-			console.error("Error fetching admin status:", error.message);
+	// Updated function to check admin status by calling the RPC function
+	const checkAdminStatus = async (userId: string | undefined): Promise<boolean> => {
+		if (!userId) {
+			setIsAdmin(false); // Explicitly set isAdmin to false if no user
 			return false;
 		}
-		return data?.is_admin || false;
-	};
+		try {
+			// console.log("Calling is_current_user_admin RPC for user:", userId);
+			const { data, error } = await supabase.rpc('is_current_user_admin');
 
-	// Sign up function
-	const signUpWithEmail = async (credentials: EmailSignUpCredentials) => {
-		setLoading(true);
+			if (error) {
+				console.error("Error calling is_current_user_admin RPC:", error.message);
+				setIsAdmin(false); // Set to false on error
+				return false;
+			}
+			// The RPC function returns a boolean directly
+			const adminStatus = data === true;
+			// console.log("Admin status from RPC:", adminStatus);
+			setIsAdmin(adminStatus); // Update state
+			return adminStatus;
 
-		if (!credentials.options?.captchaToken) {
-			setLoading(false);
-			return { error: { message: "CAPTCHA token is missing." } as AuthError };
+		} catch (e: any) {
+			console.error("Exception calling is_current_user_admin RPC:", e.message);
+			setIsAdmin(false); // Set to false on exception
+			return false;
 		}
-
-		const { data, error } = await supabase.auth.signUp({
-			email: credentials.email,
-			password: credentials.password,
-			options: {
-				captchaToken: credentials.options.captchaToken,
-				...(credentials.options?.data && { data: credentials.options.data }), // Include other options data if any
-			},
-		});
-		// Session change will be handled by onAuthStateChange listener
-		setLoading(false);
-		if (error) console.error("Error signing up:", error.message);
-		return { data, error } as { data: { user: User | null, session: Session | null } | null, error: AuthError | null };
-	};
-
-	// Sign in function
-	const signInWithEmail = async (credentials: EmailSignInCredentials) => {
-		setLoading(true);
-
-		if (!credentials.options?.captchaToken) {
-			setLoading(false);
-			return { error: { message: "CAPTCHA token is missing." } as AuthError };
-		}
-
-		const { data, error } = await supabase.auth.signInWithPassword({
-			email: credentials.email,
-			password: credentials.password,
-			options: {
-				captchaToken: credentials.options.captchaToken,
-			},
-		});
-		// Session change will be handled by onAuthStateChange listener
-		setLoading(false);
-		if (error) console.error("Error signing in:", error.message);
-		return { data, error };
-	};
-
-	// Logout function
-	const logout = async () => {
-		setLoading(true);
-		const { error } = await supabase.auth.signOut();
-		// Session change will be handled by onAuthStateChange listener
-		setLoading(false);
-		if (error) console.error("Error signing out:", error.message);
-		return { error };
 	};
 
 	useEffect(() => {
 		setLoading(true);
 		// Check for initial session
-		supabase.auth.getSession().then(async ({ data: { session } }) => {
-			setSession(session);
-			const user = session?.user ?? null;
+		supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+			setSession(initialSession);
+			const user = initialSession?.user ?? null;
 			setCurrentUser(user);
-			const admin = await checkAdminStatus(user?.id);
-			setIsAdmin(admin);
+			await checkAdminStatus(user?.id); // Await the admin status check
 			setLoading(false); // Initial check done
 
 			// Set up the auth state change listener
 			const { data: { subscription } } = supabase.auth.onAuthStateChange(
-				async (_event, session) => {
-					setSession(session);
-					const user = session?.user ?? null;
-					setCurrentUser(user);
-					const admin = await checkAdminStatus(user?.id);
-					setIsAdmin(admin);
-					// Don't set loading to false here again, only on initial load
+				async (_event, currentSession) => {
+					setSession(currentSession);
+					const currentUserFromEvent = currentSession?.user ?? null;
+					setCurrentUser(currentUserFromEvent);
+					// No need to setLoading(true) here as it might cause flashes,
+					// admin status will update reactively.
+					await checkAdminStatus(currentUserFromEvent?.id); // Await the admin status check
 				}
 			);
 
@@ -151,10 +111,54 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 			};
 		}).catch(error => {
 			console.error("Error getting initial session:", error);
+			setIsAdmin(false); // Ensure isAdmin is false on error
+			setCurrentUser(null);
+			setSession(null);
 			setLoading(false);
 		});
 
 	}, []); // Empty dependency array ensures this runs only once on mount
+
+	const signUpWithEmail = async (credentials: EmailSignUpCredentials) => {
+		setLoading(true);
+	// Use Supabase's SignUpWithPasswordCredentials type for the actual call if appropriate
+		const { data, error } = await supabase.auth.signUp({
+			email: credentials.email,
+			password: credentials.password,
+			options: {
+				captchaToken: credentials.options?.captchaToken,
+				// `data` in options is for user_metadata, ensure it's structured correctly if used
+				// For now, keeping it simple based on your interface.
+			}
+		} as SignUpWithPasswordCredentials); // Type assertion may be needed if interfaces differ
+		setLoading(false);
+		if (error) {
+			console.error("Error signing up:", error.message);
+		}
+		// Session change will be handled by onAuthStateChange listener, which also calls checkAdminStatus
+		return { data, error };
+	};
+
+	const signInWithEmail = async (credentials: EmailSignInCredentials) => {
+		setLoading(true);
+		const { data, error } = await supabase.auth.signInWithPassword(credentials);
+		setLoading(false);
+		if (error) {
+			console.error("Error signing in:", error.message);
+		}
+		// Session change will be handled by onAuthStateChange listener, which also calls checkAdminStatus
+		return { data, error };
+	};
+
+	const logout = async () => {
+		setLoading(true);
+		const { error } = await supabase.auth.signOut();
+		// Session and user state will be cleared by onAuthStateChange listener
+		// which will also set isAdmin to false via checkAdminStatus(null)
+		setLoading(false);
+		if (error) console.error("Error signing out:", error.message);
+		return { error };
+	};
 
 	const value = {
 		currentUser,
@@ -166,9 +170,5 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 		isAdmin,
 	};
 
-	return (
-		<AuthContext.Provider value={value}>
-			{!loading && children}
-		</AuthContext.Provider>
-	);
+	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
