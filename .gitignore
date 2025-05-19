@@ -30,3 +30,5 @@ node_modules/
 .roo/
 .serena/
 transformed_packages.csv
+supabase/
+schema.sql
