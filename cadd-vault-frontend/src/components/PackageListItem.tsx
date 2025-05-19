@@ -50,7 +50,7 @@ const buttonStyle = {
 				: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(theme.palette.primary.main, 0.3)})`,
 		},
 		transform: 'translateY(-1px)',
-		boxShadow: (theme: Theme) => `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`, // Adjusted boxShadow alpha
+		boxShadow: (theme: Theme) => `0 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
 	}
 };
 
@@ -77,8 +77,9 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 				gap: 2,
 				py: 1.5,
 				px: 2,
-				borderRadius: 1,
-				border: 'none', // Consistent with previous state
+				borderRadius: 2,
+				border: 0,
+				overflow: 'hidden',
 				mb: 1,
 				background: (theme) => theme.palette.mode === 'dark'
 					? 'linear-gradient(135deg, rgba(30,30,30,0.8) 0%, rgba(23,23,23,0.8) 100%)'
@@ -92,8 +93,8 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 					background: (theme) => theme.palette.mode === 'dark'
 						? 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(23,23,23,0.95) 100%)'
 						: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(249,250,251,0.95) 100%)',
-					boxShadow: (theme) => `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`, // Adjusted boxShadow alpha
-					transform: 'translateY(-1px)',
+					boxShadow: (theme) => `0 0px 24px ${alpha(theme.palette.primary.main, 0.3)}`,
+					transform: 'translateY(-2px)',
 				},
 				'&:last-child': {
 					borderBottom: 'none',
@@ -111,11 +112,11 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 							to={`/package/${encodeURIComponent(pkg.id)}`}
 							underline="none" // Explicitly set to none
 							sx={{
-								fontWeight: 'medium', // Preserved from original
-								fontSize: '1rem',    // Preserved from original
+								fontWeight: 600,
+								fontSize: '1.05rem',
 								position: 'relative',
 								transition: 'all 0.2s ease-in-out',
-								color: 'text.primary',
+								color: (theme) => theme.palette.mode === 'dark' ? theme.palette.primary.light : theme.palette.primary.dark,
 								textDecoration: 'none', // Ensure no underline in base state
 								'&:hover': {
 									color: 'primary.main',
@@ -150,14 +151,13 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 							variant="body2"
 							color="text.secondary"
 							sx={{
-								mb: 1, // Margin below description
+								mb: 1.25, // Adjusted to match PackageCard
 								overflow: 'hidden',
 								textOverflow: 'ellipsis',
 								display: '-webkit-box',
 								WebkitLineClamp: 2, // Show 2 lines for description in list item
 								WebkitBoxOrient: 'vertical',
 								lineHeight: 1.5,
-								minHeight: '48px', // Assuming lineHeight 1.5 * 16px font * 2 lines = 48px. Adjust if base font size differs.
 							}}
 						>
 							{pkg.description}
@@ -187,7 +187,7 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 								size="small"
 								sx={{
 									height: '22px',
-									borderRadius: '4px',
+									borderRadius: 4,
 									bgcolor: (theme) => theme.palette.mode === 'dark'
 										? alpha(theme.palette.primary.main, 0.12)
 										: alpha(theme.palette.primary.light, 0.12),
@@ -196,7 +196,6 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 										: theme.palette.primary.main,
 									fontWeight: 500,
 									fontSize: '0.7rem',
-									// mb: 0.35, // Margin bottom handled by Stack spacing or pb on Stack
 									'&:hover': {
 										bgcolor: (theme) => theme.palette.mode === 'dark'
 											? alpha(theme.palette.primary.main, 0.18)
@@ -283,33 +282,81 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 					{pkg.github_stars !== undefined && pkg.github_stars >= 1 && (
 						<Tooltip title="GitHub Stars">
 							<Chip
-								icon={<FiStar size={14} style={{ color: alpha('#FFC107', 0.9) }} />} // warning.main equivalent
+								icon={<FiStar size={14} />}
 								label={`${pkg.github_stars}`}
 								size="small"
 								variant="outlined"
-								sx={{ borderRadius: '4px', border: 'none', bgcolor: 'transparent', '& .MuiChip-label': { px: 0.5, fontSize: '0.75rem', color: 'text.secondary' }, '& .MuiChip-icon': { ml: '4px' } }}
+								sx={{
+									borderRadius: 4,
+									border: 'none',
+									bgcolor: 'transparent',
+									'& .MuiChip-label': {
+										px: 1,
+										fontSize: '0.75rem',
+										color: 'text.secondary'
+									},
+									'& .MuiChip-icon': {
+										color: 'warning.main',
+										ml: '4px'
+									},
+									'&:hover': {
+										bgcolor: 'transparent'
+									},
+								}}
 							/>
 						</Tooltip>
 					)}
 					{pkg.last_commit_ago && (
 						<Tooltip title="Last Commit">
 							<Chip
-								icon={<FiClock size={14} style={{ color: alpha('#2196F3', 0.9) }} />} // info.main equivalent
+								icon={<FiClock size={14} />}
 								label={formatLastCommitAgo(pkg.last_commit_ago)}
 								size="small"
 								variant="outlined"
-								sx={{ borderRadius: '4px', border: 'none', bgcolor: 'transparent', '& .MuiChip-label': { px: 0.5, fontSize: '0.75rem', color: 'text.secondary' }, '& .MuiChip-icon': { ml: '4px' } }}
+								sx={{
+									borderRadius: 4,
+									border: 'none',
+									bgcolor: 'transparent',
+									'& .MuiChip-label': {
+										px: 1,
+										fontSize: '0.75rem',
+										color: 'text.secondary'
+									},
+									'& .MuiChip-icon': {
+										color: 'info.main',
+										ml: '4px'
+									},
+									'&:hover': {
+										bgcolor: 'transparent'
+									},
+								}}
 							/>
 						</Tooltip>
 					)}
 					{pkg.citations !== undefined && (
 						<Tooltip title="Citations">
 							<Chip
-								icon={<FiBookOpen size={14} style={{ color: alpha('#4CAF50', 0.9) }} />} // success.main equivalent
+								icon={<FiBookOpen size={14} />}
 								label={`${pkg.citations}`}
 								size="small"
 								variant="outlined"
-								sx={{ borderRadius: '4px', border: 'none', bgcolor: 'transparent', '& .MuiChip-label': { px: 0.5, fontSize: '0.75rem', color: 'text.secondary' }, '& .MuiChip-icon': { ml: '4px' } }}
+								sx={{
+									borderRadius: 4,
+									border: 'none',
+									bgcolor: 'transparent',
+									'& .MuiChip-label': {
+										px: 1,
+										fontSize: '0.75rem',
+										color: 'text.secondary'
+									},
+									'& .MuiChip-icon': {
+										color: 'success.main',
+										ml: '4px'
+									},
+									'&:hover': {
+										bgcolor: 'transparent'
+									},
+								}}
 							/>
 						</Tooltip>
 					)}
