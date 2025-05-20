@@ -37,3 +37,26 @@ export interface Rating {
 	rating: number; // Matches public.ratings.rating (integer)
 	created_at: string; // Matches public.ratings.created_at (timestamp with time zone)
 }
+
+export interface PackageSuggestion {
+	id: string; // UUID, primary key
+	suggested_by_user_id?: string | null; // UUID, from auth.users.id, nullable for anonymous
+	package_name: string;
+	description?: string;
+	publication_url?: string;
+	webserver_url?: string;
+	repo_url?: string;
+	link_url?: string; // General link
+	license?: string;
+	tags?: string[];
+	folder1?: string;
+	category1?: string;
+	suggestion_reason?: string;
+	status: 'pending' | 'approved' | 'rejected';
+	admin_notes?: string;
+	created_at: string; // ISO timestamp string
+	reviewed_at?: string | null; // ISO timestamp string
+	reviewed_by_admin_id?: string | null; // UUID from auth.users.id
+	// For display purposes on admin page, might join user email
+	suggester_email?: string; // Not a DB column, but useful for display
+}
