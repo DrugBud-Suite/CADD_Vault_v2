@@ -52,7 +52,7 @@ export interface PackageSuggestion {
 	folder1?: string;
 	category1?: string;
 	suggestion_reason?: string;
-	status: 'pending' | 'approved' | 'rejected';
+	status: 'pending' | 'approved' | 'rejected' | 'added';
 	admin_notes?: string;
 	created_at: string; // ISO timestamp string
 	reviewed_at?: string | null; // ISO timestamp string
