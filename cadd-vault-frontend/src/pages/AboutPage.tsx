@@ -1,5 +1,5 @@
 import React from 'react';
-import { Container, Typography, Box, Grid, Card, CardContent, Avatar, Button, Chip, ButtonProps, TypographyProps } from '@mui/material';
+import { Container, Typography, Box, Grid, Card, CardContent, Avatar, Button, Chip, ButtonProps, TypographyProps, Theme } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useThemeValue } from '../components/ThemeContext';
 import caddVaultDarkLogo from '../assets/caddvault_dark.png';
@@ -170,11 +170,20 @@ const AboutPage: React.FC = () => {
 			content: (
 				<>
 					<SectionContentText variant="body1" paragraph>
-						Request an entry via our GitHub Issues or suggest new features.
+						You can suggest new tools, software, databases, or other resources directly through our web application. Alternatively, you can request an entry via our GitHub Issues.
 					</SectionContentText>
 					<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}> {/* Use Box for better layout control of buttons */}
 						<StyledButton
 							variant="contained"
+							color="primary"
+							component={RouterLink} // Changed to RouterLink
+							to="/suggest-package"  // Link to the suggest package page
+							endIcon={<ArrowForwardIosIcon />}
+						>
+							Suggest via Webapp
+						</StyledButton>
+						<StyledButton
+							variant="outlined" // Different style for distinction
 							color="primary"
 							href="https://github.com/AntoineLac/CADD_Vault/issues/new/choose"
 							target="_blank"
@@ -182,16 +191,6 @@ const AboutPage: React.FC = () => {
 							endIcon={<ArrowForwardIosIcon />}
 						>
 							Suggest via GitHub
-						</StyledButton>
-						<StyledButton
-							variant="outlined" // Different style for distinction
-							color="primary"
-							href="https://docs.google.com/forms/d/e/1FAIpQLSfl-uEyhoT2HWnumPAFKbZyj2J62kKcMU76fBg5RzD23cgnLw/viewform?usp=sf_link"
-							target="_blank"
-							rel="noopener noreferrer"
-							endIcon={<ArrowForwardIosIcon />}
-						>
-							Suggest via Google Form
 						</StyledButton>
 					</Box>
 				</>
@@ -244,8 +243,8 @@ const AboutPage: React.FC = () => {
 						filter: darkMode ? 'drop-shadow(0 0 15px rgba(96, 165, 250, 0.5))' : 'drop-shadow(0 0 15px rgba(59, 130, 246, 0.3))',
 					}}
 				/>
-				<Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: { xs: '2.8rem', sm: '3.5rem', md: '4rem' } }}>
-					Welcome to CADD Vault
+				<Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 'bold', color: (theme: Theme) => theme.palette.mode === 'dark' ? theme.palette.text.primary : theme.palette.text.primary, fontSize: { xs: '2.8rem', sm: '3.5rem', md: '4rem' } }}>
+					Welcome to the CADD Vault
 				</Typography>
 				<Typography variant="h5" sx={{ maxWidth: '750px', margin: '0 auto', color: 'text.secondary', lineHeight: 1.6 }}>
 					Your open-source hub for cutting-edge computer-aided drug design resources, tools, and knowledge.

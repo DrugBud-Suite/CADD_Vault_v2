@@ -36,7 +36,7 @@ We welcome contributions from the community! If you have resources, tools, tutor
 
 ## Want your tool or website added?
 
-You can suggest new package directly via the webapp. Please make sure to fill all fields correctly. Your suggestions will be review by admin.
+You can suggest new packages directly via the webapp. Please make sure to fill all fields correctly. Your suggestions will be reviewed by an admin. You can also open an issue on GitHub.
 
 ## License
 
