@@ -88,7 +88,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 						? 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(23,23,23,0.95) 100%)'
 						: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(249,250,251,0.95) 100%)',
 				},
-				background: (theme: Theme) => theme.palette.mode === 'dark'
+				background: (theme) => theme.palette.mode === 'dark'
 					? 'linear-gradient(135deg, rgba(30,30,30,0.8) 0%, rgba(23,23,23,0.8) 100%)'
 					: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(249,250,251,0.8) 100%)',
 				backdropFilter: 'blur(8px)',
@@ -120,28 +120,26 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 								position: 'relative',
 								transition: 'all 0.2s ease-in-out',
 								color: 'text.primary',
-								textDecoration: 'none',
 								'&:hover': {
-									color: 'primary.main',
-									transform: 'translateY(-1px)',
-									textDecoration: 'none', // Ensure no underline on hover
+									color: (theme) => theme.palette.mode === 'dark' ? theme.palette.primary.main : theme.palette.primary.main,
+									transform: 'translateY(-1px)', // Subtle upward movement on hover
 								},
 								'&::after': {
 									content: '""',
 									position: 'absolute',
 									width: '100%',
 									transform: 'scaleX(0)',
-									height: '1.5px', // Changed from 1px
-									bottom: '-1px',  // Changed from 0
+									height: '1px',
+									bottom: 0,
 									left: 0,
 									backgroundColor: 'primary.main',
-									transformOrigin: 'bottom left', // Changed from 'bottom right'
-									transition: 'transform 0.25s ease-out',
+									transformOrigin: 'bottom right',
+									transition: 'transform 0.25s ease-out'
 								},
 								'&:hover::after': {
 									transform: 'scaleX(1)',
-									// transformOrigin: 'bottom left' // Removed as it's set in &::after
-								},
+									transformOrigin: 'bottom left'
+								}
 							}}
 						>
 							{pkg.package_name}
@@ -248,84 +246,69 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 					(typeof pkg.citations !== 'undefined' && pkg.citations >= 0)) && (
 						<Stack direction="row" spacing={1} sx={{ pt: 1, flexWrap: 'wrap', gap: 0.75 }}>
 							{/* GitHub Stars - only shown when not null and > 0 */}
-							{typeof pkg.github_stars !== 'undefined' && pkg.github_stars > 0 && (
-								<Tooltip title="GitHub Stars" arrow>
-									<Chip
-										icon={<FiStar size={14} />}
-										label={`${pkg.github_stars}`}
-										size="small"
-										variant="outlined"
-										sx={{
-											borderRadius: 4,
-											border: 'none',
-											bgcolor: 'transparent',
-											'& .MuiChip-label': {
-												px: 1,
-												fontSize: '0.75rem',
-											},
-											'& .MuiChip-icon': {
-												color: 'warning.main',
-											},
-											'&:hover': {
-												bgcolor: 'transparent'
-											},
-										}}
-									/>
-								</Tooltip>
+						{typeof pkg.github_stars !== 'undefined' && pkg.github_stars > 0 && (
+							<Chip
+								icon={<FiStar size={14} />}
+								label={`${pkg.github_stars}`}
+								size="small"
+								variant="outlined"
+								sx={{
+									borderRadius: 4,
+										borderColor: 'divider',
+										bgcolor: (theme) => alpha(theme.palette.background.paper, 0.6),
+										'& .MuiChip-label': {
+											px: 1,
+											fontSize: '0.75rem',
+										},
+										'& .MuiChip-icon': {
+											color: 'warning.main',
+										},
+								}}
+							/>
 							)}
 
 							{/* Last Commit - only shown when not null */}
-							{pkg.last_commit_ago && (
-								<Tooltip title="Last Update" arrow>
-									<Chip
-										icon={<FiClock size={14} />}
-										label={pkg.last_commit_ago.replace(' months ago', 'mo')}
-										size="small"
-										variant="outlined"
-										sx={{
-											borderRadius: 4,
-											border: 'none',
-											bgcolor: 'transparent',
-											'& .MuiChip-label': {
-												px: 1,
-												fontSize: '0.75rem',
-											},
-											'& .MuiChip-icon': {
-												color: 'info.main',
-											},
-											'&:hover': {
-												bgcolor: 'transparent'
-											},
-										}}
-									/>
-								</Tooltip>
+						{pkg.last_commit_ago && (
+							<Chip
+								icon={<FiClock size={14} />}
+								label={pkg.last_commit_ago.replace(' months ago', 'mo')}
+								size="small"
+								variant="outlined"
+								sx={{
+									borderRadius: 4,
+										borderColor: 'divider',
+										bgcolor: (theme) => alpha(theme.palette.background.paper, 0.6),
+										'& .MuiChip-label': {
+											px: 1,
+											fontSize: '0.75rem',
+										},
+										'& .MuiChip-icon': {
+											color: 'info.main',
+										},
+								}}
+							/>
 							)}
 
 							{/* Citations - only shown when not null and >= 0 */}
-							{typeof pkg.citations !== 'undefined' && pkg.citations >= 0 && (
-								<Tooltip title="Citations" arrow>
-									<Chip
-										icon={<FiBookOpen size={14} />}
-										label={`${pkg.citations}`}
-										size="small"
-										variant="outlined"
-										sx={{
-											borderRadius: 4,
-											border: 'none',
-											bgcolor: 'transparent',
-											'& .MuiChip-label': {
-												px: 1,
-												fontSize: '0.75rem',
-											},
-											'& .MuiChip-icon': {
-												color: 'success.main',
-											},
-											'&:hover': {
-												bgcolor: 'transparent'
-											},
-										}}
-									/>
-								</Tooltip>
+						{typeof pkg.citations !== 'undefined' && pkg.citations >= 0 && (
+							<Chip
+								icon={<FiBookOpen size={14} />}
+								label={`${pkg.citations}`}
+								size="small"
+								variant="outlined"
+								sx={{
+									borderRadius: 4,
+										borderColor: 'divider',
+										bgcolor: (theme) => alpha(theme.palette.background.paper, 0.6),
+										'& .MuiChip-label': {
+											px: 1,
+											fontSize: '0.75rem',
+										},
+										'& .MuiChip-icon': {
+											color: 'success.main',
+										},
+								}}
+							/>
 							)}
 						</Stack>
 					)}
@@ -373,18 +356,16 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 											height: '22px',
 											borderRadius: 4,
 											bgcolor: (theme) => theme.palette.mode === 'dark'
-												? alpha(theme.palette.primary.main, 0.12)
-												: alpha(theme.palette.primary.light, 0.12),
-											color: (theme) => theme.palette.mode === 'dark'
-												? theme.palette.primary.light
-												: theme.palette.primary.main,
+												? alpha(theme.palette.primary.main, 0.15)
+												: alpha(theme.palette.primary.light, 0.15),
+											color: 'primary.main',
 											fontWeight: 500,
 											fontSize: '0.7rem',
-											mb: 0.35,
+											mb: 0.35, // Reduced vertical spacing between tag rows
 											'&:hover': {
 												bgcolor: (theme) => theme.palette.mode === 'dark'
-													? alpha(theme.palette.primary.main, 0.18)
-													: alpha(theme.palette.primary.light, 0.18),
+													? alpha(theme.palette.primary.main, 0.25)
+													: alpha(theme.palette.primary.light, 0.25),
 											},
 											cursor: 'pointer',
 										}}
@@ -449,18 +430,16 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 											height: '24px',
 											borderRadius: 4,
 											bgcolor: (theme) => theme.palette.mode === 'dark'
-												? alpha(theme.palette.primary.main, 0.12)
-												: alpha(theme.palette.primary.light, 0.12),
-											color: (theme) => theme.palette.mode === 'dark'
-												? theme.palette.primary.light
-												: theme.palette.primary.main,
+												? alpha(theme.palette.primary.main, 0.15)
+												: alpha(theme.palette.primary.light, 0.15),
+											color: 'primary.main',
 											fontWeight: 500,
 											fontSize: '0.7rem',
 											mb: 0.5,
 											'&:hover': {
 												bgcolor: (theme) => theme.palette.mode === 'dark'
-													? alpha(theme.palette.primary.main, 0.18)
-													: alpha(theme.palette.primary.light, 0.18),
+													? alpha(theme.palette.primary.main, 0.25)
+													: alpha(theme.palette.primary.light, 0.25),
 											},
 											cursor: 'pointer',
 										}}
