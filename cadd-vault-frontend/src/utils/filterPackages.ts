@@ -54,7 +54,7 @@ export function filterPackages(
 				// Search in tags if available
 				(pkg.tags && pkg.tags.some(tag => tag.toLowerCase().includes(searchLower))) ||
 				// Search in GitHub owner/repo if available
-				(pkg.code && pkg.code.toLowerCase().includes(searchLower));
+				(pkg.repo_link && pkg.repo_link.toLowerCase().includes(searchLower));
 
 			if (!matchesSearch) return false;
 		}

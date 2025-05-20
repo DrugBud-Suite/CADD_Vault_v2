@@ -1,5 +1,5 @@
 import React from 'react';
-import { Container, Typography, List, ListItem, ListItemText, Box, Grid, Card, CardContent, Avatar, Button, Chip, ButtonProps, TypographyProps } from '@mui/material'; // Added ButtonProps, TypographyProps
+import { Container, Typography, Box, Grid, Card, CardContent, Avatar, Button, Chip, ButtonProps, TypographyProps } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useThemeValue } from '../components/ThemeContext';
 import caddVaultDarkLogo from '../assets/caddvault_dark.png';

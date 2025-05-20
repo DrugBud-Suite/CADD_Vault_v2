@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Modal, Box, Typography, TextField, Button, Alert } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import { SignUpWithPasswordCredentials } from '@supabase/supabase-js';

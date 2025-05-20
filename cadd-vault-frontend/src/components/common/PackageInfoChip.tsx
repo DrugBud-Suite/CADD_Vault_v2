@@ -1,10 +1,9 @@
 // src/components/common/PackageInfoChip.tsx
 import React from 'react';
 import { Chip, Tooltip, SxProps, Theme } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 
 interface PackageInfoChipProps {
-	icon: React.ReactNode;
+	icon: React.ReactElement;
 	label: string | number;
 	tooltipTitle: string;
 	iconColor?: string; // e.g., 'warning.main', 'info.main', 'success.main'

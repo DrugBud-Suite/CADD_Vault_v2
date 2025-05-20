@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
 	Box,
 	Rating,
@@ -111,7 +111,7 @@ const RatingInput: React.FC<RatingInputProps> = ({
 	};
 
 	const handleRatingChange = async (
-		event: React.SyntheticEvent,
+		_event: React.SyntheticEvent,
 		newValue: number | null,
 	) => {
 		if (!currentUser || newValue === null) return; // Check currentUser

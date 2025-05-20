@@ -24,7 +24,6 @@ const EditPackagePage: React.FC = () => {
 	const [initialDataLoaded, setInitialDataLoaded] = useState<boolean>(false);
 	const [loading, setLoading] = useState<boolean>(false); // For submit action
 	const [error, setError] = useState<string | null>(null);
-	const [tagInput, setTagInput] = useState<string>('');
 	const [existingTags, setExistingTags] = useState<string[]>([]);
 	const [tagsLoading, setTagsLoading] = useState<boolean>(false);
 
@@ -122,7 +121,7 @@ const EditPackagePage: React.FC = () => {
 		}));
 	};
 
-	const handleTagsChange = (event: React.SyntheticEvent, newValue: string[]) => {
+	const handleTagsChange = (_event: React.SyntheticEvent, newValue: string[]) => {
 		setFormData((prev) => ({
 			...prev,
 			tags: newValue,

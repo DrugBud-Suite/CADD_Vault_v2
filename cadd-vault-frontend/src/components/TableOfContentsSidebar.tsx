@@ -3,8 +3,7 @@ import { supabase } from '../supabase';
 import { Package } from '../types';
 import { useFilterStore } from '../store/filterStore';
 import {
-	List, ListItem, ListItemText, Collapse, IconButton, Box, Typography,
-	useTheme
+	List, ListItem, ListItemText, Collapse, IconButton, Box, Typography
 } from '@mui/material';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import { alpha } from '@mui/material/styles';
@@ -46,7 +45,6 @@ const TreeBranch = ({ isOpen, isLast = false }: { isOpen: boolean; isLast?: bool
 );
 
 const TableOfContentsSidebar: React.FC = () => {
-	const theme = useTheme();
 	const [tocData, setTocData] = useState<TocData>({});
 	const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
 	const setFolder1 = useFilterStore((state) => state.setFolder1);
@@ -218,7 +216,7 @@ const TableOfContentsSidebar: React.FC = () => {
 							<Collapse in={openFolders.has(folder)} timeout="auto" unmountOnExit>
 								<List component="div" disablePadding dense sx={{ position: 'relative', ml: 2 }}>
 									<TreeBranch isOpen={openFolders.has(folder)} isLast={folderIndex === sortedFolders.length - 1} />
-									{tocData[folder].map((category, idx) => (
+									{tocData[folder].map((category) => (
 										<ListItem
 											key={category}
 											button

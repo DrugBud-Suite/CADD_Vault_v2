@@ -31,7 +31,6 @@ const AddPackagePage: React.FC = () => {
 	});
 	const [loading, setLoading] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
-	const [tagInput, setTagInput] = useState<string>('');
 	const [existingTags, setExistingTags] = useState<string[]>([]); // State for existing tags
 	const [tagsLoading, setTagsLoading] = useState<boolean>(false); // State for loading tags
 
@@ -86,7 +85,7 @@ const AddPackagePage: React.FC = () => {
 		}));
 	};
 
-	const handleTagsChange = (event: React.SyntheticEvent, newValue: string[]) => {
+	const handleTagsChange = (_event: React.SyntheticEvent, newValue: string[]) => {
 		setFormData((prev) => ({
 			...prev,
 			tags: newValue,
