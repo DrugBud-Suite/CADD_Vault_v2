@@ -109,7 +109,11 @@ export default function Header() {
 	};
 
 	return (
-		<AppBar position="fixed" sx={{ zIndex: theme.zIndex.drawer + 1, bgcolor: 'background.paper', color: 'text.primary' }}>
+		<AppBar position="fixed" sx={{
+			zIndex: theme.zIndex.drawer + 1, background: (theme) => theme.palette.mode === 'dark'
+				? 'linear-gradient(135deg, rgba(30,30,30,0.8) 0%, rgba(23,23,23,0.8) 100%)'
+				: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(249,250,251,0.8) 100%)', color: 'text.primary'
+		}}>
 			<Toolbar>
 				{!isAboutPage && isSmallScreen && (
 					<IconButton
