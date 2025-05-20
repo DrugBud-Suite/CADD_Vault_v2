@@ -6,10 +6,10 @@ import {
 import { alpha } from '@mui/material/styles';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { useFilterStore } from '../store/filterStore';
+import { useShallow } from 'zustand/react/shallow'; // Import useShallow
 import { debounce } from 'lodash-es';
 
 const FilterSidebar: React.FC = () => {
-	const filterStore = useFilterStore();
 	const {
 		hasGithub,
 		hasWebserver,
@@ -19,7 +19,9 @@ const FilterSidebar: React.FC = () => {
 		selectedTags,
 		allAvailableTags,
 		selectedLicenses,
-		originalPackages,
+		allAvailableLicenses,
+		datasetMaxStars,
+		datasetMaxCitations,
 		setHasGithub,
 		setHasWebserver,
 		setHasPublication,
@@ -28,46 +30,50 @@ const FilterSidebar: React.FC = () => {
 		setSelectedTags,
 		setSelectedLicenses,
 		resetFilters,
-	} = filterStore;
+	} = useFilterStore(useShallow(state => ({
+		hasGithub: state.hasGithub,
+		hasWebserver: state.hasWebserver,
+		hasPublication: state.hasPublication,
+		minStars: state.minStars,
+		minCitations: state.minCitations,
+		selectedTags: state.selectedTags,
+		allAvailableTags: state.allAvailableTags,
+		selectedLicenses: state.selectedLicenses,
+		allAvailableLicenses: state.allAvailableLicenses,
+		datasetMaxStars: state.datasetMaxStars,
+		datasetMaxCitations: state.datasetMaxCitations,
+		setHasGithub: state.setHasGithub,
+		setHasWebserver: state.setHasWebserver,
+		setHasPublication: state.setHasPublication,
+		setMinStars: state.setMinStars,
+		setMinCitations: state.setMinCitations,
+		setSelectedTags: state.setSelectedTags,
+		setSelectedLicenses: state.setSelectedLicenses,
+		resetFilters: state.resetFilters,
+	}))); // Corrected: Added closing parenthesis for useShallow
 
-	const [uniqueLicenses, setUniqueLicenses] = useState<string[]>([]);
-	const [maxStars, setMaxStars] = useState<number>(1000);
-	const [maxCitations, setMaxCitations] = useState<number>(1000);
+	// Local state for slider values to provide immediate UI feedback
 	const [localMinStars, setLocalMinStars] = useState<number | null>(minStars);
 	const [localMinCitations, setLocalMinCitations] = useState<number | null>(minCitations);
 
-	// Memoized debounced setters
+	// Memoized debounced setters for store updates
 	const debouncedSetMinStars = useMemo(() => debounce((value: number | null) => setMinStars(value), 300), [setMinStars]);
 	const debouncedSetMinCitations = useMemo(() => debounce((value: number | null) => setMinCitations(value), 300), [setMinCitations]);
 
-	// Update local state when store values change
+	// Update local slider state when store values change (e.g., on reset)
 	useEffect(() => {
 		setLocalMinStars(minStars);
-		setLocalMinCitations(minCitations);
-	}, [minStars, minCitations]);
+	}, [minStars]);
 
-	// Update available licenses and max values when packages change
 	useEffect(() => {
-		if (originalPackages.length > 0) {
-			const licenses = new Set<string>();
-			let currentMaxStars = 0;
-			let currentMaxCitations = 0;
+		setLocalMinCitations(minCitations);
+	}, [minCitations]);
 
-			originalPackages.forEach(pkg => {
-				if (pkg.license) licenses.add(pkg.license);
-				if (typeof pkg.github_stars === 'number' && pkg.github_stars > currentMaxStars) {
-					currentMaxStars = pkg.github_stars;
-				}
-				if (typeof pkg.citations === 'number' && pkg.citations > currentMaxCitations) {
-					currentMaxCitations = pkg.citations;
-				}
-			});
-
-			setUniqueLicenses(Array.from(licenses).sort());
-			setMaxStars(Math.max(100, currentMaxStars));
-			setMaxCitations(Math.max(100, currentMaxCitations));
-		}
-	}, [originalPackages]);
+	// The useEffect that derived uniqueLicenses, maxStars, and maxCitations
+	// from `originalPackages` (now `displayedPackages`) is removed.
+	// `allAvailableLicenses`, `datasetMaxStars`, and `datasetMaxCitations`
+	// should now be populated in the store by a one-time fetch in HomePage.tsx
+	// or a similar global data loading mechanism.
 
 	return (
 		<Box sx={{
@@ -121,12 +127,12 @@ const FilterSidebar: React.FC = () => {
 				</Button>
 			</Box>
 
-			{/* Tags Filter */}
+			{/* Tags Filter - Uses allAvailableTags from store */}
 			<Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', fontWeight: 500 }}>Tags</Typography>
 			<Autocomplete
 				multiple
 				id="tags-filter"
-				options={allAvailableTags}
+				options={allAvailableTags || []} // Ensure options is an array
 				value={selectedTags}
 				onChange={(_, newValue) => {
 					setSelectedTags(newValue);
@@ -253,19 +259,24 @@ const FilterSidebar: React.FC = () => {
 			{/* Metrics Section */}
 			<Box sx={{ mb: 3 }}>
 				<Typography gutterBottom variant="body2" color="text.primary" sx={{ mt: 2, fontWeight: 500, fontSize: '0.9rem' }}>
-					Citations ({localMinCitations ?? 0}+)
+					{/* Corrected Label for Stars Slider */}
+					GitHub Stars ({localMinStars ?? 0}+)
 				</Typography>
 				<Slider
 					value={localMinStars ?? 0}
 					onChange={(_, newValue) => {
 						const value = Array.isArray(newValue) ? newValue[0] : newValue;
 						setLocalMinStars(value === 0 ? null : value);
+						// Debounced call to update the store
+					}}
+					onChangeCommitted={(_, newValue) => { // Update store on commit
+						const value = Array.isArray(newValue) ? newValue[0] : newValue;
 						debouncedSetMinStars(value === 0 ? null : value);
 					}}
 					valueLabelDisplay="auto"
 					step={10}
 					min={0}
-					max={maxStars}
+					max={datasetMaxStars || 1000} // Use global max from store, fallback if not yet loaded
 					size="small"
 					sx={{
 						color: 'primary.main',
@@ -286,12 +297,16 @@ const FilterSidebar: React.FC = () => {
 					onChange={(_, newValue) => {
 						const value = Array.isArray(newValue) ? newValue[0] : newValue;
 						setLocalMinCitations(value === 0 ? null : value);
+						// Debounced call to update the store
+					}}
+					onChangeCommitted={(_, newValue) => { // Update store on commit
+						const value = Array.isArray(newValue) ? newValue[0] : newValue;
 						debouncedSetMinCitations(value === 0 ? null : value);
 					}}
 					valueLabelDisplay="auto"
 					step={10}
 					min={0}
-					max={maxCitations}
+					max={datasetMaxCitations || 1000} // Use global max from store, fallback if not yet loaded
 					size="small"
 					sx={{
 						color: 'primary.main',
@@ -305,12 +320,12 @@ const FilterSidebar: React.FC = () => {
 				/>
 			</Box>
 
-			{/* License Filter */}
+			{/* License Filter - Uses allAvailableLicenses from store */}
 			<Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', fontWeight: 500 }}>Licenses</Typography>
 			<Autocomplete
 				multiple
 				id="license-filter"
-				options={uniqueLicenses}
+				options={allAvailableLicenses || []} // Ensure options is an array
 				value={selectedLicenses}
 				onChange={(_, newValue) => {
 					setSelectedLicenses(newValue);
