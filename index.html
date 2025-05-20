@@ -1,176 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>CADD Vault | Computational Chemistry Resources</title>
-	<meta name="description" content="Discover and rate computational chemistry software packages and resources">
-	<!-- Google Fonts -->
+	<meta charset="UTF-8" />
+	<link rel="icon" type="image/png" href="/CADD_Vault_v2/caddvault_white_logo.png" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>CADD Vault</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-	<!-- Material Icons -->
-	<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-	
-	<!-- Global CSS -->
-	<link rel="stylesheet" href="css/styles.css">
-	<link rel="stylesheet" href="css/components/landing.css">
-	<link rel="stylesheet" href="css/components/error-messages.css">
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'self';
+               frame-src https://challenges.cloudflare.com;
+               script-src 'self' https://challenges.cloudflare.com https://*.challenges.cloudflare.com 'unsafe-inline';
+               style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
+               font-src 'self' https://fonts.gstatic.com;
+               connect-src 'self' https://cgilfqosnuwdmstrluzd.supabase.co;">
+	<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script type="module" crossorigin src="/CADD_Vault_v2/assets/index-DB6fSGL8.js"></script>
+  <link rel="stylesheet" crossorigin href="/CADD_Vault_v2/assets/index-B7rZpWz0.css">
 </head>
+
 <body>
-	<div class="landing-page">
-		<header>
-			<div class="container">
-				<nav>
-					<div class="logo">CADD Vault</div>
-					<div class="nav-links">
-						<a href="packages.html" class="nav-link">Browse Packages</a>
-						<a href="#about" class="nav-link">About</a>
-						<a href="https://github.com/your-username/cadd-vault" target="_blank" class="nav-link">GitHub</a>
-					</div>
-				</nav>
-				</div>
-				</header>
-				<section class="hero">
-					<div class="container">
-						<div class="hero-content">
-							<h1>Discover & Explore<br>Computational Chemistry Tools</h1>
-							<p class="hero-subtitle">
-								A curated repository of over 1,500 computational chemistry packages,
-								libraries, and resources for researchers and developers.
-							</p>
-							<div class="hero-actions">
-								<a href="packages.html" class="btn btn-primary">Browse Packages</a>
-								<a href="#popular-tags" class="btn btn-outline">Explore Tags</a>
-							</div>
-						</div>
-						<div class="hero-visual">
-							<div class="molecules-graphic">
-								<!-- SVG molecule visualization will go here -->
-								<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" class="molecule-svg">
-									<!-- Simplified molecule visualization -->
-									<circle cx="200" cy="200" r="30" class="atom atom-center" />
-									<circle cx="120" cy="150" r="20" class="atom atom-1" />
-									<circle cx="280" cy="150" r="20" class="atom atom-2" />
-									<circle cx="120" cy="250" r="20" class="atom atom-3" />
-									<circle cx="280" cy="250" r="20" class="atom atom-4" />
-				
-									<line x1="200" y1="200" x2="120" y2="150" class="bond" />
-									<line x1="200" y1="200" x2="280" y2="150" class="bond" />
-									<line x1="200" y1="200" x2="120" y2="250" class="bond" />
-									<line x1="200" y1="200" x2="280" y2="250" class="bond" />
-									</svg>
-									</div>
-									</div>
-									</div>
-									</section>
-									<section id="features" class="features">
-										<div class="container">
-				<h2>Find the Perfect Tools for Your Research</h2>
-				<div class="features-grid">
-					<div class="feature-card">
-						<span class="material-icons-round feature-icon">search</span>
-						<h3>Discover</h3>
-						<p>Search through our extensive database of computational chemistry packages.</p>
-					</div>
-					<div class="feature-card">
-						<span class="material-icons-round feature-icon">filter_alt</span>
-						<h3>Filter</h3>
-						<p>Narrow down options using tags, popularity, and other criteria.</p>
-					</div>
-					<div class="feature-card">
-						<span class="material-icons-round feature-icon">star</span>
-						<h3>Rate</h3>
-						<p>Contribute to the community by rating and reviewing packages.</p>
-					</div>
-					</div>
-			</div>
-		</section>
-		<section id="popular-tags" class="popular-tags">
-			<div class="container">
-				<h2>Popular Categories</h2>
-				<div class="tags-container" id="landing-tags">
-					<!-- Tags will be inserted here by JavaScript -->
-				</div>
-				<div class="section-action">
-					<a href="packages.html" class="btn btn-primary">View All Categories</a>
-				</div>
-			</div>
-		</section>
-		
-		<section id="about" class="about">
-			<div class="container">
-				<h2>About CADD Vault</h2>
-				<p>
-					CADD Vault is a comprehensive repository of computational chemistry software packages,
-					libraries, and resources. Our goal is to help researchers, students, and professionals
-					discover tools that can accelerate their work in drug discovery, molecular modeling,
-					and other computational chemistry domains.
-				</p>
-				<p>
-					The database includes information about GitHub repositories, citations,
-					documentation, and user ratings to help you make informed decisions about which
-					tools to use for your specific needs.
-				</p>
-			</div>
-		</section>
-		<footer>
-			<div class="container">
-				<div class="footer-content">
-					<div class="footer-logo">CADD Vault</div>
-					<div class="footer-links">
-						<a href="packages.html">Packages</a>
-						<a href="#about">About</a>
-						<a href="https://github.com/your-username/cadd-vault" target="_blank">GitHub</a>
-					</div>
-				</div>
-				<div class="footer-bottom">
-					<p>&copy; 2025 CADD Vault - Computational Chemistry Package Database</p>
-				</div>
-				</div>
-				</footer>
-	</div>
-	<!-- Before the Firebase scripts -->
-	<script src="js/utils/ErrorHandler.js"></script>
-	<!-- Firebase SDK -->
-	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-	
-	<!-- Application Scripts -->
-	<script src="js/firebase-config.js"></script>
-	<script src="js/services/PackagesService.js"></script>
-	<script>
-		// Simple script to load popular tags for the landing page
-		document.addEventListener('DOMContentLoaded', async function () {
-			// Initialize Firebase from firebase-config.js
-			if (typeof db === 'undefined') {
-				console.error('Firebase database not initialized');
-				return;
-			}
-
-			try {
-				// Get the packages service
-				const packagesService = new PackagesService(db);
-
-				// Get the top tags
-				const topTags = await packagesService.getTopTags(15);
-
-				// Display the top tags
-				const tagsContainer = document.getElementById('landing-tags');
-				topTags.forEach(tag => {
-					const tagElement = document.createElement('a');
-					tagElement.href = `packages.html?tag=${encodeURIComponent(tag.name)}`;
-					tagElement.className = 'tag';
-					tagElement.innerHTML = `
-	                        <span class="tag-name">${tag.name}</span>
-	                        <span class="tag-count">${tag.count}</span>
-	                    `;
-					tagsContainer.appendChild(tagElement);
-				});
-			} catch (error) {
-				console.error('Error loading tags:', error);
-			}
-		});
-				</script>
+	<div id="root"></div>
 </body>
+
 </html>
