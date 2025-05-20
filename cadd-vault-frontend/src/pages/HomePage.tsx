@@ -1,4 +1,4 @@
-import React, { useEffect, useState, lazy, Suspense, ChangeEvent, Fragment, useCallback } from 'react';
+import React, { useEffect, useState, lazy, Suspense, ChangeEvent, Fragment } from 'react';
 import { supabase } from '../supabase';
 import { useFilterStore } from '../store/filterStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -40,17 +40,14 @@ const HomePage: React.FC = () => {
 	// Actions from store (these are stable references)
 	const {
 		setSort, setDisplayedPackages, setTotalFilteredCount, setViewMode, setCurrentPage,
-		setAllAvailableTags, setAllAvailableLicenses, setDatasetMaxStars, setDatasetMaxCitations,
+		setOriginalPackagesAndDeriveMetadata,
 	} = useFilterStore(useShallow(state => ({
 		setSort: state.setSort,
 		setDisplayedPackages: state.setDisplayedPackages,
 		setTotalFilteredCount: state.setTotalFilteredCount,
 		setViewMode: state.setViewMode,
 		setCurrentPage: state.setCurrentPage,
-		setAllAvailableTags: state.setAllAvailableTags,
-		setAllAvailableLicenses: state.setAllAvailableLicenses,
-		setDatasetMaxStars: state.setDatasetMaxStars,
-		setDatasetMaxCitations: state.setDatasetMaxCitations,
+		setOriginalPackagesAndDeriveMetadata: state.setOriginalPackagesAndDeriveMetadata,
 	})));
 
 
@@ -61,63 +58,47 @@ const HomePage: React.FC = () => {
 
 	const itemsPerPage = 24;
 
-	// --- Effect to fetch global data for filters (runs once) ---
+	// --- Effect to fetch global data for filters and set metadata (runs once) ---
 	useEffect(() => {
-		const fetchGlobalFilterData = async () => {
-			setLoading(true); // Indicate loading for global data
+		const fetchGlobalDataAndSetMetadata = async () => {
+			setError('');
 			try {
-				const { data: licensesData, error: licensesError } = await supabase
+				// Fetch all package data needed for filter metadata.
+				// REMOVED 'created_at' from the select list as it does not exist in the 'packages' table schema.
+				const { data: allPackagesData, error: fetchError } = await supabase
 					.from('packages')
-					.select('license');
-				if (licensesError) throw licensesError;
-				if (licensesData) {
-					const uniqueLicenses = [...new Set(licensesData.map((p: any) => p.license).filter(Boolean))].sort();
-					setAllAvailableLicenses(uniqueLicenses);
+					.select('id, package_name, description, tags, license, github_stars, citations, repo_link, webserver, publication, folder1, category1, last_commit, average_rating, ratings_count, github_owner, github_repo, jif, journal, last_commit_ago, link, page_icon, primary_language, ratings_sum'); // Adjusted select list
+
+				if (fetchError) {
+					console.error("Error fetching all packages for metadata:", fetchError.message);
+					setError("Could not load initial filter options.");
+					setOriginalPackagesAndDeriveMetadata([]);
+					return;
 				}
 
-				const { data: tagsData, error: tagsError } = await supabase
-					.from('packages')
-					.select('tags');
-				if (tagsError) throw tagsError;
-				if (tagsData) {
-					const allTags = tagsData.flatMap((p: any) => p.tags || []);
-					setAllAvailableTags([...new Set(allTags)].sort());
+				if (allPackagesData) {
+					setOriginalPackagesAndDeriveMetadata(allPackagesData as Package[]);
+				} else {
+					setOriginalPackagesAndDeriveMetadata([]);
 				}
-
-				const { data: maxStarsResult, error: maxStarsError } = await supabase
-					.from('packages').select('github_stars').order('github_stars', { ascending: false, nullsFirst: false }).limit(1);
-				if (maxStarsError) { setDatasetMaxStars(1000); console.error("Max stars fetch error:", maxStarsError.message); }
-				else { setDatasetMaxStars(maxStarsResult?.[0]?.github_stars ?? 1000); }
-
-
-				const { data: maxCitationsData, error: maxCitationsError } = await supabase
-					.from('packages').select('citations').order('citations', { ascending: false, nullsFirst: false }).limit(1);
-				if (maxCitationsError) { setDatasetMaxCitations(1000); console.error("Max citations fetch error:", maxCitationsError.message); }
-				else { setDatasetMaxCitations(maxCitationsData?.[0]?.citations ?? 1000); }
-
 			} catch (err: any) {
-				console.error("Error fetching global filter data:", err.message);
-				setError("Could not load filter options.");
-				// Set sensible defaults or empty arrays
-				setAllAvailableLicenses([]);
-				setAllAvailableTags([]);
-				setDatasetMaxStars(1000);
-				setDatasetMaxCitations(1000);
+				console.error("Error in fetchGlobalDataAndSetMetadata:", err.message);
+				setError("An unexpected error occurred while loading filter options.");
+				setOriginalPackagesAndDeriveMetadata([]);
 			}
-			// setLoading(false); // Loading for packages will handle the final loading state
+			// setLoading(false); // Managed by the package fetching useEffect
 		};
 
-		fetchGlobalFilterData();
+		fetchGlobalDataAndSetMetadata();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [setAllAvailableLicenses, setAllAvailableTags, setDatasetMaxStars, setDatasetMaxCitations]); // Supabase client is stable
+	}, [setOriginalPackagesAndDeriveMetadata]);
 
 	// --- Data Fetching for packages (paginated and filtered) ---
-	// This useEffect now directly contains the fetching logic.
 	useEffect(() => {
 		const performFetchPackages = async () => {
 			setLoading(true);
 			setError('');
-			console.log(`Fetching packages. Page: ${currentPage}, SortBy: ${sortBy}, Dir: ${sortDirection}, Search: ${searchTerm}`);
+			console.log(`Workspaceing packages. Page: ${currentPage}, SortBy: ${sortBy}, Dir: ${sortDirection}, Search: ${searchTerm}`);
 
 			const pageIndex = currentPage - 1;
 			const rangeFrom = pageIndex * itemsPerPage;
@@ -126,21 +107,19 @@ const HomePage: React.FC = () => {
 			try {
 				let queryBuilder = supabase
 					.from('packages')
-					.select('*, average_rating, ratings_count', { count: 'exact' });
+					.select('*, average_rating, ratings_count', { count: 'exact' }); // Ensure average_rating and ratings_count are available if not part of '*'
 
-				// Apply filters (same logic as before)
 				if (searchTerm) queryBuilder = queryBuilder.or(`package_name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
 				if (selectedTags.length > 0) queryBuilder = queryBuilder.contains('tags', selectedTags);
-				if (minStars !== null) queryBuilder = queryBuilder.gte('github_stars', minStars);
+				if (minStars !== null && minStars > 0) queryBuilder = queryBuilder.gte('github_stars', minStars);
 				if (hasGithub) queryBuilder = queryBuilder.not('repo_link', 'is', null);
 				if (hasWebserver) queryBuilder = queryBuilder.not('webserver', 'is', null);
 				if (hasPublication) queryBuilder = queryBuilder.not('publication', 'is', null);
-				if (minCitations !== null) queryBuilder = queryBuilder.gte('citations', minCitations);
+				if (minCitations !== null && minCitations > 0) queryBuilder = queryBuilder.gte('citations', minCitations);
 				if (folder1) queryBuilder = queryBuilder.eq('folder1', folder1);
 				if (category1) queryBuilder = queryBuilder.eq('category1', category1);
 				if (selectedLicenses.length > 0) queryBuilder = queryBuilder.in('license', selectedLicenses);
 
-				// Apply sorting
 				if (sortBy && sortDirection) {
 					queryBuilder = queryBuilder.order(sortBy, { ascending: sortDirection === 'asc', nullsFirst: false });
 				} else {
@@ -155,7 +134,7 @@ const HomePage: React.FC = () => {
 
 				if (data) {
 					setDisplayedPackagesInComponent(data as Package[]);
-					setDisplayedPackages(data as Package[]); // Update store's copy
+					setDisplayedPackages(data as Package[]);
 				} else {
 					setDisplayedPackagesInComponent([]);
 					setDisplayedPackages([]);
@@ -178,7 +157,7 @@ const HomePage: React.FC = () => {
 		currentPage, searchTerm, selectedTags, minStars, hasGithub, hasWebserver,
 		hasPublication, minCitations, folder1, category1, selectedLicenses,
 		sortBy, sortDirection,
-		setDisplayedPackages, setTotalFilteredCount, itemsPerPage // itemsPerPage is stable
+		setDisplayedPackages, setTotalFilteredCount, // itemsPerPage is stable
 	]);
 
 
@@ -190,12 +169,12 @@ const HomePage: React.FC = () => {
 
 	const handleSortChange = (event: SelectChangeEvent<string>) => {
 		const value = event.target.value;
-		setCurrentPage(1); // Reset to first page via store action
-		setSort(value === '' ? null : value);
+		setCurrentPage(1);
+		setSort(value === '' ? null : value, sortDirection);
 	};
 
 	const handleSortDirectionToggle = () => {
-		setCurrentPage(1); // Reset to first page via store action
+		setCurrentPage(1);
 		setSort(sortBy, sortDirection === 'asc' ? 'desc' : 'asc');
 	};
 
