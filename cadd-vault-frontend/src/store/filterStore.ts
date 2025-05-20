@@ -1,547 +1,247 @@
 // src/store/filterStore.ts
 import { create } from 'zustand';
-import { Package } from '../types';
-import { filterPackages } from '../utils/filterPackages';
-import { debounce } from 'lodash-es'; // Import debounce
+import { persist } from 'zustand/middleware';
+import { Package } from '../types'; // Assuming Package is correctly defined
+import { debounce } from 'lodash-es';
 
-// Define the shape of your filter state
 type ViewMode = 'card' | 'list';
 
-// Define only the data properties for easier use in applyFiltersAndSort
-interface FilterData {
-	searchTerm: string;
-	selectedTags: string[];
-	minStars: number | null;
-	hasGithub: boolean;
-	hasWebserver: boolean;
-	hasPublication: boolean;
-	minRating: number | null; // Keep if rating is still used elsewhere, otherwise remove
-	minCitations: number | null;
-	allAvailableTags: string[];
-	folder1: string | null;
-	category1: string | null;
-	originalPackages: Package[];
-	sortBy: string | null;
-	sortDirection: 'asc' | 'desc';
-	// Removed: selectedTypes, selectedSubtypes, selectedPlatforms
-	selectedLicenses: string[];
+// Interface for the state
+export interface FilterState { // Exporting for use in components
+    searchTerm: string;
+    selectedTags: string[];
+    minStars: number | null;
+    hasGithub: boolean;
+    hasWebserver: boolean;
+    hasPublication: boolean;
+    minCitations: number | null;
+    folder1: string | null;
+    category1: string | null;
+    selectedLicenses: string[];
+    sortBy: string | null;
+    sortDirection: 'asc' | 'desc';
+
+    // Data related to the main package list (potentially paginated/filtered server-side)
+    // These are set by HomePage after fetching data based on current filters
+    displayedPackages: Package[];
+    totalFilteredCount: number; // Total packages matching current filters (from server)
+    currentPage: number;
+
+    // Data derived from the entire dataset (for filter options, etc.)
+    originalPackages: Package[]; // Holds all packages, set once on initial load
+    allAvailableTags: string[];    // Derived from originalPackages
+    allAvailableLicenses: string[];// Derived from originalPackages
+    allAvailableFolders: string[]; // Derived from originalPackages
+    allAvailableCategories: Record<string, string[]>; // Categories per folder, derived
+
+    datasetMaxStars: number | null;   // Max stars in the entire dataset, derived
+    datasetMaxCitations: number | null; // Max citations in the entire dataset, derived
+
+    viewMode: ViewMode;
+    isFilterSidebarVisible: boolean;
+    isNavSidebarVisible: boolean;
+
+    // Actions
+    setSearchTerm: (term: string) => void;
+    setSelectedTags: (tags: string[]) => void;
+    addTag: (tag: string) => void; // Added addTag action
+    setMinStars: (stars: number | null) => void;
+    setHasGithub: (has: boolean) => void;
+    setHasWebserver: (has: boolean) => void;
+    setHasPublication: (has: boolean) => void;
+    setMinCitations: (citations: number | null) => void;
+    setFolder1: (folder: string | null) => void;
+    setCategory1: (category: string | null) => void;
+    setSelectedLicenses: (licenses: string[]) => void;
+    setSort: (field: string | null, direction?: 'asc' | 'desc') => void;
+
+    // Actions for HomePage to update based on server response
+    setDisplayedPackages: (packages: Package[]) => void;
+    setTotalFilteredCount: (count: number) => void;
+    setCurrentPage: (page: number) => void;
+
+    // Action to set the initial full dataset and derive all related metadata
+    setOriginalPackagesAndDeriveMetadata: (packages: Package[]) => void;
+
+    resetFilters: () => void;
+    setViewMode: (mode: ViewMode) => void;
+    toggleFilterSidebar: () => void;
+    toggleNavSidebar: () => void;
 }
 
-
-interface FilterState extends FilterData {
-	filteredPackages: Package[]; // Current filtered packages
-	isFilterSidebarVisible: boolean;
-	isNavSidebarVisible: boolean;
-	viewMode: ViewMode;
-
-	// Actions to update the state
-	setSearchTerm: (term: string) => void;
-	toggleTag: (tag: string) => void;
-	addTag: (tag: string) => void;
-	setSelectedTags: (tags: string[]) => void; // New action for Autocomplete
-	setSelectedLicenses: (licenses: string[]) => void; // New action for Autocomplete
-	setMinStars: (stars: number | null) => void;
-	setHasGithub: (value: boolean) => void;
-	setHasWebserver: (value: boolean) => void;
-	setHasPublication: (value: boolean) => void;
-	setMinRating: (rating: number | null) => void; // Keep if rating is still used elsewhere
-	setMinCitations: (citations: number | null) => void;
-	setFolder1: (folder: string | null) => void;
-	setCategory1: (category: string | null) => void;
-	setAllAvailableTags: (tags: string[]) => void;
-	setOriginalPackages: (packages: Package[]) => void;
-	clearFilters: () => void;
-	setSort: (sortBy: string | null, direction?: 'asc' | 'desc') => void;
-	setViewMode: (mode: ViewMode) => void;
-	toggleFilterSidebar: () => void;
-	toggleNavSidebar: () => void;
-
-	// Removed: toggleType, toggleSubtype, togglePlatform
-	toggleLicense: (license: string) => void;
-	resetFilters: () => void;
-	updateFilteredPackages: () => void;
-}
-
-// Define initial state values
-const initialStateData: Omit<FilterState, 'filteredPackages' | 'isFilterSidebarVisible' | 'isNavSidebarVisible' | 'viewMode' | keyof FilterStateActions> & { viewMode: ViewMode } = {
-	searchTerm: '',
-	selectedTags: [],
-	minStars: null,
-	hasGithub: false,
-	hasWebserver: false,
-	hasPublication: false,
-	minRating: null, // Keep if rating is still used elsewhere
-	minCitations: null,
-	folder1: null,
-	category1: null,
-	allAvailableTags: [],
-	originalPackages: [],
-	sortBy: 'package_name',
-	sortDirection: 'asc',
-	// Removed: selectedTypes, selectedSubtypes, selectedPlatforms
-	selectedLicenses: [],
-	viewMode: 'card', // Default view
+// Initial static part of the state (values that don't depend on fetched data)
+const initialStateValues: Omit<FilterState,
+    // Omit actions
+    'setSearchTerm' | 'setSelectedTags' | 'addTag' | 'setMinStars' | 'setHasGithub' |
+    'setHasWebserver' | 'setHasPublication' | 'setMinCitations' | 'setFolder1' |
+    'setCategory1' | 'setSelectedLicenses' | 'setSort' | 'setDisplayedPackages' |
+    'setTotalFilteredCount' | 'setCurrentPage' | 'setOriginalPackagesAndDeriveMetadata' |
+    'resetFilters' | 'setViewMode' | 'toggleFilterSidebar' | 'toggleNavSidebar' |
+    // Omit fields that will be derived or fetched
+    'originalPackages' | 'allAvailableTags' | 'allAvailableLicenses' |
+    'allAvailableFolders' | 'allAvailableCategories' | 'datasetMaxStars' |
+    'datasetMaxCitations' | 'displayedPackages' | 'totalFilteredCount'
+> = {
+    searchTerm: '',
+    selectedTags: [],
+    minStars: null,
+    hasGithub: false,
+    hasWebserver: false,
+    hasPublication: false,
+    minCitations: null,
+    folder1: null,
+    category1: null,
+    selectedLicenses: [],
+    sortBy: 'package_name',
+    sortDirection: 'asc',
+    viewMode: 'card',
+    currentPage: 1,
+    isFilterSidebarVisible: true,
+    isNavSidebarVisible: true,
 };
 
-const initialState: FilterState = {
-	...initialStateData,
-	filteredPackages: [],
-	isFilterSidebarVisible: true,
-	isNavSidebarVisible: true,
-	// Actions will be added by zustand create function
-	setSearchTerm: () => { },
-	toggleTag: () => { },
-	addTag: () => { },
-	setSelectedTags: () => { }, // Add placeholder
-	setSelectedLicenses: () => { }, // Add placeholder
-	setMinStars: () => { },
-	setHasGithub: () => { },
-	setHasWebserver: () => { },
-	setHasPublication: () => { },
-	setMinRating: () => { }, // Keep if rating is still used elsewhere
-	setMinCitations: () => { },
-	setFolder1: () => { },
-	setCategory1: () => { },
-	setAllAvailableTags: () => { },
-	setOriginalPackages: () => { },
-	clearFilters: () => { },
-	setSort: () => { },
-	setViewMode: () => { },
-	toggleFilterSidebar: () => { },
-	toggleNavSidebar: () => { },
-	// Removed: toggleType, toggleSubtype, togglePlatform
-	toggleLicense: () => { },
-	resetFilters: () => { },
-	updateFilteredPackages: () => { },
-};
+export const useFilterStore = create<FilterState>()(
+    persist(
+        (set, get) => ({
+            ...initialStateValues, // Spread initial static values
 
-// Define the actions separately for clarity
-type FilterStateActions = Pick<FilterState,
-	'setSearchTerm' | 'toggleTag' | 'addTag' | 'setSelectedTags' | 'setSelectedLicenses' | 'setMinStars' | 'setHasGithub' |
-	'setHasWebserver' | 'setHasPublication' | 'setMinRating' | 'setMinCitations' |
-	'setFolder1' | 'setCategory1' | 'setAllAvailableTags' | 'setOriginalPackages' |
-	'clearFilters' | 'setSort' | 'setViewMode' | 'toggleFilterSidebar' |
-	'toggleNavSidebar' | /* Removed: toggleType, toggleSubtype, togglePlatform */
-	'toggleLicense' | 'resetFilters' | 'updateFilteredPackages'
->;
+            // Initialize fields that will be derived/fetched
+            originalPackages: [],
+            allAvailableTags: [],
+            allAvailableLicenses: [],
+            allAvailableFolders: [],
+            allAvailableCategories: {},
+            datasetMaxStars: null,
+            datasetMaxCitations: null,
+            displayedPackages: [],
+            totalFilteredCount: 0,
 
+            // Actions
+            setSearchTerm: debounce((searchTerm) => set({ searchTerm, currentPage: 1 }), 300),
+            setSelectedTags: (selectedTags) => set({ selectedTags, currentPage: 1 }),
+            addTag: (tag) => set((state) => ({
+                selectedTags: state.selectedTags.includes(tag) ? state.selectedTags : [...state.selectedTags, tag],
+                currentPage: 1
+            })),
+            setMinStars: (minStars) => set({ minStars: minStars !== null && !isNaN(minStars) && minStars >= 0 ? Number(minStars) : null, currentPage: 1 }),
+            setHasGithub: (hasGithub) => set({ hasGithub, currentPage: 1 }),
+            setHasWebserver: (hasWebserver) => set({ hasWebserver, currentPage: 1 }),
+            setHasPublication: (hasPublication) => set({ hasPublication, currentPage: 1 }),
+            setMinCitations: (minCitations) => set({ minCitations: minCitations !== null && !isNaN(minCitations) && minCitations >= 0 ? Number(minCitations) : null, currentPage: 1 }),
+            setFolder1: (folder1) => set({ folder1, category1: null, currentPage: 1 }),
+            setCategory1: (category1) => set({ category1, currentPage: 1 }),
+            setSelectedLicenses: (selectedLicenses) => set({ selectedLicenses, currentPage: 1 }),
+            setSort: (field, direction) => {
+                const currentSortBy = get().sortBy;
+                const currentSortDirection = get().sortDirection;
+                if (field === null) {
+                    set({ sortBy: initialStateValues.sortBy, sortDirection: initialStateValues.sortDirection, currentPage: 1 });
+                } else if (direction) {
+                    set({ sortBy: field, sortDirection: direction, currentPage: 1 });
+                } else {
+                    set({
+                        sortBy: field,
+                        sortDirection: field === currentSortBy && currentSortDirection === 'asc' ? 'desc' : 'asc',
+                        currentPage: 1
+                    });
+                }
+            },
+            setDisplayedPackages: (displayedPackages) => set({ displayedPackages }),
+            setTotalFilteredCount: (totalFilteredCount) => set({ totalFilteredCount }),
+            setCurrentPage: (currentPage) => set({ currentPage }),
 
-// Helper function to apply filters and sorting
-const applyFiltersAndSort = (stateData: FilterData): Package[] => {
-	const {
-		originalPackages,
-		searchTerm,
-		selectedTags,
-		minStars,
-		hasGithub,
-		hasWebserver,
-		hasPublication,
-		minCitations,
-		folder1,
-		category1,
-		sortBy,
-		sortDirection,
-		// Removed: selectedTypes, selectedSubtypes, selectedPlatforms
-		selectedLicenses
-	} = stateData;
+            setOriginalPackagesAndDeriveMetadata: (packages: Package[]) => {
+                const allTags = [...new Set(packages.flatMap(p => p.tags || []))].sort();
+                const allLicenses = [...new Set(packages.map(p => p.license).filter(Boolean) as string[])].sort();
+                
+                let maxStars = 0;
+                let maxCitations = 0;
+                const folderCategoryMap: Record<string, Set<string>> = {};
+                
+                packages.forEach(pkg => {
+                    if (pkg.github_stars && pkg.github_stars > maxStars) maxStars = pkg.github_stars;
+                    if (pkg.citations && pkg.citations > maxCitations) maxCitations = pkg.citations;
+                    if (pkg.folder1) {
+                        if (!folderCategoryMap[pkg.folder1]) {
+                            folderCategoryMap[pkg.folder1] = new Set();
+                        }
+                        if (pkg.category1) {
+                            folderCategoryMap[pkg.folder1].add(pkg.category1);
+                        }
+                    }
+                });
 
-	// Apply base filters using the utility function
-	// Note: filterPackages might need updates to handle hasGithub, hasWebserver, hasPublication correctly
-	// if they are not simple boolean checks on existing properties.
-	// Assuming filterPackages handles searchTerm, selectedTags, minStars, minCitations, folder1, category1
-	let filtered = filterPackages(originalPackages, {
-		searchTerm,
-		selectedTags,
-		minStars,
-		hasGithub, // Pass these down
-		hasWebserver, // Pass these down
-		hasPublication, // Pass these down
-		minCitations,
-		folder1,
-		category1,
-	});
+                const allFolders = Object.keys(folderCategoryMap).sort();
+                const allCategoriesResult: Record<string, string[]> = {};
+                for (const folder in folderCategoryMap) {
+                    allCategoriesResult[folder] = Array.from(folderCategoryMap[folder]).sort();
+                }
 
-	// --- Removed redundant manual filtering block ---
-	// The filterPackages utility function now handles all these criteria.
+                set({
+                    originalPackages: packages,
+                    allAvailableTags: allTags,
+                    allAvailableLicenses: allLicenses,
+                    allAvailableFolders: allFolders,
+                    allAvailableCategories: allCategoriesResult,
+                    datasetMaxStars: maxStars > 0 ? maxStars : null,
+                    datasetMaxCitations: maxCitations > 0 ? maxCitations : null,
+                });
+            },
 
-	// Filter by Checkboxes (License) - Keep this one as it wasn't in filterPackages
-	if (selectedLicenses.length > 0) {
-		// Ensure pkg.license_type exists and is a string
-		filtered = filtered.filter(pkg => pkg.license && selectedLicenses.includes(pkg.license));
-	}
+            resetFilters: () => set((state) => ({
+                // Reset filter criteria to their initial values
+                searchTerm: initialStateValues.searchTerm,
+                selectedTags: initialStateValues.selectedTags,
+                minStars: initialStateValues.minStars,
+                hasGithub: initialStateValues.hasGithub,
+                hasWebserver: initialStateValues.hasWebserver,
+                hasPublication: initialStateValues.hasPublication,
+                minCitations: initialStateValues.minCitations,
+                folder1: initialStateValues.folder1,
+                category1: initialStateValues.category1,
+                selectedLicenses: initialStateValues.selectedLicenses,
+                // sortBy and sortDirection are also part of initialStateValues
+                sortBy: initialStateValues.sortBy,
+                sortDirection: initialStateValues.sortDirection,
+                currentPage: 1, // Reset current page
 
-
-	// Apply sorting
-	if (sortBy) {
-		filtered = [...filtered].sort((a, b) => {
-			let valA: any = a[sortBy as keyof Package];
-			let valB: any = b[sortBy as keyof Package];
-
-			// Handle potential null/undefined values
-			if (valA == null) valA = sortDirection === 'asc' ? Infinity : -Infinity;
-			if (valB == null) valB = sortDirection === 'asc' ? Infinity : -Infinity;
-
-			// Specific handling for different types
-			if (sortBy === 'last_commit' && typeof valA === 'string' && typeof valB === 'string') {
-				// Attempt to parse dates if they are strings
-				const dateA = new Date(valA);
-				const dateB = new Date(valB);
-				if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
-					valA = dateA.getTime();
-					valB = dateB.getTime();
-				}
-			} else if (sortBy === 'last_commit' && valA instanceof Date && valB instanceof Date) {
-				valA = valA.getTime();
-				valB = valB.getTime();
-			} else if (typeof valA === 'string' && typeof valB === 'string') {
-				valA = valA.toLowerCase();
-				valB = valB.toLowerCase();
-			} else if (typeof valA === 'number' && typeof valB === 'number') {
-				// Standard number comparison
-			}
-
-
-			let comparison = 0;
-			if (valA < valB) {
-				comparison = -1;
-			} else if (valA > valB) {
-				comparison = 1;
-			}
-
-			return sortDirection === 'desc' ? comparison * -1 : comparison;
-		});
-	}
-
-	return filtered;
-};
-
-// Helper to get the data part of the state
-const getStateData = (state: FilterState): FilterData => {
-	const {
-		searchTerm, selectedTags, minStars, hasGithub, hasWebserver, hasPublication,
-		minRating, minCitations, allAvailableTags, folder1, category1, originalPackages,
-		sortBy, sortDirection, /* Removed: selectedTypes, selectedSubtypes, selectedPlatforms */ selectedLicenses
-	} = state;
-	return {
-		searchTerm, selectedTags, minStars, hasGithub, hasWebserver, hasPublication,
-		minRating, minCitations, allAvailableTags, folder1, category1, originalPackages,
-		sortBy, sortDirection, /* Removed */ selectedLicenses
-	};
-};
-
-
-// Create the store
-export const useFilterStore = create<FilterState>()((set, get) => ({ // Add 'get' if needed later
-	// Initial State Properties
-	searchTerm: initialStateData.searchTerm,
-	selectedTags: initialStateData.selectedTags,
-	minStars: initialStateData.minStars,
-	hasGithub: initialStateData.hasGithub,
-	hasWebserver: initialStateData.hasWebserver,
-	hasPublication: initialStateData.hasPublication,
-	minRating: initialStateData.minRating,
-	minCitations: initialStateData.minCitations,
-	folder1: initialStateData.folder1,
-	category1: initialStateData.category1,
-	allAvailableTags: initialStateData.allAvailableTags,
-	originalPackages: initialStateData.originalPackages,
-	sortBy: initialStateData.sortBy,
-	sortDirection: initialStateData.sortDirection,
-	selectedLicenses: initialStateData.selectedLicenses,
-	viewMode: initialStateData.viewMode,
-	filteredPackages: [], // Start with empty filtered list
-	isFilterSidebarVisible: true, // Default visibility
-	isNavSidebarVisible: true, // Default visibility
-	allAvailableLicenses: [], // Add this if needed based on setOriginalPackages logic
-
-	// Actions
-	setSearchTerm: debounce((term: string) => {
-		set((state) => {
-			const newStateData = { ...getStateData(state), searchTerm: term };
-			return {
-				searchTerm: term,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	}, 300),
-
-	toggleTag: (tag: string) => {
-		set((state) => {
-			const newTags = state.selectedTags.includes(tag)
-				? state.selectedTags.filter((t) => t !== tag)
-				: [...state.selectedTags, tag];
-			const newStateData = { ...getStateData(state), selectedTags: newTags };
-			return {
-				selectedTags: newTags,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	addTag: (tag: string) => {
-		set((state) => {
-			if (!state.selectedTags.includes(tag)) {
-				const newTags = [...state.selectedTags, tag];
-				const newStateData = { ...getStateData(state), selectedTags: newTags };
-				return {
-					selectedTags: newTags,
-					filteredPackages: applyFiltersAndSort(newStateData),
-				};
-			}
-			return {}; // Return empty object if no change
-		});
-	},
-
-	setSelectedTags: (tags: string[]) => {
-		set((state) => {
-			const newStateData = { ...getStateData(state), selectedTags: tags };
-			return {
-				selectedTags: tags,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setSelectedLicenses: (licenses: string[]) => {
-		set((state) => {
-			const newStateData = { ...getStateData(state), selectedLicenses: licenses };
-			return {
-				selectedLicenses: licenses,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setMinStars: (stars: number | null) => {
-		set((state) => {
-			const newStars = stars !== null && !isNaN(stars) && stars >= 0 ? Number(stars) : null;
-			const newStateData = { ...getStateData(state), minStars: newStars };
-			return {
-				minStars: newStars,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setHasGithub: (value: boolean) => {
-		set((state) => {
-			const newStateData = { ...getStateData(state), hasGithub: value };
-			return {
-				hasGithub: value,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setHasWebserver: (value: boolean) => {
-		set((state) => {
-			const newStateData = { ...getStateData(state), hasWebserver: value };
-			return {
-				hasWebserver: value,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setHasPublication: (value: boolean) => {
-		set((state) => {
-			const newStateData = { ...getStateData(state), hasPublication: value };
-			return {
-				hasPublication: value,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setMinRating: (rating: number | null) => {
-		set((state) => {
-			const newRating = rating !== null && rating >= 0 && rating <= 5 ? Number(rating) : null;
-			const newStateData = { ...getStateData(state), minRating: newRating };
-			return {
-				minRating: newRating,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setMinCitations: (citations: number | null) => {
-		set((state) => {
-			const newCitations = citations !== null && !isNaN(citations) && citations >= 0 ? Number(citations) : null;
-			const newStateData = { ...getStateData(state), minCitations: newCitations };
-			return {
-				minCitations: newCitations,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setFolder1: (folder: string | null) => {
-		set((state) => {
-			const newStateData = { ...getStateData(state), folder1: folder, category1: null }; // Reset category
-			return {
-				folder1: folder,
-				category1: null,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setCategory1: (category: string | null) => {
-		set((state) => {
-			const newStateData = { ...getStateData(state), category1: category };
-			return {
-				category1: category,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setAllAvailableTags: (tags: string[]) => {
-		set({ allAvailableTags: tags });
-	},
-
-	setOriginalPackages: (packages: Package[]) => {
-		console.log(`Loaded ${packages.length} original packages.`);
-		set((state) => {
-			const newAllAvailableTags = [...new Set(packages.flatMap(p => p.tags || []))].sort();
-			const newAllAvailableLicenses = [...new Set(packages.map(p => p.license).filter(Boolean) as string[])].sort();
-
-			const newStateData = {
-				...getStateData(state), // Get current filters
-				originalPackages: packages, // Update packages
-				allAvailableTags: newAllAvailableTags, // Update tags
-				// Note: We don't put allAvailableLicenses into FilterData for applyFiltersAndSort
-			};
-
-			return {
-				originalPackages: packages,
-				allAvailableTags: newAllAvailableTags,
-				allAvailableLicenses: newAllAvailableLicenses, // Store in state
-				filteredPackages: applyFiltersAndSort(newStateData), // Apply initial filter
-			};
-		});
-	},
-
-	clearFilters: () => {
-		set((state) => {
-			// Keep original packages, available tags, licenses, sort, view mode etc.
-			const resetData: FilterData = {
-				...getStateData(state), // Get current state (includes packages, tags, sort etc.)
-				// Reset only the filter criteria to defaults from initialStateData
-				searchTerm: initialStateData.searchTerm,
-				selectedTags: initialStateData.selectedTags,
-				minStars: initialStateData.minStars,
-				hasGithub: initialStateData.hasGithub,
-				hasWebserver: initialStateData.hasWebserver,
-				hasPublication: initialStateData.hasPublication,
-				minRating: initialStateData.minRating,
-				minCitations: initialStateData.minCitations,
-				folder1: initialStateData.folder1,
-				category1: initialStateData.category1,
-				selectedLicenses: initialStateData.selectedLicenses,
-			};
-			return {
-				// Update state with reset filter values
-				searchTerm: resetData.searchTerm,
-				selectedTags: resetData.selectedTags,
-				minStars: resetData.minStars,
-				hasGithub: resetData.hasGithub,
-				hasWebserver: resetData.hasWebserver,
-				hasPublication: resetData.hasPublication,
-				minRating: resetData.minRating,
-				minCitations: resetData.minCitations,
-				folder1: resetData.folder1,
-				category1: resetData.category1,
-				selectedLicenses: resetData.selectedLicenses,
-				// Recalculate filtered packages based on the reset filters
-				filteredPackages: applyFiltersAndSort(resetData),
-			};
-		});
-	},
-
-	setSort: (newSortBy: string | null, newDirection?: 'asc' | 'desc') => {
-		set((state) => {
-			const direction = newDirection || (
-				newSortBy === state.sortBy
-					? (state.sortDirection === 'asc' ? 'desc' : 'asc')
-					: 'asc'
-			);
-			const newStateData = { ...getStateData(state), sortBy: newSortBy, sortDirection: direction };
-			return {
-				sortBy: newSortBy,
-				sortDirection: direction,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	setViewMode: (mode: ViewMode) => {
-		set({ viewMode: mode });
-	},
-
-	toggleFilterSidebar: () => {
-		set((state) => ({
-			isFilterSidebarVisible: !state.isFilterSidebarVisible,
-		}));
-	},
-
-	toggleNavSidebar: () => {
-		set((state) => ({
-			isNavSidebarVisible: !state.isNavSidebarVisible,
-		}));
-	},
-
-	toggleLicense: (license: string) => {
-		set((state) => {
-			const newSelectedLicenses = state.selectedLicenses.includes(license)
-				? state.selectedLicenses.filter((l: string) => l !== license)
-				: [...state.selectedLicenses, license];
-			const newStateData = { ...getStateData(state), selectedLicenses: newSelectedLicenses };
-			return {
-				selectedLicenses: newSelectedLicenses,
-				filteredPackages: applyFiltersAndSort(newStateData),
-			};
-		});
-	},
-
-	// resetFilters is similar to clearFilters but might be intended differently?
-	// Let's make it identical to clearFilters for now, as the previous implementation was complex.
-	resetFilters: () => {
-		set((state) => {
-			const resetData: FilterData = {
-				...getStateData(state),
-				searchTerm: initialStateData.searchTerm,
-				selectedTags: initialStateData.selectedTags,
-				minStars: initialStateData.minStars,
-				hasGithub: initialStateData.hasGithub,
-				hasWebserver: initialStateData.hasWebserver,
-				hasPublication: initialStateData.hasPublication,
-				minRating: initialStateData.minRating,
-				minCitations: initialStateData.minCitations,
-				folder1: initialStateData.folder1,
-				category1: initialStateData.category1,
-				selectedLicenses: initialStateData.selectedLicenses,
-			};
-			return {
-				searchTerm: resetData.searchTerm,
-				selectedTags: resetData.selectedTags,
-				minStars: resetData.minStars,
-				hasGithub: resetData.hasGithub,
-				hasWebserver: resetData.hasWebserver,
-				hasPublication: resetData.hasPublication,
-				minRating: resetData.minRating,
-				minCitations: resetData.minCitations,
-				folder1: resetData.folder1,
-				category1: resetData.category1,
-				selectedLicenses: resetData.selectedLicenses,
-				filteredPackages: applyFiltersAndSort(resetData),
-			};
-		});
-	},
-
-	updateFilteredPackages: () => {
-		set((state) => ({
-			filteredPackages: applyFiltersAndSort(getStateData(state)),
-		}));
-	},
-}));
+                // Retain data that is fetched/derived once and doesn't change with filters
+                originalPackages: state.originalPackages,
+                allAvailableTags: state.allAvailableTags,
+                allAvailableLicenses: state.allAvailableLicenses,
+                allAvailableFolders: state.allAvailableFolders,
+                allAvailableCategories: state.allAvailableCategories,
+                datasetMaxStars: state.datasetMaxStars,
+                datasetMaxCitations: state.datasetMaxCitations,
+                
+                // These are set by HomePage based on new (reset) filters, so clear them or let HomePage handle it
+                displayedPackages: [], // Will be updated by HomePage after filters reset
+                totalFilteredCount: 0, // Will be updated by HomePage
+            })),
+            setViewMode: (viewMode) => set({ viewMode }),
+            toggleFilterSidebar: () => set((state) => ({ isFilterSidebarVisible: !state.isFilterSidebarVisible })),
+            toggleNavSidebar: () => set((state) => ({ isNavSidebarVisible: !state.isNavSidebarVisible })),
+        }),
+        {
+            name: 'cadd-vault-filter-storage-v3', // Incremented version
+            partialize: (state) => ({
+                searchTerm: state.searchTerm,
+                selectedTags: state.selectedTags,
+                minStars: state.minStars,
+                hasGithub: state.hasGithub,
+                hasWebserver: state.hasWebserver,
+                hasPublication: state.hasPublication,
+                minCitations: state.minCitations,
+                folder1: state.folder1,
+                category1: state.category1,
+                selectedLicenses: state.selectedLicenses,
+                sortBy: state.sortBy,
+                sortDirection: state.sortDirection,
+                viewMode: state.viewMode,
+                currentPage: state.currentPage,
+                isFilterSidebarVisible: state.isFilterSidebarVisible,
+                isNavSidebarVisible: state.isNavSidebarVisible,
+            }),
+        }
+    )
+);
