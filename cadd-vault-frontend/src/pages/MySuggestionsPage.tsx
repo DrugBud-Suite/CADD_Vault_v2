@@ -5,19 +5,23 @@ import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import { PackageSuggestion } from '../types';
 import {
-	Box, Typography, CircularProgress, Paper, Alert, Container, // Added Container
+	Box, Typography, CircularProgress, Paper, Alert, Container,
 	Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip
 } from '@mui/material';
-// import EditIcon from '@mui/icons-material/Edit'; // Edit functionality not implemented yet
+import EditIcon from '@mui/icons-material/Edit'; // Import EditIcon
 import DeleteIcon from '@mui/icons-material/Delete';
-// import VisibilityIcon from '@mui/icons-material/Visibility'; // View functionality not implemented yet
+import EditSuggestionModal from '../components/EditSuggestionModal'; // Import the modal
 
 const MySuggestionsPage: React.FC = () => {
 	const navigate = useNavigate();
-	const { currentUser, loading: authLoading } = useAuth();
+	const { currentUser, loading: authLoading, isAdmin } = useAuth(); // Get isAdmin
 	const [suggestions, setSuggestions] = useState<PackageSuggestion[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
+
+	// State for the edit modal
+	const [editingSuggestion, setEditingSuggestion] = useState<PackageSuggestion | null>(null);
+	const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
 	const fetchSuggestions = useCallback(async () => {
 		if (!currentUser) return;
@@ -26,7 +30,7 @@ const MySuggestionsPage: React.FC = () => {
 		try {
 			const { data, error: fetchError } = await supabase
 				.from('package_suggestions')
-				.select('*') // You might want to select specific columns or join user email here
+				.select('*')
 				.eq('suggested_by_user_id', currentUser.id)
 				.order('created_at', { ascending: false });
 
@@ -35,14 +39,15 @@ const MySuggestionsPage: React.FC = () => {
 		} catch (err: any) {
 			console.error("Error fetching suggestions:", err.message);
 			setError(`Failed to load your suggestions: ${err.message}`);
+			setSuggestions([]);
 		} finally {
 			setLoading(false);
 		}
-	}, [currentUser]); // Dependency: currentUser
+	}, [currentUser]);
 
 	useEffect(() => {
 		if (!authLoading && !currentUser) {
-			navigate('/login'); // Or show a message to login
+			navigate('/login');
 		} else if (currentUser) {
 			fetchSuggestions();
 		}
@@ -50,19 +55,43 @@ const MySuggestionsPage: React.FC = () => {
 
 	const handleDeleteSuggestion = async (suggestionId: string) => {
 		if (!window.confirm("Are you sure you want to delete this pending suggestion? This action cannot be undone.")) return;
+		if (!currentUser) return;
+
 		try {
 			const { error: deleteError } = await supabase
 				.from('package_suggestions')
 				.delete()
 				.eq('id', suggestionId)
-				.eq('status', 'pending'); // Ensure only pending can be deleted by user
+				.eq('status', 'pending')
+				.eq('suggested_by_user_id', currentUser.id);
 
 			if (deleteError) throw deleteError;
-			setSuggestions(prev => prev.filter((s: PackageSuggestion) => s.id !== suggestionId)); // Explicitly type 's'
-			// TODO: Show success message (e.g., using a Snackbar)
+			setSuggestions(prev => prev.filter((s) => s.id !== suggestionId));
+			// Consider adding a success snackbar here
 		} catch (err: any) {
 			setError(`Failed to delete suggestion: ${err.message}`);
 		}
+	};
+
+	const handleOpenEditModal = (suggestion: PackageSuggestion) => {
+		if ((suggestion.status === 'pending' && suggestion.suggested_by_user_id === currentUser?.id) || isAdmin) {
+			setEditingSuggestion(suggestion);
+			setIsEditModalOpen(true);
+		} else {
+			alert("You can only edit your own suggestions that are still pending.");
+		}
+	};
+
+	const handleCloseEditModal = () => {
+		setEditingSuggestion(null);
+		setIsEditModalOpen(false);
+	};
+
+	const handleSaveSuccess = () => {
+		fetchSuggestions();
+		setIsEditModalOpen(false);
+		setEditingSuggestion(null);
+		// Consider adding a success snackbar here
 	};
 
 	const getStatusChipColor = (status: PackageSuggestion['status']) => {
@@ -70,6 +99,7 @@ const MySuggestionsPage: React.FC = () => {
 			case 'pending': return 'warning';
 			case 'approved': return 'success';
 			case 'rejected': return 'error';
+			case 'added': return 'info'; // Added from previous update, ensure type is consistent
 			default: return 'default';
 		}
 	};
@@ -109,7 +139,7 @@ const MySuggestionsPage: React.FC = () => {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{suggestions.map((suggestion: PackageSuggestion) => ( // Explicitly type 'suggestion'
+								{suggestions.map((suggestion) => (
 								<TableRow key={suggestion.id} hover>
 									<TableCell component="th" scope="row">
 										{suggestion.package_name}
@@ -129,14 +159,25 @@ const MySuggestionsPage: React.FC = () => {
 										</Tooltip>
 									</TableCell>
 									<TableCell align="right">
-										{suggestion.status === 'pending' && (
-											<>
-												<Tooltip title="Delete Suggestion">
-													<IconButton size="small" onClick={() => handleDeleteSuggestion(suggestion.id)} sx={{ ml: 1, color: 'error.main' }}>
-														<DeleteIcon />
-													</IconButton>
-												</Tooltip>
-											</>
+										{/* Edit button: User can edit their own PENDING suggestions. Admin can edit any. */}
+										{((suggestion.status === 'pending' && suggestion.suggested_by_user_id === currentUser.id) || isAdmin) && (
+											<Tooltip title="Edit Suggestion">
+												<IconButton
+													size="small"
+													onClick={() => handleOpenEditModal(suggestion)}
+													sx={{ color: 'primary.main' }}
+												>
+													<EditIcon />
+												</IconButton>
+											</Tooltip>
+										)}
+										{/* Delete button: User can delete their own PENDING suggestions */}
+										{suggestion.status === 'pending' && suggestion.suggested_by_user_id === currentUser.id && (
+											<Tooltip title="Delete Suggestion">
+												<IconButton size="small" onClick={() => handleDeleteSuggestion(suggestion.id)} sx={{ ml: 1, color: 'error.main' }}>
+													<DeleteIcon />
+												</IconButton>
+											</Tooltip>
 										)}
 									</TableCell>
 								</TableRow>
@@ -144,6 +185,16 @@ const MySuggestionsPage: React.FC = () => {
 						</TableBody>
 					</Table>
 				</TableContainer>
+			)}
+			{/* Edit Suggestion Modal */}
+			{editingSuggestion && (
+				<EditSuggestionModal
+					open={isEditModalOpen}
+					onClose={handleCloseEditModal}
+					suggestion={editingSuggestion}
+					onSaveSuccess={handleSaveSuccess}
+					isAdmin={!!isAdmin} // Pass admin status
+				/>
 			)}
 		</Container>
 	);

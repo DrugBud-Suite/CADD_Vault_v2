@@ -300,9 +300,10 @@ const SuggestPackagePage: React.FC = () => {
 								onChange={handleTagsChange}
 								freeSolo
 								renderTags={(value: readonly string[], getTagProps) =>
-									value.map((option: string, index: number) => (
-										<Chip variant="outlined" label={option} {...getTagProps({ index })} />
-									))
+									value.map((option: string, index: number) => {
+										const { key, ...otherTagProps } = getTagProps({ index }); // Destructure key
+										return <Chip key={key} variant="outlined" label={option} {...otherTagProps} />; // Apply key directly and spread the rest
+									})
 								}
 								renderInput={(params) => (
 									<TextField
