@@ -110,7 +110,12 @@ const HomePage: React.FC = () => {
 					.select('*, average_rating, ratings_count', { count: 'exact' }); // Ensure average_rating and ratings_count are available if not part of '*'
 
 				if (searchTerm) queryBuilder = queryBuilder.or(`package_name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
-				if (selectedTags.length > 0) queryBuilder = queryBuilder.contains('tags', selectedTags);
+				if (selectedTags.length > 0) {
+					// Convert the array of strings to a JSON string array format.
+					// e.g., if selectedTags is ['tag1', 'tag2'], jsonFormattedTags will be '["tag1","tag2"]'
+					const jsonFormattedTags = JSON.stringify(selectedTags);
+					queryBuilder = queryBuilder.contains('tags', jsonFormattedTags);
+				}
 				if (minStars !== null && minStars > 0) queryBuilder = queryBuilder.gte('github_stars', minStars);
 				if (hasGithub) queryBuilder = queryBuilder.not('repo_link', 'is', null);
 				if (hasWebserver) queryBuilder = queryBuilder.not('webserver', 'is', null);
