@@ -94,11 +94,6 @@ export default function Header() {
 		setIsSignupModalOpen(false);
 	};
 
-	const handleNavigate = (path: string) => {
-		handleCloseUserMenu();
-		navigate(path);
-	};
-
 	// Tooltip text for user icon
 	const userTooltipTitle = currentUser
 		? `User ID: ${currentUser.id || 'N/A'}, Email: ${currentUser.email}`
