@@ -1,14 +1,13 @@
+![CADD Vault Logo](./cadd-vault-frontend/src/assets/caddvault_medium.png)
 
-![Logo](./caddvault_medium.png)
-
-# [Computer-Aided Drug Design (CADD) Vault](https://drugbud-suite.github.io/CADD_Vault/)
+# [Computer-Aided Drug Design (CADD) Vault](https://drugbud-suite.github.io/CADD_Vault_v2/)
 
 ![Stars](https://img.shields.io/github/stars/drugbud-suite/CADD_Vault?style=for-the-badge)
 ![mkdocs](https://img.shields.io/github/actions/workflow/status/drugbud-suite/CADD_Vault/mkdocs-deploy.yml?style=for-the-badge)
 ![License](https://img.shields.io/github/license/drugbud-suite/CADD_Vault?style=for-the-badge)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)
 
-Welcome to the [CADD Vault](https://drugbud-suite.github.io/CADD_Vault/), an open-source repository dedicated to sharing resources, tools, and knowledge in the field of computer-aided drug design. This vault aims to support researchers, students, and professionals by providing a comprehensive collection of materials related to CADD.
+Welcome to the [CADD Vault](https://drugbud-suite.github.io/CADD_Vault_v2/), an open-source repository dedicated to sharing resources, tools, and knowledge in the field of computer-aided drug design. This vault aims to support researchers, students, and professionals by providing a comprehensive collection of materials related to CADD.
 
 ## About the Vault
 
@@ -27,19 +26,17 @@ The [CADD Vault](https://drugbud-suite.github.io/CADD_Vault/) includes resources
   
 ## How to Use the Vault
 
-The vault can be accessed here : [Computer-Aided Drug Design (CADD) Vault](https://drugbud-suite.github.io/CADD_Vault/)
+The vault can be accessed here : [Computer-Aided Drug Design (CADD) Vault](https://drugbud-suite.github.io/CADD_Vault_v2/)
 
 The vault is structured into several sections, each dedicated to a specific aspect of CADD. You can navigate through the repository to explore tutorials, datasets, software tools, and more. We have organized the content into subdirectories for easy navigation.
 
 ## Contributing
 
-We welcome contributions from the community! If you have resources, tools, tutorials, or any other content that you believe would benefit others in the field of CADD, please see our **[contributing guidelines](https://github.com/DrugBud-Suite/CADD_Vault/blob/main/CONTRIBUTING.md)** for how to get involved.
+We welcome contributions from the community! If you have resources, tools, tutorials, or any other content that you believe would benefit others in the field of CADD, please see our **[contributing guidelines](https://github.com/DrugBud-Suite/CADD_Vault_v2/blob/main/CONTRIBUTING.md)** for how to get involved.
 
 ## Want your tool or website added?
 
-We provide a **[Google Form](https://forms.gle/pA81nNdRLnkVZEcs7)** to request an entry to be added to the CADD Vault.
-
-Alternatively, Feel free to create an **[issue on Github](https://github.com/DrugBud-Suite/CADD_Vault/issues)** and we would be happy to add your tool or website to the CADD_Vault.
+You can suggest new package directly via the webapp. Please make sure to fill all fields correctly. Your suggestions will be review by admin.
 
 ## License
 
@@ -59,4 +56,4 @@ We particularly thank the creators of the following resources:
 
 If you have any questions, suggestions, or would like to contribute, please feel free to contact us via GitHub issues or pull requests.
 
-Thank you for visiting the **[CADD Vault](https://drugbud-suite.github.io/CADD_Vault/)**. Happy exploring!
+Thank you for visiting the **[CADD Vault](https://drugbud-suite.github.io/CADD_Vault_v2/)**. Happy exploring!
