@@ -1,15 +1,31 @@
-import React, { useState } from 'react'
-import { Link as RouterLink } from 'react-router-dom'
-import { Card, CardContent, Typography, Link, Box, Chip, Stack, Divider, Tooltip, Button, IconButton, Popover } from '@mui/material';
-import { alpha, Theme } from '@mui/material/styles';
-import { Code as CodeIcon, Article, Language, Link as LinkIcon, MoreHoriz as MoreHorizIcon } from '@mui/icons-material';
-import { FiTag, FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
+// src/components/PackageCard.tsx
+import React, { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import {
+	Card,
+	CardContent,
+	Typography,
+	Link,
+	Box,
+	Chip,
+	Stack,
+	Divider,
+	Tooltip,
+	IconButton,
+	Popover,
+	Theme
+} from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { MoreHoriz as MoreHorizIcon } from '@mui/icons-material';
+import { FiTag } from 'react-icons/fi';
 import { Package } from '../types';
 import { useFilterStore } from '../store/filterStore';
 import RatingInput from './RatingInput';
+import PackageActions from './common/PackageActions';
+import PackageMetrics from './common/PackageMetrics';
 
 interface PackageCardProps {
-	pkg: Package
+	pkg: Package;
 }
 
 const PackageCardComponent = ({ pkg }: PackageCardProps) => {
@@ -30,47 +46,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 
 	const tagsPopoverOpen = Boolean(tagsPopoverAnchor);
 
-	// Common button styles
-	const buttonStyle = {
-		borderRadius: 4,
-		textTransform: 'none',
-		px: 1.5,
-		minWidth: 'auto',
-		borderColor: (theme: Theme) => alpha(theme.palette.primary.main, 0.3),
-		color: 'primary.main',
-		position: 'relative',
-		transition: (theme: Theme) => theme.transitions.create(['all'], {
-			duration: '0.2s'
-		}),
-		'&::before': {
-			content: '""',
-			position: 'absolute',
-			top: -1,
-			left: -1,
-			right: -1,
-			bottom: -1,
-			borderRadius: 4,
-			padding: '1px',
-			background: (theme: Theme) => theme.palette.mode === 'dark'
-				? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0)}, ${alpha(theme.palette.primary.main, 0.3)})`
-				: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0)}, ${alpha(theme.palette.primary.main, 0.2)})`,
-			WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-			WebkitMaskComposite: 'xor',
-			maskComposite: 'exclude',
-		},
-		'&:hover': {
-			borderColor: 'primary.main',
-			color: (theme: Theme) => theme.palette.mode === 'dark' ? theme.palette.primary.light : theme.palette.primary.main,
-			bgcolor: (theme: Theme) => alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.15 : 0.04),
-			'&::before': {
-				background: (theme: Theme) => theme.palette.mode === 'dark'
-					? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.2)}, ${alpha(theme.palette.primary.main, 0.4)})`
-					: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(theme.palette.primary.main, 0.3)})`,
-			},
-			transform: 'translateY(-1px)',
-			boxShadow: (theme: Theme) => `0 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
-		}
-	};
+	// buttonStyle definition is removed from here, as it's encapsulated in PackageLinkButton.tsx
 
 	return (
 		<Card
@@ -108,7 +84,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 							fontWeight: 600,
 							pr: 2, // Add padding to prevent overlap with rating
 							flexGrow: 1,
-							fontSize: '1.05rem', // Reduced from h6 default size
+							fontSize: '1.05rem',
 							color: (theme) => theme.palette.mode === 'dark' ? theme.palette.primary.light : theme.palette.primary.dark,
 						}}
 					>
@@ -122,7 +98,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 								color: 'text.primary',
 								'&:hover': {
 									color: (theme) => theme.palette.mode === 'dark' ? theme.palette.primary.main : theme.palette.primary.main,
-									transform: 'translateY(-1px)', // Subtle upward movement on hover
+									transform: 'translateY(-1px)',
 								},
 								'&::after': {
 									content: '""',
@@ -161,7 +137,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 						variant="body2"
 						color="text.secondary"
 						sx={{
-							mb: 1.25, // Reduced from 2
+							mb: 1.25,
 							overflow: 'hidden',
 							textOverflow: 'ellipsis',
 							display: '-webkit-box',
@@ -177,141 +153,15 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 				{/* Spacer to push content below to the bottom */}
 				<Box sx={{ flexGrow: 1 }} />
 
-				{/* Links Row - Redesigned as buttons with reduced top padding */}
-				<Stack direction="row" spacing={1} sx={{ pt: 1, flexWrap: 'wrap', gap: 1 }}>
-					{/* Code Repository */}
-					{(pkg.repo_link || pkg.repository) && (
-						<Button
-							href={pkg.repo_link || pkg.repository || ''}
-							target="_blank"
-							rel="noopener noreferrer"
-							variant="outlined"
-							size="small"
-							startIcon={<CodeIcon fontSize="small" />}
-							sx={buttonStyle}
-						>
-							Code
-						</Button>
-					)}
+				{/* Links Row - Replaced with PackageActions component */}
+				<Box sx={{ pt: 1 }}>
+					<PackageActions pkg={pkg} />
+				</Box>
 
-					{/* Publication */}
-					{pkg.publication && (
-						<Button
-							href={pkg.publication || ''}
-							target="_blank"
-							rel="noopener noreferrer"
-							variant="outlined"
-							size="small"
-							startIcon={<Article fontSize="small" />}
-							sx={buttonStyle}
-						>
-							Publication
-						</Button>
-					)}
-
-					{/* Webserver */}
-					{pkg.webserver && (
-						<Button
-							href={pkg.webserver || ''}
-							target="_blank"
-							rel="noopener noreferrer"
-							variant="outlined"
-							size="small"
-							startIcon={<Language fontSize="small" />}
-							sx={buttonStyle}
-						>
-							Web
-						</Button>
-					)}
-
-					{/* Link */}
-					{pkg.link && (
-						<Button
-							href={pkg.link || ''}
-							target="_blank"
-							rel="noopener noreferrer"
-							variant="outlined"
-							size="small"
-							startIcon={<LinkIcon fontSize="small" />}
-							sx={buttonStyle}
-						>
-							Link
-						</Button>
-					)}
-				</Stack>
-
-				{/* Info Chips Row - only shown when there's at least one metric to display */}
-				{((typeof pkg.github_stars !== 'undefined' && pkg.github_stars > 0) ||
-					pkg.last_commit_ago ||
-					(typeof pkg.citations !== 'undefined' && pkg.citations >= 0)) && (
-						<Stack direction="row" spacing={1} sx={{ pt: 1, flexWrap: 'wrap', gap: 0.75 }}>
-							{/* GitHub Stars - only shown when not null and > 0 */}
-						{typeof pkg.github_stars !== 'undefined' && pkg.github_stars > 0 && (
-							<Chip
-								icon={<FiStar size={14} />}
-								label={`${pkg.github_stars}`}
-								size="small"
-								variant="outlined"
-								sx={{
-									borderRadius: 4,
-										borderColor: 'divider',
-										bgcolor: (theme) => alpha(theme.palette.background.paper, 0.6),
-										'& .MuiChip-label': {
-											px: 1,
-											fontSize: '0.75rem',
-										},
-										'& .MuiChip-icon': {
-											color: 'warning.main',
-										},
-								}}
-							/>
-							)}
-
-							{/* Last Commit - only shown when not null */}
-						{pkg.last_commit_ago && (
-							<Chip
-								icon={<FiClock size={14} />}
-								label={pkg.last_commit_ago.replace(' months ago', 'mo')}
-								size="small"
-								variant="outlined"
-								sx={{
-									borderRadius: 4,
-										borderColor: 'divider',
-										bgcolor: (theme) => alpha(theme.palette.background.paper, 0.6),
-										'& .MuiChip-label': {
-											px: 1,
-											fontSize: '0.75rem',
-										},
-										'& .MuiChip-icon': {
-											color: 'info.main',
-										},
-								}}
-							/>
-							)}
-
-							{/* Citations - only shown when not null and >= 0 */}
-						{typeof pkg.citations !== 'undefined' && pkg.citations >= 0 && (
-							<Chip
-								icon={<FiBookOpen size={14} />}
-								label={`${pkg.citations}`}
-								size="small"
-								variant="outlined"
-								sx={{
-									borderRadius: 4,
-										borderColor: 'divider',
-										bgcolor: (theme) => alpha(theme.palette.background.paper, 0.6),
-										'& .MuiChip-label': {
-											px: 1,
-											fontSize: '0.75rem',
-										},
-										'& .MuiChip-icon': {
-											color: 'success.main',
-										},
-								}}
-							/>
-							)}
-						</Stack>
-					)}
+				{/* Info Chips Row - Replaced with PackageMetrics component */}
+				<Box sx={{ pt: 1 }}>
+					<PackageMetrics pkg={pkg} variant="card" />
+				</Box>
 			</CardContent>
 
 			{/* Tags Section - with consistent height and "See All Tags" button */}
@@ -323,7 +173,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 							pt: 1.25,
 							pb: '12px !important',
 							px: 2,
-							height: '76px', // Increased height for better display of 2 rows of tags
+							height: '76px',
 							position: 'relative',
 							overflow: 'hidden'
 						}}
@@ -333,7 +183,6 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 								<FiTag size={14} />
 							</Box>
 
-							{/* Tags container with limited height to show max 2 rows */}
 							<Box
 								sx={{
 									display: 'flex',
@@ -341,8 +190,8 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 									gap: 0.75,
 									alignItems: 'flex-start',
 									minWidth: 0,
-									maxWidth: 'calc(100% - 50px)', // Make room for the "more" button
-									maxHeight: '62px', // Increased to better show 2 rows of tags
+									maxWidth: 'calc(100% - 50px)',
+									maxHeight: '62px',
 									overflow: 'hidden',
 									pr: 1
 								}}
@@ -361,7 +210,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 											color: 'primary.main',
 											fontWeight: 500,
 											fontSize: '0.7rem',
-											mb: 0.35, // Reduced vertical spacing between tag rows
+											mb: 0.35,
 											'&:hover': {
 												bgcolor: (theme) => theme.palette.mode === 'dark'
 													? alpha(theme.palette.primary.main, 0.25)
@@ -374,7 +223,6 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 								))}
 							</Box>
 
-							{/* "See All Tags" button */}
 							<Box sx={{ position: 'absolute', right: 8, top: 10 }}>
 								<Tooltip title="See All Tags" arrow>
 									<IconButton
@@ -396,7 +244,6 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 							</Box>
 						</Stack>
 
-						{/* Tags popover */}
 						<Popover
 							open={tagsPopoverOpen}
 							anchorEl={tagsPopoverAnchor}
