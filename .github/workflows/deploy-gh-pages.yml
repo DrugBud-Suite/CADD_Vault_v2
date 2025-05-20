@@ -1,0 +1,49 @@
+name: Deploy Frontend to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main # Trigger deployment on pushes to the main branch
+  workflow_dispatch: # Allows manual triggering of the workflow
+
+permissions:
+  contents: write # Needed to push to gh-pages branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Ensure your VITE_ environment variables are set here if they are needed during build time
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_TURNSTILE_SITE_KEY_PROD: ${{ secrets.VITE_TURNSTILE_SITE_KEY_PROD }} # Added Turnstile Site Key
+      # Add other VITE_ environment variables needed for the build
+      CI: false # Often needed for Vite builds on CI to treat warnings as non-fatal
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*' # Use the latest Long-Term Support version
+          cache: 'npm'
+          cache-dependency-path: cadd-vault-frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./cadd-vault-frontend
+        run: npm ci # Use 'ci' for cleaner installs in CI environments
+
+      - name: Build frontend application
+        working-directory: ./cadd-vault-frontend
+        run: npm run build # This runs "tsc -b && vite build"
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./cadd-vault-frontend/dist
+          # user_name: 'github-actions[bot]' # Optional: customize commit user
+          # user_email: 'github-actions[bot]@users.noreply.github.com' # Optional: customize commit email
+          # cname: yourcustomdomain.com # Optional: if you use a custom domain
