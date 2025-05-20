@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Box, Typography, TextField, Button, Alert } from '@mui/material';
+import { Modal, Typography, TextField, Button, Alert, Paper } from '@mui/material'; // Removed Box, kept Paper
 import { useAuth, EmailSignInCredentials } from '../context/AuthContext';
 import CaptchaWidget from './CaptchaWidget'; // Import the new component
 
@@ -15,13 +15,14 @@ const style = {
 	left: '50%',
 	transform: 'translate(-50%, -50%)',
 	width: 400,
-	bgcolor: 'background.paper',
-	border: '2px solid #000',
+	bgcolor: 'background.paper', // Use theme background
+	// border: '2px solid #000', // Removed border
+	borderRadius: '12px', // Added border radius
 	boxShadow: 24,
-	p: 4,
+	p: 4, // Keep padding
 	display: 'flex',
 	flexDirection: 'column',
-	gap: 2,
+	gap: 3, // Increased gap for better spacing
 };
 
 const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onOpenSignup }) => {
@@ -65,12 +66,12 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onOpenSignup }) 
 			aria-labelledby="login-modal-title"
 			aria-describedby="login-modal-description"
 		>
-			<Box sx={style}>
-				<Typography id="login-modal-title" variant="h6" component="h2">
+			<Paper sx={style}>
+				<Typography id="login-modal-title" variant="h5" component="h2" sx={{ textAlign: 'center', fontWeight: 'bold', mb: 1 }}> {/* Centered and styled title */}
 					Login
 				</Typography>
-				{error && <Alert severity="error">{error}</Alert>}
-				<form onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+				{error && <Alert severity="error" sx={{ width: '100%' }}>{error}</Alert>} {/* Ensure alert takes full width */}
+				<form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}> {/* Added gap to form elements */}
 					<TextField
 						label="Email"
 						variant="outlined"
@@ -93,6 +94,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onOpenSignup }) 
 						variant="contained"
 						type="submit" // Set type to submit
 						disabled={loading || !captchaToken} // Disable if loading or no captcha token
+						sx={{ py: 1.5, fontWeight: 'bold' }} // Made button taller and text bold
 					>
 						{loading ? 'Logging In...' : 'Login'}
 					</Button>
@@ -102,11 +104,11 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onOpenSignup }) 
 					onClick={onOpenSignup}
 					color="primary"
 					size="small"
-					sx={{ mt: 1 }}
+					sx={{ mt: 1, alignSelf: 'center' }} // Centered the signup button
 				>
 					Don't have an account? Sign Up
 				</Button>
-			</Box>
+			</Paper>
 		</Modal>
 	);
 };
