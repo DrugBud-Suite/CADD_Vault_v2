@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Typography, Grid, Paper, Button, CircularProgress, Link, Chip, useTheme, Theme, Stack } from '@mui/material';
+import { Box, Typography, Grid, Paper, Button, CircularProgress, Link, Chip, useTheme, Theme, Stack, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { supabase } from '../supabase';
 import { Package } from '../types';
-import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon } from '@mui/icons-material';
+import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
 import RatingInput from '../components/RatingInput';
 import { useAuth } from '../context/AuthContext';
@@ -94,11 +94,44 @@ const PackageDetailPage: React.FC = () => {
 	const [packageData, setPackageData] = useState<Package | null>(null);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
+	const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
 
 	const handleEditClick = () => {
 		if (packageId) {
 			navigate(`/edit-package/${encodeURIComponent(packageId)}`);
 		}
+	};
+
+	const handleDeleteClick = () => {
+		setOpenDeleteConfirm(true);
+	};
+
+	const handleConfirmDelete = async () => {
+		if (!packageId) {
+			setError('Package ID is missing for deletion.');
+			setOpenDeleteConfirm(false);
+			return;
+		}
+		try {
+			const { error: deleteError } = await supabase
+				.from('packages')
+				.delete()
+				.eq('id', packageId);
+
+			if (deleteError) {
+				throw deleteError;
+			}
+			setOpenDeleteConfirm(false);
+			navigate('/'); // Navigate to homepage after deletion
+		} catch (err: any) {
+			console.error("Error deleting package:", err);
+			setError(`Failed to delete package: ${err?.message || 'Unknown error'}`);
+			setOpenDeleteConfirm(false);
+		}
+	};
+
+	const handleCloseDeleteConfirm = () => {
+		setOpenDeleteConfirm(false);
 	};
 
 	useEffect(() => {
@@ -197,23 +230,28 @@ const PackageDetailPage: React.FC = () => {
 			borderRadius: 2,
 		}}>
 			{isAdmin && (
-				<Button
-					variant="outlined"
-					startIcon={<Edit fontSize="small" />}
-					onClick={handleEditClick}
-					sx={{
-						position: 'absolute',
-						top: 16,
-						right: 16,
-						...buttonStyle
-					}}
-				>
-					Edit
-				</Button>
+				<Stack direction="row" spacing={1} sx={{ position: 'absolute', top: 16, right: 16 }}>
+					<Button
+						variant="outlined"
+						startIcon={<Edit fontSize="small" />}
+						onClick={handleEditClick}
+						sx={buttonStyle}
+					>
+						Edit
+					</Button>
+					<Button
+						variant="outlined"
+						startIcon={<Delete fontSize="small" />}
+						onClick={handleDeleteClick}
+						sx={{ ...buttonStyle, borderColor: theme.palette.error.main, color: theme.palette.error.main, '&:hover': { borderColor: theme.palette.error.dark, bgcolor: alpha(theme.palette.error.main, 0.1) } }}
+					>
+						Delete
+					</Button>
+				</Stack>
 			)}
 			{/* Rating in top right corner */}
 			{packageId && (
-				<Box sx={{ position: 'absolute', top: 20, right: isAdmin ? 120 : 16, zIndex: 1 }}>
+				<Box sx={{ position: 'absolute', top: 20, right: isAdmin ? (packageData?.package_name && packageData.package_name.length > 15 ? 300 : 210) : 16, zIndex: 1 }}>
 					<RatingInput
 						packageId={packageId}
 						initialAverageRating={packageData.average_rating ?? 0}
@@ -531,6 +569,28 @@ const PackageDetailPage: React.FC = () => {
 					</Box>
 				</Box>
 			)}
+
+			<Dialog
+				open={openDeleteConfirm}
+				onClose={handleCloseDeleteConfirm}
+				aria-labelledby="alert-dialog-title"
+				aria-describedby="alert-dialog-description"
+			>
+				<DialogTitle id="alert-dialog-title">{"Confirm Deletion"}</DialogTitle>
+				<DialogContent>
+					<DialogContentText id="alert-dialog-description">
+						Are you sure you want to delete the package "{packageData?.package_name || packageId}"? This action cannot be undone.
+					</DialogContentText>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={handleCloseDeleteConfirm} color="primary">
+						Cancel
+					</Button>
+					<Button onClick={handleConfirmDelete} color="error" autoFocus>
+						Delete
+					</Button>
+				</DialogActions>
+			</Dialog>
 		</Paper>
 	);
 };
