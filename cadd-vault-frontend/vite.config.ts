@@ -5,7 +5,6 @@ export default defineConfig({
 	base: '/CADD_Vault_v2/',
 	plugins: [react()],
 	css: {
-		postcss: null // Disable PostCSS processing
 	},
 	server: {
 		port: 5173,
