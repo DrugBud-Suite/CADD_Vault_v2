@@ -11,6 +11,8 @@ import AddIcon from '@mui/icons-material/Add';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import HomeIcon from '@mui/icons-material/Home';
+import InfoIcon from '@mui/icons-material/Info';
 import { useTheme } from '@mui/material/styles';
 import { useFilterStore } from '../store/filterStore';
 import ThemeToggle from './ThemeToggle';
@@ -32,7 +34,7 @@ export default function Header() {
 		isFilterSidebarVisible,
 		isNavSidebarVisible
 	} = useFilterStore();
-	const { currentUser, logout, isAdmin } = useAuth(); // Removed signInWithEmail as it's not directly used here
+	const { currentUser, logout, isAdmin } = useAuth();
 	const navigate = useNavigate();
 	const location = useLocation();
 	const isAboutPage = location.pathname === '/about';
@@ -41,7 +43,7 @@ export default function Header() {
 	const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
 	const [anchorElUserMenu, setAnchorElUserMenu] = useState<null | HTMLElement>(null);
 
-	const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
+	const isSmallScreen = useMediaQuery(theme.breakpoints.down('lg'));
 
 	const debouncedUpdate = useCallback(
 		debounce((value: string) => {
@@ -97,6 +99,11 @@ export default function Header() {
 		navigate(path);
 	};
 
+	// Tooltip text for user icon
+	const userTooltipTitle = currentUser
+		? `User ID: ${currentUser.id || 'N/A'}, Email: ${currentUser.email}`
+		: "User Menu";
+
 
 	const handleFilterToggle = () => {
 		toggleFilterSidebar();
@@ -144,45 +151,57 @@ export default function Header() {
 					/>
 				</Link>
 
-				<Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, mr: 2 }}>
-					<Button
-						component={RouterLink}
-						to="/"
-						color="inherit"
-						size="small"
-						sx={{ fontWeight: location.pathname === '/' ? 'bold' : 'normal', textTransform: 'none' }}
-					>
-						Home
-					</Button>
-					<Button
-						component={RouterLink}
-						to="/about"
-						color="inherit"
-						size="small"
-						sx={{ fontWeight: location.pathname === '/about' ? 'bold' : 'normal', textTransform: 'none' }}
-					>
-						About
-					</Button>
-					{currentUser && (
+				{/* Home and About Links - Responsive */}
+				{isSmallScreen ? (
+					<Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', mr: 1 }}>
+						{!isAboutPage && (
+							<Tooltip title="Home">
+								<IconButton component={RouterLink} to="/" color="inherit" size="small">
+									<HomeIcon />
+								</IconButton>
+							</Tooltip>
+						)}
+						<Tooltip title="About">
+							<IconButton component={RouterLink} to="/about" color="inherit" size="small">
+								<InfoIcon />
+							</IconButton>
+						</Tooltip>
+					</Box>
+				) : (
+					<Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
 						<Button
 							component={RouterLink}
-							to="/suggest-package"
+							to="/"
 							color="inherit"
 							size="small"
-							sx={{ fontWeight: location.pathname === '/suggest-package' ? 'bold' : 'normal', textTransform: 'none' }}
+							sx={{ fontWeight: location.pathname === '/' ? 'bold' : 'normal', textTransform: 'none' }}
 						>
-							Suggest Package
+							Home
 						</Button>
-					)}
-				</Box>
+						<Button
+							component={RouterLink}
+							to="/about"
+							color="inherit"
+							size="small"
+							sx={{ fontWeight: location.pathname === '/about' ? 'bold' : 'normal', textTransform: 'none' }}
+						>
+							About
+						</Button>
+						</Box>
+				)}
 
-				<Box sx={{ flexGrow: 1, mx: { xs: 0, md: 2 } }}>
-					{!isAboutPage && !isSmallScreen && (
+				{/* Search bar (if not on About page) or Spacer (if on About page) */}
+				{!isAboutPage ? (
+					<Box sx={{
+						flexGrow: 1,
+						mx: { xs: 1, sm: 1.5, md: 2 }, // Adjusted horizontal margins for responsiveness
+						minWidth: isSmallScreen ? 120 : 'auto', // Ensure some minWidth on small screens
+					}}>
 						<TextField
 							fullWidth
 							variant="outlined"
 							size="small"
-							placeholder="Search packages..."
+							placeholder="Search..."
 							value={inputValue}
 							onChange={handleInputChange}
 							InputProps={{
@@ -192,26 +211,140 @@ export default function Header() {
 							}}
 							sx={{
 								'& .MuiOutlinedInput-root': {
-									borderRadius: '20px', // Keep rounded search bar
+									borderRadius: '20px',
 								},
-								maxWidth: 500, // Limit search bar width
+								// Apply maxWidth on larger screens, allow flexibility on smaller ones
+								maxWidth: !isSmallScreen ? 500 : undefined,
 							}}
 						/>
-					)}
-				</Box>
+					</Box>
+				) : (
+					<Box sx={{ flexGrow: 1 }} /> // Spacer only when on About page
+				)}
+
+
+				{/* User Action Text Buttons for Large Screens */}
+				{!isSmallScreen && (
+					<Box sx={{ display: 'flex', gap: 1, mr: 2, alignItems: 'center' }}>
+						{currentUser && (
+							<>
+								<Button
+									component={RouterLink}
+									to="/suggest-package"
+									variant="outlined"
+									color="primary"
+									size="small"
+									sx={{
+										fontWeight: location.pathname === '/suggest-package' ? 'bold' : 'normal',
+										textTransform: 'none',
+										lineHeight: 1.2,
+										textAlign: 'center'
+									}}
+								>
+									Suggest<br />Package
+								</Button>
+								<Button
+									component={RouterLink}
+									to="/my-suggestions"
+									variant="outlined"
+									color="primary"
+									size="small"
+									sx={{
+										fontWeight: location.pathname === '/my-suggestions' ? 'bold' : 'normal',
+										textTransform: 'none',
+										lineHeight: 1.2,
+										textAlign: 'center'
+									}}
+								>
+									My<br />Suggestions
+								</Button>
+							</>
+						)}
+						{currentUser && isAdmin && (
+							<>
+								<Button
+									component={RouterLink}
+									to="/add-package"
+									variant="contained" // More distinct for admin
+									color="secondary"
+									size="small"
+									sx={{
+										fontWeight: location.pathname === '/add-package' ? 'bold' : 'normal',
+										textTransform: 'none',
+										lineHeight: 1.2,
+										textAlign: 'center'
+									}}
+								>
+									Add<br />Package
+								</Button>
+								<Button
+									component={RouterLink}
+									to="/admin/review-suggestions"
+									variant="contained" // More distinct for admin
+									color="secondary"
+									size="small"
+									sx={{
+										fontWeight: location.pathname === '/admin/review-suggestions' ? 'bold' : 'normal',
+										textTransform: 'none',
+										lineHeight: 1.2,
+										textAlign: 'center'
+									}}
+								>
+									Review<br />Suggestions
+								</Button>
+							</>
+						)}
+					</Box>
+				)}
 
 				<Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
+					{/* User Action Icons for Small Screens */}
+					{isSmallScreen && currentUser && (
+						<>
+							<Tooltip title="Suggest Package">
+								<IconButton component={RouterLink} to="/suggest-package" color="inherit" size="small">
+									<AddIcon />
+								</IconButton>
+							</Tooltip>
+							<Tooltip title="My Suggestions">
+								<IconButton component={RouterLink} to="/my-suggestions" color="inherit" size="small">
+									<ListAltIcon />
+								</IconButton>
+							</Tooltip>
+							{isAdmin && (
+								<>
+									<Tooltip title="Add Package (Admin)">
+										<IconButton component={RouterLink} to="/add-package" color="secondary" size="small">
+											<AddIcon />
+										</IconButton>
+									</Tooltip>
+									<Tooltip title="Review Suggestions (Admin)">
+										<IconButton component={RouterLink} to="/admin/review-suggestions" color="secondary" size="small">
+											<AdminPanelSettingsIcon />
+										</IconButton>
+									</Tooltip>
+								</>
+							)}
+						</>
+					)}
 					<ThemeToggle />
 
 					{currentUser ? (
 						<>
-							<Tooltip title="User Menu">
+							<Tooltip title={userTooltipTitle}>
 								<IconButton onClick={handleOpenUserMenu} size="small" sx={{ p: 0.5 }}>
-									<AccountCircleIcon sx={{ color: 'primary.main' }} />
+									<AccountCircleIcon sx={{ color: 'primary.main', fontSize: 30 }} />
 								</IconButton>
 							</Tooltip>
 							<Menu
-								sx={{ mt: '45px' }}
+								sx={{
+									mt: '45px',
+									'& .MuiPaper-root': {
+										borderRadius: '8px',
+										boxShadow: '0px 4px 20px rgba(0,0,0,0.1)',
+										minWidth: 220,
+									},
+								}}
 								id="menu-appbar"
 								anchorEl={anchorElUserMenu}
 								anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
@@ -220,33 +353,18 @@ export default function Header() {
 								open={Boolean(anchorElUserMenu)}
 								onClose={handleCloseUserMenu}
 							>
-								<MenuItem disabled>
-									<Typography variant="caption" color="textSecondary">
+								<Box sx={{ px: 2, py: 1.5 }}>
+									<Typography variant="subtitle1" fontWeight="bold">
+										{/* Assuming User type might not have displayName, fallback to email part or 'User' */}
+										{(currentUser as any).displayName || currentUser.email?.split('@')[0] || 'User'}
+									</Typography>
+									<Typography variant="caption" color="text.secondary">
 										{currentUser.email}
 									</Typography>
-								</MenuItem>
-								<Divider />
-								{isSmallScreen && ( // Show Suggest Package in menu for small screens if logged in
-									<MenuItem onClick={() => handleNavigate('/suggest-package')}>
-										<AddIcon sx={{ mr: 1 }} /> Suggest Package
-									</MenuItem>
-								)}
-								<MenuItem onClick={() => handleNavigate('/my-suggestions')}>
-									<ListAltIcon sx={{ mr: 1 }} /> My Suggestions
-								</MenuItem>
-								{isAdmin && (
-									<MenuItem onClick={() => handleNavigate('/add-package')}>
-										<AddIcon sx={{ mr: 1 }} /> Add Package (Admin)
-									</MenuItem>
-								)}
-								{isAdmin && (
-									<MenuItem onClick={() => handleNavigate('/admin/review-suggestions')}>
-										<AdminPanelSettingsIcon sx={{ mr: 1 }} /> Review Suggestions
-									</MenuItem>
-								)}
-								<Divider />
-								<MenuItem onClick={handleLogout}>
-									<ExitToAppIcon sx={{ mr: 1 }} /> Logout
+								</Box>
+								<Divider sx={{ my: 0.5 }} />
+								<MenuItem onClick={handleLogout} sx={{ borderRadius: '6px', mx: 1, color: 'error.main' }}>
+									<ExitToAppIcon sx={{ mr: 1.5 }} /> Logout
 								</MenuItem>
 							</Menu>
 						</>
