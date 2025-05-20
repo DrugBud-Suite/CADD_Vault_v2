@@ -51,7 +51,6 @@ const TableOfContentsSidebar: React.FC = () => {
 	const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
 	const setFolder1 = useFilterStore((state) => state.setFolder1);
 	const setCategory1 = useFilterStore((state) => state.setCategory1);
-	const updateFilteredPackages = useFilterStore((state) => state.updateFilteredPackages);
 
 	useEffect(() => {
 		const fetchPackagesAndBuildToc = async () => {
@@ -104,13 +103,11 @@ const TableOfContentsSidebar: React.FC = () => {
 	const handleCategoryClick = (folder: string, category: string | null) => {
 		setFolder1(folder);
 		setCategory1(category);
-		updateFilteredPackages();
 	};
 
 	const handleFolderHeaderClick = (folder: string) => {
 		setFolder1(folder);
 		setCategory1(null);
-		updateFilteredPackages();
 	};
 
 	const sortedFolders = Object.keys(tocData).sort();
@@ -163,7 +160,6 @@ const TableOfContentsSidebar: React.FC = () => {
 					onClick={() => {
 						setFolder1(null);
 						setCategory1(null);
-						updateFilteredPackages();
 					}}
 				>
 					<ListItemText
