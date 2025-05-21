@@ -15,6 +15,7 @@ import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import HomeIcon from '@mui/icons-material/Home';
 import InfoIcon from '@mui/icons-material/Info';
 import UploadFileIcon from '@mui/icons-material/UploadFile'; // Import for Bulk Upload icon
+import EditAttributesIcon from '@mui/icons-material/EditAttributes'; // Import for Bulk Operations icon
 import { useTheme } from '@mui/material/styles';
 import { useFilterStore } from '../store/filterStore';
 import ThemeToggle from './ThemeToggle';
@@ -303,6 +304,21 @@ export default function Header() {
 								>
 									Bulk<br />Upload
 								</Button>
+								<Button
+									component={RouterLink}
+									to="/admin/bulk-operations"
+									variant="contained"
+									color="secondary"
+									size="small"
+									sx={{
+										fontWeight: location.pathname === '/admin/bulk-operations' ? 'bold' : 'normal',
+										textTransform: 'none',
+										lineHeight: 1.2,
+										textAlign: 'center'
+									}}
+								>
+									Bulk<br />Operations
+								</Button>
 							</>
 						)}
 					</Box>
@@ -336,6 +352,16 @@ export default function Header() {
 									<Tooltip title="Bulk Upload (Admin)">
 										<IconButton component={RouterLink} to="/admin/bulk-upload" color="secondary" size="small">
 											<UploadFileIcon />
+										</IconButton>
+									</Tooltip>
+									<Tooltip title="Bulk Operations (Admin)">
+										<IconButton
+											component={RouterLink}
+											to="/admin/bulk-operations"
+											color="secondary"
+											size="small"
+										>
+											<EditAttributesIcon />
 										</IconButton>
 									</Tooltip>
 								</>
