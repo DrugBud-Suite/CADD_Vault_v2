@@ -1,3 +1,4 @@
+// src/pages/HomePage.tsx
 import React, { useEffect, useState, lazy, Suspense, ChangeEvent, Fragment } from 'react';
 import { supabase } from '../supabase';
 import { useFilterStore } from '../store/filterStore';
@@ -12,6 +13,46 @@ import { ViewList as ViewListIcon, ViewModule as ViewModuleIcon, ArrowUpward as 
 // Lazy load components
 const PackageCard = lazy(() => import('../components/PackageCard'));
 const PackageList = lazy(() => import('../components/PackageList'));
+
+// Helper function to fetch all data with pagination
+async function fetchAllSupabaseData(
+	queryBuilder: any, // Adjust type based on Supabase client version if possible
+	selectFields: string,
+	pageSize: number = 1000 // Supabase default limit
+): Promise<Package[]> {
+	let allData: Package[] = [];
+	let offset = 0;
+	let hasMore = true;
+
+	while (hasMore) {
+		const { data, error, count } = await queryBuilder
+			.select(selectFields, { count: 'exact' }) // Ensure count is requested
+			.range(offset, offset + pageSize - 1);
+
+		if (error) {
+			console.error("Error fetching paginated data:", error.message);
+			throw error; // Propagate error to be caught by caller
+		}
+
+		if (data && data.length > 0) {
+			allData = allData.concat(data as Package[]);
+			offset += data.length;
+		} else {
+			hasMore = false;
+		}
+
+		// If Supabase provides a total count and we've fetched that many, stop
+		if (count !== null && offset >= count) {
+			hasMore = false;
+		}
+		// Safety break if data length is less than page size, means no more data
+		if (data && data.length < pageSize) {
+			hasMore = false;
+		}
+	}
+	return allData;
+}
+
 
 const HomePage: React.FC = () => {
 	// --- Zustand Store Selectors using useShallow ---
@@ -62,43 +103,49 @@ const HomePage: React.FC = () => {
 	useEffect(() => {
 		const fetchGlobalDataAndSetMetadata = async () => {
 			setError('');
+			setLoading(true); // Set loading true at the start of this specific fetch
 			try {
-				// Fetch all package data needed for filter metadata.
-				// REMOVED 'created_at' from the select list as it does not exist in the 'packages' table schema.
-				const { data: allPackagesData, error: fetchError } = await supabase
-					.from('packages')
-					.select('id, package_name, description, tags, license, github_stars, citations, repo_link, webserver, publication, folder1, category1, last_commit, average_rating, ratings_count, github_owner, github_repo, jif, journal, last_commit_ago, link, page_icon, primary_language, ratings_sum'); // Adjusted select list
-
-				if (fetchError) {
-					console.error("Error fetching all packages for metadata:", fetchError.message);
-					setError("Could not load initial filter options.");
-					setOriginalPackagesAndDeriveMetadata([]);
-					return;
-				}
+				// Fetch all package data needed for filter metadata using the helper.
+				// Select all fields necessary for metadata derivation.
+				const selectFieldsForMetadata = 'id, package_name, description, tags, license, github_stars, citations, repo_link, webserver, publication, folder1, category1, last_commit, average_rating, ratings_count, github_owner, github_repo, jif, journal, last_commit_ago, link, page_icon, primary_language, ratings_sum';
+				const allPackagesData = await fetchAllSupabaseData(
+					supabase.from('packages'),
+					selectFieldsForMetadata
+				);
 
 				if (allPackagesData) {
-					setOriginalPackagesAndDeriveMetadata(allPackagesData as Package[]);
+					setOriginalPackagesAndDeriveMetadata(allPackagesData);
 				} else {
 					setOriginalPackagesAndDeriveMetadata([]);
+					setError("No packages found for metadata."); // More specific error
 				}
 			} catch (err: any) {
 				console.error("Error in fetchGlobalDataAndSetMetadata:", err.message);
 				setError("An unexpected error occurred while loading filter options.");
 				setOriginalPackagesAndDeriveMetadata([]);
+			} finally {
+				setLoading(false); // Set loading false after this specific fetch is done
 			}
-			// setLoading(false); // Managed by the package fetching useEffect
 		};
 
 		fetchGlobalDataAndSetMetadata();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [setOriginalPackagesAndDeriveMetadata]);
+	}, [setOriginalPackagesAndDeriveMetadata]); // Dependency array ensures this runs once
 
 	// --- Data Fetching for packages (paginated and filtered) ---
 	useEffect(() => {
 		const performFetchPackages = async () => {
+			// Only proceed if metadata (like allAvailableFolders) is loaded,
+			// which indicates fetchGlobalDataAndSetMetadata has likely completed.
+			// This check can be made more robust if needed.
+			if (useFilterStore.getState().allAvailableFolders.length === 0 && useFilterStore.getState().originalPackages.length === 0) {
+				// console.log("Metadata not yet loaded, skipping package fetch.");
+				// return;
+			}
+
 			setLoading(true);
 			setError('');
-			console.log(`Workspaceing packages. Page: ${currentPage}, SortBy: ${sortBy}, Dir: ${sortDirection}, Search: ${searchTerm}`);
+			// console.log(`Fetching packages. Page: ${currentPage}, SortBy: ${sortBy}, Dir: ${sortDirection}, Search: ${searchTerm}`);
 
 			const pageIndex = currentPage - 1;
 			const rangeFrom = pageIndex * itemsPerPage;
@@ -107,12 +154,10 @@ const HomePage: React.FC = () => {
 			try {
 				let queryBuilder = supabase
 					.from('packages')
-					.select('*, average_rating, ratings_count', { count: 'exact' }); // Ensure average_rating and ratings_count are available if not part of '*'
+					.select('*, average_rating, ratings_count', { count: 'exact' });
 
 				if (searchTerm) queryBuilder = queryBuilder.or(`package_name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
 				if (selectedTags.length > 0) {
-					// Convert the array of strings to a JSON string array format.
-					// e.g., if selectedTags is ['tag1', 'tag2'], jsonFormattedTags will be '["tag1","tag2"]'
 					const jsonFormattedTags = JSON.stringify(selectedTags);
 					queryBuilder = queryBuilder.contains('tags', jsonFormattedTags);
 				}
@@ -139,19 +184,19 @@ const HomePage: React.FC = () => {
 
 				if (data) {
 					setDisplayedPackagesInComponent(data as Package[]);
-					setDisplayedPackages(data as Package[]);
+					setDisplayedPackages(data as Package[]); // Update store
 				} else {
 					setDisplayedPackagesInComponent([]);
-					setDisplayedPackages([]);
+					setDisplayedPackages([]); // Update store
 				}
-				setTotalFilteredCount(count ?? 0);
+				setTotalFilteredCount(count ?? 0); // Update store
 
 			} catch (err: any) {
 				setError(`Failed to fetch packages: ${err?.message || 'Unknown error'}`);
 				console.error("Error fetching packages from Supabase:", err);
 				setDisplayedPackagesInComponent([]);
-				setDisplayedPackages([]);
-				setTotalFilteredCount(0);
+				setDisplayedPackages([]); // Update store
+				setTotalFilteredCount(0); // Update store
 			} finally {
 				setLoading(false);
 			}
@@ -163,6 +208,7 @@ const HomePage: React.FC = () => {
 		hasPublication, minCitations, folder1, category1, selectedLicenses,
 		sortBy, sortDirection,
 		setDisplayedPackages, setTotalFilteredCount, // itemsPerPage is stable
+		// No longer depends on originalPackages directly for this effect
 	]);
 
 
