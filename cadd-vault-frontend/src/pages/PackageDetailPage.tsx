@@ -4,7 +4,7 @@ import { Box, Typography, Grid, Paper, Button, CircularProgress, Link, Chip, use
 import { alpha } from '@mui/material/styles';
 import { supabase } from '../supabase';
 import { Package } from '../types';
-import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete } from '@mui/icons-material';
+import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete, FolderOutlined, CategoryOutlined } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
 import RatingInput from '../components/RatingInput';
 import { useAuth } from '../context/AuthContext';
@@ -445,6 +445,28 @@ const PackageDetailPage: React.FC = () => {
 							color: (theme) => theme.palette.mode === 'dark' ? theme.palette.text.primary : theme.palette.text.primary,
 						}}>Other</Typography>
 
+						{/* Folder */}
+						{packageData.folder1 && (
+							<Box mb={2}>
+								<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
+									<FolderOutlined sx={{ mr: 1, color: theme.palette.primary.main }} />
+									Folder
+								</Typography>
+								<Typography variant="body2">{packageData.folder1}</Typography>
+							</Box>
+						)}
+
+						{/* Category */}
+						{packageData.category1 && (
+							<Box mb={2}>
+								<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
+									<CategoryOutlined sx={{ mr: 1, color: theme.palette.secondary.main }} />
+									Category
+								</Typography>
+								<Typography variant="body2">{packageData.category1}</Typography>
+							</Box>
+						)}
+
 						{/* Webserver */}
 						{packageData.webserver && (
 							<Box mb={2}>
@@ -540,13 +562,13 @@ const PackageDetailPage: React.FC = () => {
 							fontSize: '1.25rem',
 							color: (theme) => theme.palette.mode === 'dark' ? theme.palette.text.primary : theme.palette.text.primary,
 						}}>Tags</Typography>
-						<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+						<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
 							{packageData.tags.map((tag: string) => (<Chip
 								key={tag}
 								label={tag}
-								size="small"
+								size="medium"
 								sx={{
-									height: '22px',
+									height: '28px',
 									borderRadius: 4,
 									bgcolor: (theme) => theme.palette.mode === 'dark'
 										? alpha(theme.palette.primary.main, 0.12)
@@ -555,7 +577,8 @@ const PackageDetailPage: React.FC = () => {
 										? theme.palette.primary.light
 										: theme.palette.primary.main,
 									fontWeight: 500,
-									fontSize: '0.7rem',
+									fontSize: '0.8rem',
+									padding: '0 4px',
 									'&:hover': {
 										bgcolor: (theme) => theme.palette.mode === 'dark'
 											? alpha(theme.palette.primary.main, 0.18)
