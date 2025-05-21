@@ -11,9 +11,10 @@ import {
 	CircularProgress,
 	Paper,
 	Grid,
-	Autocomplete,
 	Chip,
+	Autocomplete,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 
 const AddPackagePage: React.FC = () => {
 	const navigate = useNavigate();
@@ -32,7 +33,6 @@ const AddPackagePage: React.FC = () => {
 	const [loading, setLoading] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
 	const [existingTags, setExistingTags] = useState<string[]>([]); // State for existing tags
-	const [tagsLoading, setTagsLoading] = useState<boolean>(false); // State for loading tags
 
 	useEffect(() => {
 		// Redirect if not admin and auth is not loading
@@ -46,7 +46,6 @@ const AddPackagePage: React.FC = () => {
 	useEffect(() => {
 		const fetchTags = async () => {
 			if (!isAdmin) return; // Only fetch if admin
-			setTagsLoading(true);
 			try {
 				const { data, error: fetchError } = await supabase
 					.from('packages')
@@ -67,8 +66,6 @@ const AddPackagePage: React.FC = () => {
 			} catch (error: any) {
 				console.error("Error fetching existing tags:", error.message);
 				setError("Failed to load existing tags."); // Inform the user
-			} finally {
-				setTagsLoading(false);
 			}
 		};
 
@@ -256,38 +253,102 @@ const AddPackagePage: React.FC = () => {
 							variant="outlined"
 						/>
 					</Grid>
+					{/* MUI Autocomplete for Tags */}
 					<Grid item xs={12}>
 						<Autocomplete
 							multiple
-							id="tags-filled"
+							id="tags-standard"
 							options={existingTags}
-							loading={tagsLoading} // Show loading indicator in Autocomplete
+							getOptionLabel={(option) => option}
 							value={formData.tags || []}
 							onChange={handleTagsChange}
-							freeSolo // Allows adding arbitrary tags
+							freeSolo // Allows adding new tags not in the existingTags list
 							renderTags={(value: readonly string[], getTagProps) =>
-								value.map((option: string, index: number) => (
-									<Chip variant="outlined" label={option} {...getTagProps({ index })} />
-								))
+								value.map((option: string, index: number) => {
+									const { key, ...otherTagProps } = getTagProps({ index });
+									return <Chip
+										key={key}
+										label={option}
+										{...otherTagProps}
+										size="small"
+										sx={{
+											height: '22px',
+											borderRadius: 4,
+											bgcolor: (theme) => theme.palette.mode === 'dark'
+												? alpha(theme.palette.primary.main, 0.15)
+												: alpha(theme.palette.primary.light, 0.15),
+											color: 'primary.main',
+											fontWeight: 500,
+											fontSize: '0.7rem',
+											mr: 0.5, // Add some margin between chips
+											mb: 0.5, // Add some margin below chips for wrapping
+											'&:hover': {
+												bgcolor: (theme) => theme.palette.mode === 'dark'
+													? alpha(theme.palette.primary.main, 0.25)
+													: alpha(theme.palette.primary.light, 0.25),
+											},
+										}}
+									/>;
+								})
 							}
 							renderInput={(params) => (
 								<TextField
 									{...params}
-									id="tags-input" // Add id
-									name="tags" // Add name
 									variant="outlined"
 									label="Tags"
 									placeholder="Add or select tags"
-									InputProps={{
-										...params.InputProps,
-										endAdornment: (
-											<React.Fragment>
-												{tagsLoading ? <CircularProgress color="inherit" size={20} /> : null}
-												{params.InputProps.endAdornment}
-											</React.Fragment>
-										),
-									}}
+									helperText="Type to see suggestions or add new tags"
 								/>
+							)}
+							PaperComponent={({ children, ...otherPaperProps }) => (
+								<Paper
+									{...otherPaperProps}
+									sx={{
+										boxShadow: 3,
+										maxHeight: '200px', // Adjust as needed
+										overflow: 'auto',
+									}}
+								>
+									{children}
+								</Paper>
+							)}
+							ListboxProps={{
+								style: {
+									display: 'flex',
+									flexWrap: 'wrap',
+									gap: '4px',
+									padding: '4px',
+									margin: 0,
+									listStyle: 'none',
+								}
+							}}
+							renderOption={(props, option, { selected }) => (
+								<li {...props} style={{ margin: 0, padding: 0, width: 'auto', listStyle: 'none' }}>
+									<Chip
+										label={option}
+										size="small"
+										variant={selected ? "filled" : "outlined"} // Differentiate selected chips
+										clickable
+										sx={{
+											height: '22px',
+											borderRadius: 4,
+											bgcolor: (theme) => selected
+												? (theme.palette.mode === 'dark' ? alpha(theme.palette.primary.main, 0.35) : alpha(theme.palette.primary.light, 0.35))
+												: (theme.palette.mode === 'dark' ? alpha(theme.palette.primary.main, 0.15) : alpha(theme.palette.primary.light, 0.15)),
+											color: 'primary.main',
+											fontWeight: 500,
+											fontSize: '0.7rem',
+											cursor: 'pointer',
+											m: 0.25, // Add small margin around each option chip
+											'&:hover': {
+												bgcolor: (theme) => theme.palette.mode === 'dark'
+													? alpha(theme.palette.primary.main, 0.25)
+													: alpha(theme.palette.primary.light, 0.25),
+											},
+											display: 'inline-flex',
+										}}
+									/>
+								</li>
 							)}
 						/>
 					</Grid>
