@@ -1,18 +1,56 @@
+// src/components/TableOfContentsSidebar.tsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Package } from '../types';
+import { Package } from '../types'; // Assuming Package type includes folder1 and category1
 import { useFilterStore } from '../store/filterStore';
 import {
-	List, ListItem, ListItemText, Collapse, IconButton, Box, Typography
+	List, ListItem, ListItemText, Collapse, IconButton, Box, Typography, CircularProgress
 } from '@mui/material';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 
 interface TocData {
 	[folder1: string]: string[];
 }
+
+// Helper function to fetch all data with pagination (can be moved to a utils file)
+async function fetchAllSupabaseDataForTOC(
+	queryBuilder: any,
+	selectFields: string,
+	pageSize: number = 1000
+): Promise<Pick<Package, 'folder1' | 'category1'>[]> {
+	let allData: Pick<Package, 'folder1' | 'category1'>[] = [];
+	let offset = 0;
+	let hasMore = true;
+
+	while (hasMore) {
+		const { data, error, count } = await queryBuilder
+			.select(selectFields, { count: 'exact' }) // Ensure count is requested
+			.range(offset, offset + pageSize - 1);
+
+		if (error) {
+			console.error("Error fetching paginated TOC data:", error.message);
+			throw error;
+		}
+
+		if (data && data.length > 0) {
+			allData = allData.concat(data as Pick<Package, 'folder1' | 'category1'>[]);
+			offset += data.length;
+		} else {
+			hasMore = false;
+		}
+		if (count !== null && offset >= count) {
+			hasMore = false;
+		}
+		if (data && data.length < pageSize) {
+			hasMore = false;
+		}
+	}
+	return allData;
+}
+
 
 // TreeBranch component with vertical and horizontal lines
 const TreeBranch = ({ isOpen, isLast = false }: { isOpen: boolean; isLast?: boolean }) => (
@@ -47,40 +85,64 @@ const TreeBranch = ({ isOpen, isLast = false }: { isOpen: boolean; isLast?: bool
 const TableOfContentsSidebar: React.FC = () => {
 	const [tocData, setTocData] = useState<TocData>({});
 	const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+	const [loading, setLoading] = useState<boolean>(true);
+	const [error, setError] = useState<string | null>(null);
+	const theme = useTheme();
+
 	const setFolder1 = useFilterStore((state) => state.setFolder1);
 	const setCategory1 = useFilterStore((state) => state.setCategory1);
+	const selectedFolder1 = useFilterStore((state) => state.folder1);
+	const selectedCategory1 = useFilterStore((state) => state.category1);
+
 
 	useEffect(() => {
 		const fetchPackagesAndBuildToc = async () => {
-			const { data: supabaseData, error } = await supabase
-				.from('packages')
-				.select('folder1, category1');
+			setLoading(true);
+			setError(null);
+			try {
+				const packageList = await fetchAllSupabaseDataForTOC(
+					supabase.from('packages'),
+					'folder1, category1'
+				);
 
-			if (error) {
-				console.error("Error fetching packages for TOC:", error.message);
-				return;
+				const tocStructure: TocData = {};
+				packageList.forEach(pkg => {
+					const folder1Value = pkg.folder1 || 'Uncategorized'; // Handle null/empty folder1
+					const category1Value = pkg.category1;
+
+					if (!tocStructure[folder1Value]) {
+						tocStructure[folder1Value] = [];
+					}
+					if (category1Value && !tocStructure[folder1Value].includes(category1Value)) {
+						tocStructure[folder1Value].push(category1Value);
+					}
+				});
+
+				Object.keys(tocStructure).forEach(folder => {
+					tocStructure[folder].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+				});
+
+				// Sort folders, ensuring 'Uncategorized' comes last if present
+				const sortedFolderKeys = Object.keys(tocStructure).sort((a, b) => {
+					if (a === 'Uncategorized') return 1;
+					if (b === 'Uncategorized') return -1;
+					return a.localeCompare(b, undefined, { sensitivity: 'base' });
+				});
+
+				const sortedTocData: TocData = {};
+				sortedFolderKeys.forEach(key => {
+					sortedTocData[key] = tocStructure[key];
+				});
+
+
+				setTocData(sortedTocData);
+
+			} catch (err: any) {
+				console.error("Error fetching packages for TOC:", err.message);
+				setError("Failed to load navigation data.");
+			} finally {
+				setLoading(false);
 			}
-
-			const packageList = supabaseData as Pick<Package, 'folder1' | 'category1'>[];
-			const tocStructure: TocData = {};
-
-			packageList.forEach(pkg => {
-				const folder1 = pkg.folder1 || 'Uncategorized';
-				const category1 = pkg.category1;
-
-				if (!tocStructure[folder1]) {
-					tocStructure[folder1] = [];
-				}
-				if (category1 && !tocStructure[folder1].includes(category1)) {
-					tocStructure[folder1].push(category1);
-				}
-			});
-
-			Object.keys(tocStructure).forEach(folder => {
-				tocStructure[folder].sort();
-			});
-
-			setTocData(tocStructure);
 		};
 
 		fetchPackagesAndBuildToc();
@@ -99,22 +161,45 @@ const TableOfContentsSidebar: React.FC = () => {
 	};
 
 	const handleCategoryClick = (folder: string, category: string | null) => {
-		setFolder1(folder);
+		setFolder1(folder === 'Uncategorized' ? null : folder);
 		setCategory1(category);
 	};
 
 	const handleFolderHeaderClick = (folder: string) => {
-		setFolder1(folder);
-		setCategory1(null);
+		setFolder1(folder === 'Uncategorized' ? null : folder);
+		setCategory1(null); // Reset category when a folder header is clicked
+		// Optionally, open the folder if it's not already open
+		if (!openFolders.has(folder)) {
+			handleFolderClick(folder);
+		}
 	};
 
-	const sortedFolders = Object.keys(tocData).sort();
+	const sortedFolders = Object.keys(tocData); // Already sorted by fetchPackagesAndBuildToc
+
+	if (loading) {
+		return (
+			<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', p: 2 }}>
+				<CircularProgress size={24} />
+				<Typography sx={{ ml: 1, fontSize: '0.9rem' }}>Loading Nav...</Typography>
+			</Box>
+		);
+	}
+
+	if (error) {
+		return (
+			<Box sx={{ p: 2 }}>
+				<Typography color="error" sx={{ fontSize: '0.9rem' }}>{error}</Typography>
+			</Box>
+		);
+	}
 
 	return (
 		<Box sx={{
 			height: '100%',
 			overflowY: 'auto',
-			pt: 2,
+			display: 'flex',
+			flexDirection: 'column',
+			pt: 1,
 			'&::-webkit-scrollbar': { width: '6px' },
 			'&::-webkit-scrollbar-track': { background: 'transparent' },
 			'&::-webkit-scrollbar-thumb': {
@@ -128,11 +213,13 @@ const TableOfContentsSidebar: React.FC = () => {
 			<Box sx={{
 				display: 'flex',
 				alignItems: 'center',
+				mt: 1.5,
 				px: 2,
 				mb: 2,
 				pb: 2,
 				borderBottom: 1,
 				borderColor: 'divider',
+				flexGrow: 1,
 			}}>
 				<AccountTreeIcon sx={{ mr: 1, color: 'primary.main', fontSize: '1.25rem' }} />
 				<Typography variant="h6" sx={{
@@ -144,16 +231,19 @@ const TableOfContentsSidebar: React.FC = () => {
 				</Typography>
 			</Box>
 
-			<List component="nav" dense sx={{ px: 1, py: 0 }}>
+			<List component="nav" dense sx={{ px: 1, py: 0, '& .MuiListItem-root': { minHeight: 'unset' } }}>
 				<ListItem
 					button
 					sx={{
-						mb: 0.5,
-						py: 0,
-						borderRadius: 1,
+						mb: 0.25,
+						py: 0.5, // Reduced padding
+						borderRadius: 1.5, // Slightly more rounded
+						bgcolor: selectedFolder1 === null && selectedCategory1 === null ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
+						color: selectedFolder1 === null && selectedCategory1 === null ? 'primary.main' : 'text.primary',
 						'&:hover': {
 							bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
-						}
+						},
+						transition: 'background-color 0.2s, color 0.2s',
 					}}
 					onClick={() => {
 						setFolder1(null);
@@ -164,7 +254,7 @@ const TableOfContentsSidebar: React.FC = () => {
 						primary="All Packages"
 						primaryTypographyProps={{
 							sx: {
-								fontWeight: 'medium',
+								fontWeight: selectedFolder1 === null && selectedCategory1 === null ? 'bold' : 'medium',
 								fontSize: '0.9rem',
 							}
 						}}
@@ -172,24 +262,27 @@ const TableOfContentsSidebar: React.FC = () => {
 				</ListItem>
 
 				{sortedFolders.map((folder, folderIndex) => (
-					<Box key={folder} sx={{ position: 'relative', mb: 0.25 }}>
+					<Box key={folder} sx={{ position: 'relative', mb: 0.1 }}>
 						<ListItem
 							button
+							onClick={() => handleFolderHeaderClick(folder)}
 							sx={{
-								borderRadius: 1,
+								borderRadius: 1.5,
 								py: 0,
 								pl: 2,
+								bgcolor: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === null ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
+								color: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === null ? 'primary.main' : 'text.primary',
 								'&:hover': {
 									bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
-								}
+								},
+								transition: 'background-color 0.2s, color 0.2s',
 							}}
 						>
 							<ListItemText
 								primary={folder}
-								onClick={() => handleFolderHeaderClick(folder)}
 								primaryTypographyProps={{
 									sx: {
-										fontWeight: 'medium',
+										fontWeight: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === null ? 'bold' : 'medium',
 										fontSize: '0.9rem',
 									}
 								}}
@@ -198,7 +291,7 @@ const TableOfContentsSidebar: React.FC = () => {
 								<IconButton
 									edge="end"
 									size="small"
-									onClick={() => handleFolderClick(folder)}
+									onClick={(e) => { e.stopPropagation(); handleFolderClick(folder); }}
 									sx={{
 										color: 'text.secondary',
 										'&:hover': {
@@ -214,8 +307,8 @@ const TableOfContentsSidebar: React.FC = () => {
 
 						{tocData[folder] && tocData[folder].length > 0 && (
 							<Collapse in={openFolders.has(folder)} timeout="auto" unmountOnExit>
-								<List component="div" disablePadding dense sx={{ position: 'relative', ml: 2 }}>
-									<TreeBranch isOpen={openFolders.has(folder)} isLast={folderIndex === sortedFolders.length - 1} />
+								<List component="div" disablePadding dense sx={{ position: 'relative', ml: 2, mt: 0, mb: 0 }}>
+									<TreeBranch isOpen={openFolders.has(folder)} isLast={folderIndex === sortedFolders.length - 1 && tocData[folder].length === 0} />
 									{tocData[folder].map((category) => (
 										<ListItem
 											key={category}
@@ -223,21 +316,23 @@ const TableOfContentsSidebar: React.FC = () => {
 											onClick={() => handleCategoryClick(folder, category)}
 											sx={{
 												pl: 4,
-												py: 0.25,
-												borderRadius: 1,
+												py: 0.2, // Reduced padding
+												borderRadius: 1.5,
 												position: 'relative',
+												bgcolor: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === category ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+												color: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === category ? 'primary.main' : 'text.secondary',
 												'&:hover': {
 													bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
-												}
+												},
+												transition: 'background-color 0.2s, color 0.2s',
 											}}
 										>
 											<ListItemText
 												primary={category}
 												primaryTypographyProps={{
 													sx: {
-														fontWeight: 'normal',
-														fontSize: '0.85rem',
-														color: 'text.primary'
+														fontWeight: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === category ? 'medium' : 'normal',
+														fontSize: '0.8rem',
 													}
 												}}
 											/>
@@ -254,3 +349,4 @@ const TableOfContentsSidebar: React.FC = () => {
 };
 
 export default TableOfContentsSidebar;
+
