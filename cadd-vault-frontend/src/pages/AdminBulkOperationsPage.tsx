@@ -75,6 +75,12 @@ interface FolderCategoryForm {
 	newCategory: string;
 }
 
+// Interface for the tag management form
+interface TagManagementForm {
+	oldTag: string;
+	newTag: string;
+}
+
 const AdminBulkOperationsPage: React.FC = () => {
 	const { currentUser, loading: authLoading, isAdmin } = useAuth();
 	const theme = useTheme();
@@ -105,6 +111,12 @@ const AdminBulkOperationsPage: React.FC = () => {
 		newCategory: ''
 	});
 
+	// State for tag management form
+	const [tagManagementForm, setTagManagementForm] = useState<TagManagementForm>({
+		oldTag: '',
+		newTag: ''
+	});
+
 	// States for folder/category creation
 	const [isFolderCreating, setIsFolderCreating] = useState<boolean>(false);
 	const [isCategoryCreating, setIsCategoryCreating] = useState<boolean>(false);
@@ -112,6 +124,15 @@ const AdminBulkOperationsPage: React.FC = () => {
 	const [folderCreationSuccess, setFolderCreationSuccess] = useState<string | null>(null);
 	const [categoryCreationError, setCategoryCreationError] = useState<string | null>(null);
 	const [categoryCreationSuccess, setCategoryCreationSuccess] = useState<string | null>(null);
+
+	// States for tag management
+	const [isTagUpdating, setIsTagUpdating] = useState<boolean>(false);
+	const [tagUpdateError, setTagUpdateError] = useState<string | null>(null);
+	const [tagUpdateSuccess, setTagUpdateSuccess] = useState<string | null>(null);
+	const [affectedPackagesCount, setAffectedPackagesCount] = useState<number>(0);
+	const [tagPreviewPackages, setTagPreviewPackages] = useState<Package[]>([]);
+	const [isTagPreviewLoading, setIsTagPreviewLoading] = useState<boolean>(false);
+	const [showTagPreview, setShowTagPreview] = useState<boolean>(false);
 
 	// States for UI
 	const [loading, setLoading] = useState<boolean>(false);
@@ -182,6 +203,41 @@ const AdminBulkOperationsPage: React.FC = () => {
 			setIsPreviewLoading(false);
 		}
 	}, [form.filterOptions]);
+
+	// Load packages with a specific tag for preview
+	const loadTagPreviewPackages = useCallback(async () => {
+		if (!tagManagementForm.oldTag.trim()) {
+			setTagUpdateError("Please select a tag to preview affected packages.");
+			return;
+		}
+
+		setIsTagPreviewLoading(true);
+		setShowTagPreview(true);
+		setTagUpdateError(null);
+
+		try {
+			// Get all packages with the old tag
+			const { data, error } = await supabase
+				.from('packages')
+				.select('*')
+				.contains('tags', [tagManagementForm.oldTag.trim()]);
+
+			if (error) throw error;
+
+			setTagPreviewPackages(data || []);
+			setAffectedPackagesCount(data?.length || 0);
+
+			if (!data || data.length === 0) {
+				setTagUpdateError(`No packages found with tag "${tagManagementForm.oldTag.trim()}".`);
+			}
+		} catch (err: any) {
+			console.error("Error fetching packages with tag:", err);
+			setTagUpdateError(`Failed to load packages with tag: ${err.message}`);
+			setTagPreviewPackages([]);
+		} finally {
+			setIsTagPreviewLoading(false);
+		}
+	}, [tagManagementForm.oldTag]);
 
 	// Handle form changes
 	const handleOperationChange = (event: SelectChangeEvent) => {
@@ -284,6 +340,144 @@ const AdminBulkOperationsPage: React.FC = () => {
 			...prev,
 			[name]: value
 		}));
+	};
+
+	// Handle tag management form changes
+	const handleTagManagementFormChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+		const { name, value } = event.target;
+		setTagManagementForm(prev => ({
+			...prev,
+			[name]: value
+		}));
+	};
+
+	// Handle tag selection from autocomplete
+	const handleOldTagSelection = (_event: React.SyntheticEvent, value: string | null) => {
+		if (value) {
+			setTagManagementForm(prev => ({
+				...prev,
+				oldTag: value
+			}));
+
+			// Reset preview when a new tag is selected
+			setShowTagPreview(false);
+			setTagPreviewPackages([]);
+		}
+	};
+
+	// Handle updating tags across packages
+	const handleUpdateTag = async () => {
+		if (!isAdmin) {
+			setTagUpdateError("You must be an admin to perform this operation.");
+			return;
+		}
+
+		if (!tagManagementForm.oldTag.trim()) {
+			setTagUpdateError("Please select a tag to replace.");
+			return;
+		}
+
+		if (!tagManagementForm.newTag.trim()) {
+			setTagUpdateError("Please enter a new tag name.");
+			return;
+		}
+
+		setIsTagUpdating(true);
+		setTagUpdateError(null);
+		setTagUpdateSuccess(null);
+		setAffectedPackagesCount(0);
+
+		try {
+			// Use the preview packages if available, otherwise fetch them again
+			let packagesWithOldTag: Package[] = [];
+
+			if (showTagPreview && tagPreviewPackages.length > 0) {
+				packagesWithOldTag = tagPreviewPackages;
+			} else {
+				// Get all packages with the old tag
+				const { data, error: fetchError } = await supabase
+					.from('packages')
+					.select('*')
+					.contains('tags', [tagManagementForm.oldTag.trim()]);
+
+				if (fetchError) throw fetchError;
+				packagesWithOldTag = data || [];
+			}
+
+			if (packagesWithOldTag.length === 0) {
+				setTagUpdateError(`No packages found with tag "${tagManagementForm.oldTag.trim()}".`);
+				setIsTagUpdating(false);
+				return;
+			}
+
+			let successCount = 0;
+			let errorCount = 0;
+
+			// Update each package
+			for (const pkg of packagesWithOldTag) {
+				try {
+					// Get current tags
+					const currentTags = pkg.tags || [];
+
+					// Replace old tag with new tag
+					const updatedTags = currentTags.map((tag: string) =>
+						tag === tagManagementForm.oldTag.trim() ? tagManagementForm.newTag.trim() : tag
+					);
+
+					// Update package
+					const { error: updateError } = await supabase
+						.from('packages')
+						.update({ tags: updatedTags })
+						.eq('id', pkg.id);
+
+					if (updateError) throw updateError;
+					successCount++;
+				} catch (err) {
+					console.error("Error updating package tags:", err);
+					errorCount++;
+				}
+			}
+
+			// Set the success message
+			setAffectedPackagesCount(successCount);
+			setTagUpdateSuccess(`Successfully updated tag "${tagManagementForm.oldTag.trim()}" to "${tagManagementForm.newTag.trim()}" in ${successCount} packages.`);
+
+			// If there were errors, also set error message
+			if (errorCount > 0) {
+				setTagUpdateError(`Failed to update tags in ${errorCount} packages.`);
+			}
+
+			// Reset the form
+			setTagManagementForm({
+				oldTag: '',
+				newTag: ''
+			});
+
+			// Update the available tags in the store
+			// This should fetch fresh tags from the server
+			// For now we'll just manually update the store
+			const updatedTags = [...allAvailableTags];
+			if (!updatedTags.includes(tagManagementForm.newTag.trim())) {
+				updatedTags.push(tagManagementForm.newTag.trim());
+			}
+			// Only remove the old tag if it's not used in any other packages
+			if (successCount === packagesWithOldTag.length) {
+				const index = updatedTags.indexOf(tagManagementForm.oldTag.trim());
+				if (index !== -1) {
+					updatedTags.splice(index, 1);
+				}
+			}
+
+			useFilterStore.setState({
+				allAvailableTags: updatedTags.sort()
+			});
+
+		} catch (err: any) {
+			console.error("Error updating tags:", err);
+			setTagUpdateError(`Failed to update tags: ${err.message}`);
+		} finally {
+			setIsTagUpdating(false);
+		}
 	};
 
 	const handleFolderSelectChange = (event: SelectChangeEvent) => {
@@ -633,6 +827,7 @@ const AdminBulkOperationsPage: React.FC = () => {
 				<Tabs value={activeTab} onChange={handleTabChange} aria-label="admin operations tabs">
 					<Tab label="Bulk Updates" id="admin-tab-0" aria-controls="admin-tabpanel-0" />
 					<Tab label="Folder & Category Management" id="admin-tab-1" aria-controls="admin-tabpanel-1" />
+					<Tab label="Tag Management" id="admin-tab-2" aria-controls="admin-tabpanel-2" />
 				</Tabs>
 			</Box>
 
@@ -994,6 +1189,241 @@ const AdminBulkOperationsPage: React.FC = () => {
 								</Paper>
 							</Grid>
 						)}
+					</Grid>
+				)}
+			</div>
+
+			{/* Tag Management Tab */}
+			<div
+				role="tabpanel"
+				hidden={activeTab !== 2}
+				id="admin-tabpanel-2"
+				aria-labelledby="admin-tab-2"
+			>
+				{activeTab === 2 && (
+					<Grid container spacing={3}>
+						<Grid item xs={12}>
+							<Paper elevation={3} sx={{ p: 3 }}>
+								<Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+									<FolderSpecialOutlined sx={{ mr: 1 }} />
+									Tag Management
+								</Typography>
+
+								<Alert severity="info" sx={{ mb: 3 }}>
+									Find and correct tags with typos. Changes will be applied to all packages that have the selected tag.
+								</Alert>
+
+								{tagUpdateError && (
+									<Alert severity="error" sx={{ mb: 2 }}>
+										{tagUpdateError}
+									</Alert>
+								)}
+
+								{tagUpdateSuccess && (
+									<Alert severity="success" sx={{ mb: 2 }}>
+										{tagUpdateSuccess}
+									</Alert>
+								)}
+
+								<Grid container spacing={2} sx={{ mb: 3 }}>
+									<Grid item xs={12} sm={6}>
+										<Autocomplete
+											options={allAvailableTags}
+											value={tagManagementForm.oldTag}
+											onChange={(event, value) => handleOldTagSelection(event, value)}
+											renderInput={(params) => (
+												<TextField
+													{...params}
+													label="Tag to Replace"
+													name="oldTag"
+													fullWidth
+													helperText="Select the tag that has a typo or needs to be renamed"
+												/>
+											)}
+										/>
+									</Grid>
+
+									<Grid item xs={12} sm={6}>
+										<TextField
+											label="New Tag Name"
+											name="newTag"
+											value={tagManagementForm.newTag}
+											onChange={handleTagManagementFormChange}
+											fullWidth
+											helperText="Enter the corrected tag name"
+										/>
+									</Grid>
+								</Grid>
+
+								<Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+									<Button
+										variant="outlined"
+										color="primary"
+										onClick={loadTagPreviewPackages}
+										disabled={isTagPreviewLoading || !tagManagementForm.oldTag}
+									>
+										{isTagPreviewLoading ? <CircularProgress size={24} /> : 'Preview Affected Packages'}
+									</Button>
+
+									{!showTagPreview && tagManagementForm.oldTag && (
+										<Typography variant="body2" sx={{ alignSelf: 'center', fontStyle: 'italic' }}>
+											Click to see which packages will be affected
+										</Typography>
+									)}
+								</Box>
+
+								<Box sx={{ display: 'flex', gap: 2 }}>
+									<Button
+										variant="contained"
+										color="primary"
+										onClick={handleUpdateTag}
+										disabled={isTagUpdating || !tagManagementForm.oldTag || !tagManagementForm.newTag || affectedPackagesCount === 0}
+										sx={{ mr: 2 }}
+									>
+										{isTagUpdating ? <CircularProgress size={24} /> : 'Update Tag'}
+									</Button>
+
+									<Button
+										variant="outlined"
+										color="secondary"
+										onClick={() => {
+											setTagManagementForm({
+												oldTag: '',
+												newTag: ''
+											});
+											setTagUpdateError(null);
+											setTagUpdateSuccess(null);
+											setShowTagPreview(false);
+											setTagPreviewPackages([]);
+											setAffectedPackagesCount(0);
+										}}
+										disabled={isTagUpdating}
+									>
+										Reset Form
+									</Button>
+								</Box>
+
+								{affectedPackagesCount > 0 && !showTagPreview && (
+									<Box sx={{ mt: 3 }}>
+										<Typography variant="subtitle2">
+											Tags updated in {affectedPackagesCount} packages
+										</Typography>
+									</Box>
+								)}
+
+								<Divider sx={{ my: 3 }} />
+
+								<Typography variant="subtitle1" sx={{ mb: 2 }}>
+									Available Tags ({allAvailableTags.length})
+								</Typography>
+								<Box sx={{
+									maxHeight: 200,
+									overflowY: 'auto',
+									border: 1,
+									borderColor: 'divider',
+									borderRadius: 1,
+									p: 1
+								}}>
+									{allAvailableTags.length > 0 ? (
+										<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+											{allAvailableTags.map(tag => (
+												<Chip
+													key={tag}
+													label={tag}
+													size="small"
+													sx={{
+														bgcolor: alpha(theme.palette.primary.main, 0.1),
+													}}
+												/>
+											))}
+										</Box>
+									) : (
+										<Typography variant="body2" color="text.secondary">
+											No tags available
+										</Typography>
+									)}
+								</Box>
+
+								{showTagPreview && (
+									<Box sx={{ mt: 3 }}>
+										<Typography variant="subtitle1" sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+											<span>Packages With Tag "{tagManagementForm.oldTag}" ({tagPreviewPackages.length})</span>
+											{tagPreviewPackages.length > 0 && (
+												<Tooltip title="Download as JSON">
+													<IconButton
+														size="small"
+														onClick={() => {
+															const dataStr = JSON.stringify(tagPreviewPackages, null, 2);
+															const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+															const exportFileDefaultName = `packages-with-tag-${tagManagementForm.oldTag}-${new Date().toISOString()}.json`;
+															const linkElement = document.createElement('a');
+															linkElement.setAttribute('href', dataUri);
+															linkElement.setAttribute('download', exportFileDefaultName);
+															linkElement.click();
+														}}
+													>
+														<FileDownload />
+													</IconButton>
+												</Tooltip>
+											)}
+										</Typography>
+
+										{isTagPreviewLoading ? (
+											<Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+												<CircularProgress />
+											</Box>
+										) : tagPreviewPackages.length === 0 ? (
+											<Alert severity="info">No packages found with this tag.</Alert>
+										) : (
+											<TableContainer sx={{ maxHeight: 400 }}>
+												<Table stickyHeader size="small">
+													<TableHead>
+														<TableRow>
+															<TableCell>Package Name</TableCell>
+															<TableCell>Folder</TableCell>
+															<TableCell>Category</TableCell>
+															<TableCell>Tags</TableCell>
+														</TableRow>
+													</TableHead>
+													<TableBody>
+														{tagPreviewPackages.map(pkg => (
+															<TableRow key={pkg.id} hover>
+																<TableCell>{pkg.package_name}</TableCell>
+																<TableCell>{pkg.folder1 || 'None'}</TableCell>
+																<TableCell>{pkg.category1 || 'None'}</TableCell>
+																<TableCell>
+																	<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+																		{pkg.tags && pkg.tags.map(tag => (
+																			<Chip
+																				key={`${pkg.id}-${tag}`}
+																				label={tag}
+																				size="small"
+																				sx={{
+																					bgcolor: tag === tagManagementForm.oldTag
+																						? alpha(theme.palette.warning.main, 0.2)
+																						: alpha(theme.palette.primary.main, 0.1),
+																					fontWeight: tag === tagManagementForm.oldTag ? 'bold' : 'normal',
+																					height: 22
+																				}}
+																			/>
+																		))}
+																		{(!pkg.tags || pkg.tags.length === 0) && (
+																			<Typography variant="body2" color="text.secondary">
+																				No tags
+																			</Typography>
+																		)}
+																	</Box>
+																</TableCell>
+															</TableRow>
+														))}
+													</TableBody>
+												</Table>
+											</TableContainer>
+										)}
+									</Box>
+								)}
+							</Paper>
+						</Grid>
 					</Grid>
 				)}
 			</div>
