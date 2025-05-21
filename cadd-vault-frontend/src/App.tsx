@@ -5,6 +5,7 @@ import { Typography, Box, CircularProgress, Container } from '@mui/material';
 import Layout from './components/Layout';
 import AdminRoute from './components/AdminRoute';
 import './App.css';
+import AdminBulkUploadPage from './pages/AdminBulkUploadPage';
 
 // Lazy load page components
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -49,6 +50,7 @@ function App() {
 
 					{/* Admin Routes */}
 					<Route element={<AdminRoute />}>
+						<Route path="/admin/bulk-upload" element={<AdminBulkUploadPage />} />
 						<Route path="/add-package" element={<AddPackagePage />} />
 						<Route path="/edit-package/:packageId" element={<EditPackagePage />} />
 						<Route path="/admin/review-suggestions" element={<AdminReviewSuggestionsPage />} />
