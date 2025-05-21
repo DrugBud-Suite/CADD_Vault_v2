@@ -15,6 +15,7 @@ const AddPackagePage = lazy(() => import('./pages/AddPackagePage'));
 const EditPackagePage = lazy(() => import('./pages/EditPackagePage'));
 const SuggestPackagePage = lazy(() => import('./pages/SuggestPackagePage'));
 const AdminReviewSuggestionsPage = lazy(() => import('./pages/AdminReviewSuggestionsPage'));
+const AdminBulkOperationsPage = lazy(() => import('./pages/AdminBulkOperationsPage'));
 const MySuggestionsPage = lazy(() => import('./pages/MySuggestionsPage'));
 
 // Placeholder for a simple Login Page if direct navigation is desired
@@ -54,6 +55,7 @@ function App() {
 						<Route path="/add-package" element={<AddPackagePage />} />
 						<Route path="/edit-package/:packageId" element={<EditPackagePage />} />
 						<Route path="/admin/review-suggestions" element={<AdminReviewSuggestionsPage />} />
+						<Route path="/admin/bulk-operations" element={<AdminBulkOperationsPage />} />
 					</Route>
 				</Routes>
 			</Suspense>
