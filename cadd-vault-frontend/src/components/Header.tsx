@@ -1,4 +1,5 @@
 // src/components/Header.tsx
+
 import React, { useState, useCallback } from 'react';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { AppBar, Toolbar, Box, Link, TextField, Button, Typography, IconButton, Tooltip, useMediaQuery, Menu, MenuItem, Divider } from '@mui/material';
@@ -13,6 +14,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import HomeIcon from '@mui/icons-material/Home';
 import InfoIcon from '@mui/icons-material/Info';
+import UploadFileIcon from '@mui/icons-material/UploadFile'; // Import for Bulk Upload icon
 import { useTheme } from '@mui/material/styles';
 import { useFilterStore } from '../store/filterStore';
 import ThemeToggle from './ThemeToggle';
@@ -34,7 +36,7 @@ export default function Header() {
 		isFilterSidebarVisible,
 		isNavSidebarVisible
 	} = useFilterStore();
-	const { currentUser, logout, isAdmin } = useAuth();
+	const { currentUser, logout, isAdmin } = useAuth(); // Ensure isAdmin is correctly destructured
 	const navigate = useNavigate();
 	const location = useLocation();
 	const isAboutPage = location.pathname === '/about';
@@ -94,7 +96,6 @@ export default function Header() {
 		setIsSignupModalOpen(false);
 	};
 
-	// Tooltip text for user icon
 	const userTooltipTitle = currentUser
 		? `User ID: ${currentUser.id || 'N/A'}, Email: ${currentUser.email}`
 		: "User Menu";
@@ -121,7 +122,7 @@ export default function Header() {
 						aria-label="toggle filter sidebar"
 						edge="start"
 						onClick={handleFilterToggle}
-						sx={{ mr: 1 }} // Reduced margin for small screens
+						sx={{ mr: 1 }}
 					>
 						<MenuIcon />
 					</IconButton>
@@ -144,13 +145,12 @@ export default function Header() {
 						src={theme.palette.mode === 'dark' ? caddVaultWhiteLogo : caddVaultDarkLogo}
 						alt="CADD Vault Logo"
 						sx={{
-							height: isSmallScreen ? '28px' : '36px', // Adjusted logo size
+							height: isSmallScreen ? '28px' : '36px',
 							marginRight: isSmallScreen ? '4px' : '8px',
 						}}
 					/>
 				</Link>
 
-				{/* Home and About Links - Responsive */}
 				{isSmallScreen ? (
 					<Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', mr: 1 }}>
 						{!isAboutPage && (
@@ -186,15 +186,14 @@ export default function Header() {
 						>
 							About
 						</Button>
-						</Box>
+					</Box>
 				)}
 
-				{/* Search bar (if not on About page) or Spacer (if on About page) */}
 				{!isAboutPage ? (
 					<Box sx={{
 						flexGrow: 1,
-						mx: { xs: 1, sm: 1.5, md: 2 }, // Adjusted horizontal margins for responsiveness
-						minWidth: isSmallScreen ? 120 : 'auto', // Ensure some minWidth on small screens
+						mx: { xs: 1, sm: 1.5, md: 2 },
+						minWidth: isSmallScreen ? 120 : 'auto',
 					}}>
 						<TextField
 							fullWidth
@@ -212,17 +211,15 @@ export default function Header() {
 								'& .MuiOutlinedInput-root': {
 									borderRadius: '20px',
 								},
-								// Apply maxWidth on larger screens, allow flexibility on smaller ones
 								maxWidth: !isSmallScreen ? 500 : undefined,
 							}}
 						/>
 					</Box>
 				) : (
-					<Box sx={{ flexGrow: 1 }} /> // Spacer only when on About page
+					<Box sx={{ flexGrow: 1 }} />
 				)}
 
 
-				{/* User Action Text Buttons for Large Screens */}
 				{!isSmallScreen && (
 					<Box sx={{ display: 'flex', gap: 1, mr: 2, alignItems: 'center' }}>
 						{currentUser && (
@@ -259,12 +256,12 @@ export default function Header() {
 								</Button>
 							</>
 						)}
-						{currentUser && isAdmin && (
+						{currentUser && isAdmin && ( // Check for currentUser and isAdmin
 							<>
 								<Button
 									component={RouterLink}
 									to="/add-package"
-									variant="contained" // More distinct for admin
+									variant="contained"
 									color="secondary"
 									size="small"
 									sx={{
@@ -279,7 +276,7 @@ export default function Header() {
 								<Button
 									component={RouterLink}
 									to="/admin/review-suggestions"
-									variant="contained" // More distinct for admin
+									variant="contained"
 									color="secondary"
 									size="small"
 									sx={{
@@ -291,13 +288,27 @@ export default function Header() {
 								>
 									Review<br />Suggestions
 								</Button>
+								<Button // New Bulk Upload Button
+									component={RouterLink}
+									to="/admin/bulk-upload"
+									variant="contained"
+									color="secondary"
+									size="small"
+									sx={{
+										fontWeight: location.pathname === '/admin/bulk-upload' ? 'bold' : 'normal',
+										textTransform: 'none',
+										lineHeight: 1.2,
+										textAlign: 'center'
+									}}
+								>
+									Bulk<br />Upload
+								</Button>
 							</>
 						)}
 					</Box>
 				)}
 
 				<Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
-					{/* User Action Icons for Small Screens */}
 					{isSmallScreen && currentUser && (
 						<>
 							<Tooltip title="Suggest Package">
@@ -310,7 +321,7 @@ export default function Header() {
 									<ListAltIcon />
 								</IconButton>
 							</Tooltip>
-							{isAdmin && (
+							{isAdmin && ( // Check for isAdmin
 								<>
 									<Tooltip title="Add Package (Admin)">
 										<IconButton component={RouterLink} to="/add-package" color="secondary" size="small">
@@ -320,6 +331,11 @@ export default function Header() {
 									<Tooltip title="Review Suggestions (Admin)">
 										<IconButton component={RouterLink} to="/admin/review-suggestions" color="secondary" size="small">
 											<AdminPanelSettingsIcon />
+										</IconButton>
+									</Tooltip>
+									<Tooltip title="Bulk Upload (Admin)">
+										<IconButton component={RouterLink} to="/admin/bulk-upload" color="secondary" size="small">
+											<UploadFileIcon />
 										</IconButton>
 									</Tooltip>
 								</>
@@ -354,7 +370,6 @@ export default function Header() {
 							>
 								<Box sx={{ px: 2, py: 1.5 }}>
 									<Typography variant="subtitle1" fontWeight="bold">
-										{/* Assuming User type might not have displayName, fallback to email part or 'User' */}
 										{(currentUser as any).displayName || currentUser.email?.split('@')[0] || 'User'}
 									</Typography>
 									<Typography variant="caption" color="text.secondary">
@@ -382,7 +397,7 @@ export default function Header() {
 							{isNavSidebarVisible ? <ChevronRightIcon /> : <MenuIcon />}
 						</IconButton>
 					)}
-					{!isAboutPage && isSmallScreen && ( // Right menu toggle for small screens
+					{!isAboutPage && isSmallScreen && (
 						<IconButton
 							color="inherit"
 							aria-label="toggle navigation sidebar"
