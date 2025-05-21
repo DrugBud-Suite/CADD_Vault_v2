@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase'; // Import Supabase client
 import { useAuth } from '../context/AuthContext';
 import { Package } from '../types';
+import { useFilterStore } from '../store/filterStore'; // Import the filter store
 import {
 	Box,
 	Typography,
@@ -24,55 +25,44 @@ const AddPackagePage: React.FC = () => {
 		description: '',
 		publication: '',
 		webserver: '',
-		repo_link: '', // For code repository
-		link: '', // General link
-		// github_owner and github_repo will be derived from link if possible
+		repo_link: '',
+		link: '',
 		license: '',
 		tags: [],
 	});
 	const [loading, setLoading] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
-	const [existingTags, setExistingTags] = useState<string[]>([]); // State for existing tags
+
+	// Get existing tags from the filter store
+	const existingTags = useFilterStore((state) => state.allAvailableTags);
+	// Use originalPackages.length as a proxy to know if filter store's metadata is loaded
+	const isStoreMetadataLoaded = useFilterStore((state) => state.originalPackages.length > 0);
+	const [tagsLoading, setTagsLoading] = useState<boolean>(true);
+
 
 	useEffect(() => {
-		// Redirect if not admin and auth is not loading
 		if (!authLoading && !isAdmin) {
 			console.warn('Access denied: User is not an admin.');
-			navigate('/'); // Redirect to home page
+			navigate('/');
 		}
 	}, [isAdmin, authLoading, navigate]);
 
-	// Effect to fetch existing tags
+	// Effect to manage tagsLoading state based on store
 	useEffect(() => {
-		const fetchTags = async () => {
-			if (!isAdmin) return; // Only fetch if admin
-			try {
-				const { data, error: fetchError } = await supabase
-					.from('packages')
-					.select('tags'); // Select only the 'tags' column
-
-				if (fetchError) {
-					throw fetchError;
-				}
-
-				const allTags = new Set<string>();
-				data.forEach((row) => {
-					if (row.tags && Array.isArray(row.tags)) {
-						row.tags.forEach(tag => allTags.add(tag));
-					}
-				});
-				setExistingTags(Array.from(allTags).sort()); // Sort alphabetically
-
-			} catch (error: any) {
-				console.error("Error fetching existing tags:", error.message);
-				setError("Failed to load existing tags."); // Inform the user
-			}
-		};
-
 		if (isAdmin) {
-			fetchTags();
+			if (isStoreMetadataLoaded) {
+				setTagsLoading(false);
+			} else {
+				// If store metadata isn't loaded yet, keep showing loading.
+				// HomePage is responsible for populating this.
+				// If AddPackagePage can be accessed before HomePage,
+				// a direct fetch here might be needed as a fallback,
+				// but the primary approach is to rely on the store.
+				setTagsLoading(true);
+			}
 		}
-	}, [isAdmin]); // Re-run if admin status changes (e.g., after login)
+	}, [isAdmin, isStoreMetadataLoaded]);
+
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
 		const { name, value } = event.target;
@@ -101,10 +91,7 @@ const AddPackagePage: React.FC = () => {
 		setLoading(true);
 
 		try {
-			// Prepare data for Supabase insert.
-			// Supabase handles timestamps automatically with 'created_at' column.
-			// GitHub owner/repo parsing should be handled by a Supabase function/trigger if needed.
-			const newPackageData: Omit<Package, 'id' | 'last_commit' | 'github_stars' | 'citations' | 'ratingSum' | 'ratings_count' | 'average_rating' | 'added_at' | 'github_owner' | 'github_repo'> = {
+			const newPackageData: Omit<Package, 'id' | 'last_commit' | 'github_stars' | 'citations' | 'average_rating' | 'ratings_count' | 'added_at' | 'github_owner' | 'github_repo'> = {
 				package_name: formData.package_name || '',
 				description: formData.description || '',
 				publication: formData.publication || '',
@@ -113,27 +100,29 @@ const AddPackagePage: React.FC = () => {
 				link: formData.link || '',
 				license: formData.license || '',
 				tags: formData.tags || [],
-				// Other fields like last_commit, github_stars, citations, ratings
-				// should be handled by backend logic (e.g., GitHub webhook, scheduled functions)
 			};
 
 			const { data, error: insertError } = await supabase
 				.from('packages')
 				.insert([newPackageData])
-				.select(); // Select the inserted data to get the new ID
+				.select();
 
 			if (insertError) {
 				throw insertError;
 			}
 
-			// Assuming the insert returns the newly created row with its ID
 			const newPackage = data?.[0];
 
 			if (newPackage) {
 				console.log('Package added successfully:', newPackage);
-				navigate(`/package/${encodeURIComponent(newPackage.id)}`); // Navigate to the new package page
+				// Optionally, update the filterStore's originalPackages and derived metadata here
+				// or rely on a full refresh/re-fetch if the user navigates back to HomePage.
+				// For simplicity, we'll navigate and let HomePage handle its data.
+				useFilterStore.getState().setOriginalPackagesAndDeriveMetadata(
+					[...useFilterStore.getState().originalPackages, newPackage]
+				);
+				navigate(`/package/${encodeURIComponent(newPackage.id)}`);
 			} else {
-				// This case should ideally not happen if select() is used after insert
 				setError('Failed to retrieve the newly added package data.');
 				console.error('Insert successful but no data returned.');
 			}
@@ -146,12 +135,10 @@ const AddPackagePage: React.FC = () => {
 		}
 	};
 
-	// Don't render the form until auth state is confirmed
 	if (authLoading) {
 		return <Box display="flex" justifyContent="center" alignItems="center" height="50vh"><CircularProgress /></Box>;
 	}
 
-	// If not admin (although useEffect should redirect, this is a safeguard)
 	if (!isAdmin) {
 		return <Typography color="error" align="center">Access Denied. You must be an admin to add packages.</Typography>;
 	}
@@ -163,10 +150,9 @@ const AddPackagePage: React.FC = () => {
 			</Typography>
 			<form onSubmit={handleSubmit}>
 				<Grid container spacing={3}>
-					{/* Required Field */}
 					<Grid item xs={12}>
 						<TextField
-							id="package_name" // Add id
+							id="package_name"
 							label="Package Name (package_name)"
 							name="package_name"
 							value={formData.package_name}
@@ -176,11 +162,9 @@ const AddPackagePage: React.FC = () => {
 							variant="outlined"
 						/>
 					</Grid>
-
-					{/* Optional Fields */}
 					<Grid item xs={12}>
 						<TextField
-							id="description" // Add id
+							id="description"
 							label="Description"
 							name="description"
 							value={formData.description}
@@ -193,7 +177,7 @@ const AddPackagePage: React.FC = () => {
 					</Grid>
 					<Grid item xs={12} sm={6}>
 						<TextField
-							id="publication" // Add id
+							id="publication"
 							label="Publication URL"
 							name="publication"
 							value={formData.publication}
@@ -205,7 +189,7 @@ const AddPackagePage: React.FC = () => {
 					</Grid>
 					<Grid item xs={12} sm={6}>
 						<TextField
-							id="webserver" // Add id
+							id="webserver"
 							label="Webserver/Homepage URL"
 							name="webserver"
 							value={formData.webserver}
@@ -215,10 +199,9 @@ const AddPackagePage: React.FC = () => {
 							type="url"
 						/>
 					</Grid>
-					{/* GitHub Owner and Repo fields removed */}
 					<Grid item xs={12} sm={6}>
 						<TextField
-							id="repo_link" // Add id
+							id="repo_link"
 							label="Code Repository Link (GitHub or other)"
 							name="repo_link"
 							value={formData.repo_link}
@@ -231,7 +214,7 @@ const AddPackagePage: React.FC = () => {
 					</Grid>
 					<Grid item xs={12} sm={6}>
 						<TextField
-							id="link" // Add id
+							id="link"
 							label="General Link"
 							name="link"
 							value={formData.link}
@@ -244,7 +227,7 @@ const AddPackagePage: React.FC = () => {
 					</Grid>
 					<Grid item xs={12} sm={6}>
 						<TextField
-							id="license" // Add id
+							id="license"
 							label="License"
 							name="license"
 							value={formData.license}
@@ -253,16 +236,15 @@ const AddPackagePage: React.FC = () => {
 							variant="outlined"
 						/>
 					</Grid>
-					{/* MUI Autocomplete for Tags */}
 					<Grid item xs={12}>
 						<Autocomplete
 							multiple
 							id="tags-standard"
-							options={existingTags}
-							getOptionLabel={(option) => option}
+							options={existingTags} // Use tags from the store
+							loading={tagsLoading} // Show loading indicator if tags are not yet available
 							value={formData.tags || []}
 							onChange={handleTagsChange}
-							freeSolo // Allows adding new tags not in the existingTags list
+							freeSolo
 							renderTags={(value: readonly string[], getTagProps) =>
 								value.map((option: string, index: number) => {
 									const { key, ...otherTagProps } = getTagProps({ index });
@@ -280,8 +262,8 @@ const AddPackagePage: React.FC = () => {
 											color: 'primary.main',
 											fontWeight: 500,
 											fontSize: '0.7rem',
-											mr: 0.5, // Add some margin between chips
-											mb: 0.5, // Add some margin below chips for wrapping
+											mr: 0.5,
+											mb: 0.5,
 											'&:hover': {
 												bgcolor: (theme) => theme.palette.mode === 'dark'
 													? alpha(theme.palette.primary.main, 0.25)
@@ -298,6 +280,15 @@ const AddPackagePage: React.FC = () => {
 									label="Tags"
 									placeholder="Add or select tags"
 									helperText="Type to see suggestions or add new tags"
+									InputProps={{
+										...params.InputProps,
+										endAdornment: (
+											<React.Fragment>
+												{tagsLoading ? <CircularProgress color="inherit" size={20} /> : null}
+												{params.InputProps.endAdornment}
+											</React.Fragment>
+										),
+									}}
 								/>
 							)}
 							PaperComponent={({ children, ...otherPaperProps }) => (
@@ -305,7 +296,7 @@ const AddPackagePage: React.FC = () => {
 									{...otherPaperProps}
 									sx={{
 										boxShadow: 3,
-										maxHeight: '200px', // Adjust as needed
+										maxHeight: '200px',
 										overflow: 'auto',
 									}}
 								>
@@ -327,7 +318,7 @@ const AddPackagePage: React.FC = () => {
 									<Chip
 										label={option}
 										size="small"
-										variant={selected ? "filled" : "outlined"} // Differentiate selected chips
+										variant={selected ? "filled" : "outlined"}
 										clickable
 										sx={{
 											height: '22px',
@@ -339,7 +330,7 @@ const AddPackagePage: React.FC = () => {
 											fontWeight: 500,
 											fontSize: '0.7rem',
 											cursor: 'pointer',
-											m: 0.25, // Add small margin around each option chip
+											m: 0.25,
 											'&:hover': {
 												bgcolor: (theme) => theme.palette.mode === 'dark'
 													? alpha(theme.palette.primary.main, 0.25)
@@ -352,8 +343,6 @@ const AddPackagePage: React.FC = () => {
 							)}
 						/>
 					</Grid>
-
-					{/* Submit Button & Error Message */}
 					<Grid item xs={12}>
 						{error && (
 							<Typography color="error" sx={{ mb: 2 }}>
