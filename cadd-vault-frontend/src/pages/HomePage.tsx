@@ -129,6 +129,38 @@ const HomePage: React.FC = () => {
 		};
 
 		fetchGlobalDataAndSetMetadata();
+
+		// Add event listener for rating updates
+		const handleRatingUpdate = (event: Event) => {
+			const customEvent = event as CustomEvent;
+			const { packageId, newAverageRating, newRatingsCount } = customEvent.detail;
+
+			console.log(`HomePage received rating update for package ${packageId}: ${newAverageRating} (${newRatingsCount} ratings)`);
+
+			// Update the displayed packages with the new rating data
+			setDisplayedPackagesInComponent(prevPackages =>
+				prevPackages.map(pkg =>
+					pkg.id === packageId
+						? { ...pkg, average_rating: newAverageRating, ratings_count: newRatingsCount }
+						: pkg
+				)
+			);
+
+			// Also update in the store
+			setDisplayedPackages(useFilterStore.getState().displayedPackages.map(pkg =>
+				pkg.id === packageId
+					? { ...pkg, average_rating: newAverageRating, ratings_count: newRatingsCount }
+					: pkg
+			));
+		};
+
+		document.addEventListener('package-rating-updated', handleRatingUpdate);
+
+		// Cleanup the event listener on component unmount
+		return () => {
+			document.removeEventListener('package-rating-updated', handleRatingUpdate);
+		};
+
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [setOriginalPackagesAndDeriveMetadata]); // Dependency array ensures this runs once
 

@@ -69,13 +69,33 @@ const RatingInput: React.FC<RatingInputProps> = ({
 				.from('packages')
 				.select('average_rating, ratings_count')
 				.eq('id', packageId)
-				.single();
+				.limit(1);
 
 			if (error) {
 				console.error('Error fetching aggregated rating:', error);
-			} else if (data) {
-				setAverageRating(data.average_rating ?? 0);
-				setRatingsCount(data.ratings_count ?? 0);
+			} else if (data && data.length > 0) {
+				// Update local state with values from the database
+				const newAverageRating = data[0].average_rating ?? 0;
+				const newRatingsCount = data[0].ratings_count ?? 0;
+
+				setAverageRating(newAverageRating);
+				setRatingsCount(newRatingsCount);
+
+				// Create and dispatch a custom event to notify all components about the rating change
+				const ratingUpdateEvent = new CustomEvent('package-rating-updated', {
+					detail: {
+						packageId,
+						newAverageRating,
+						newRatingsCount
+					},
+					bubbles: true,
+					cancelable: false,
+					composed: true // Allows the event to pass through shadow DOM boundaries if needed
+				});
+
+				// Dispatch the event from the document object to ensure global visibility
+				document.dispatchEvent(ratingUpdateEvent);
+				console.log(`Rating update event dispatched for package ${packageId}`);
 			}
 		} catch (err) {
 			console.error('Unexpected error fetching aggregated rating:', err);
@@ -121,15 +141,19 @@ const RatingInput: React.FC<RatingInputProps> = ({
 
 		try {
 			// Check if user already has a rating (for upsert logic)
-			const { data: existingRating, error: fetchError } = await supabase
+			// Use limit(1) instead of single() to avoid potential 406 errors with RLS
+			const { data: existingRatingData, error: fetchError } = await supabase
 				.from('ratings')
 				.select('id')
 				.eq('user_id', currentUser.id) // Use currentUser.id
 				.eq('package_id', packageId)
-				.single();
+				.limit(1);
 
-			if (fetchError && fetchError.code !== 'PGRST116') {
-				throw fetchError; // Throw if it's not a "not found" error
+			// Extract the first rating (if any) from the array result
+			const existingRating = existingRatingData && existingRatingData.length > 0 ? existingRatingData[0] : null;
+
+			if (fetchError) {
+				throw fetchError; // Throw if there's any error
 			}
 
 			const { error: upsertError } = await supabase.from('ratings').upsert({
@@ -145,18 +169,18 @@ const RatingInput: React.FC<RatingInputProps> = ({
 				console.error('Error submitting rating:', upsertError);
 				setPopoverRating(userRating); // Revert optimistic update on error
 			} else {
-				// Optimistically update average rating and count
-				const newTotalRatingsSum = (ratingsCount * averageRating) + newValue;
-				const newRatingsCount = ratingsCount + (userRating === null ? 1 : 0); // Increment count only if it's a new rating
-				const newAverageRating = newRatingsCount > 0 ? newTotalRatingsSum / newRatingsCount : 0;
+				// Update local state on success
+				setUserRating(newValue);
 
-				setUserRating(newValue); // Update local state on success
-				setAverageRating(newAverageRating);
-				setRatingsCount(newRatingsCount);
+				// Close popover immediately for better UX
+				handlePopoverClose();
 
-				// Re-fetch aggregated data after successful submission
-				fetchAggregatedRating(); // No need to await here, it will update eventually
-				handlePopoverClose(); // Close popover on success
+				// Add a slight delay to allow the database trigger to update the aggregated rating
+				setTimeout(async () => {
+					// Fetch the updated rating data from the server
+					// This ensures we get the correct aggregated rating that accounts for this rating
+					await fetchAggregatedRating();
+				}, 200);
 			}
 		} catch (err) {
 			console.error('Unexpected error submitting rating:', err);

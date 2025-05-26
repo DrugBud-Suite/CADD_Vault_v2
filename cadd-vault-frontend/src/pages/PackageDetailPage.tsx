@@ -148,14 +148,14 @@ const PackageDetailPage: React.FC = () => {
 					.from('packages')
 					.select('*')
 					.eq('id', packageId)
-					.single();
+					.limit(1);
 
 				if (dbError) {
 					throw dbError;
 				}
 
-				if (data) {
-					setPackageData(data as Package);
+				if (data && data.length > 0) {
+					setPackageData(data[0] as Package);
 				} else {
 					setError('Package not found.');
 				}
@@ -168,7 +168,30 @@ const PackageDetailPage: React.FC = () => {
 		};
 
 		fetchPackage();
-	}, [packageId]);
+
+		// Listen for rating updates
+		const handleRatingUpdate = (event: Event) => {
+			const customEvent = event as CustomEvent;
+			const { packageId: ratedPackageId, newAverageRating, newRatingsCount } = customEvent.detail;
+
+			// Only update if this is the current package
+			if (ratedPackageId === packageId && packageData) {
+				console.log(`PackageDetailPage received rating update for package ${ratedPackageId}: ${newAverageRating} (${newRatingsCount} ratings)`);
+
+				setPackageData(prev => prev ? {
+					...prev,
+					average_rating: newAverageRating,
+					ratings_count: newRatingsCount
+				} : null);
+			}
+		};
+
+		document.addEventListener('package-rating-updated', handleRatingUpdate);
+
+		return () => {
+			document.removeEventListener('package-rating-updated', handleRatingUpdate);
+		};
+	}, [packageId, packageData]);
 
 	if (loading) {
 		return <Box display="flex" justifyContent="center" alignItems="center" height="50vh"><CircularProgress /></Box>;
