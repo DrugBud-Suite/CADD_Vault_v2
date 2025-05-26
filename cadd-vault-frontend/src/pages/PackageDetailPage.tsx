@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+// src/pages/PackageDetailPage.tsx
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, Grid, Paper, Button, CircularProgress, Link, Chip, useTheme, Theme, Stack, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import { alpha } from '@mui/material/styles';
@@ -6,6 +7,7 @@ import { supabase } from '../supabase';
 import { Package } from '../types';
 import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete, FolderOutlined, CategoryOutlined } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
+import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import RatingInput from '../components/RatingInput';
 import { useAuth } from '../context/AuthContext';
 
@@ -86,16 +88,22 @@ const linkStyle = {
 };
 
 const PackageDetailPage: React.FC = () => {
-	const theme = useTheme(); // Added theme hook
+	const theme = useTheme();
 	const { packageId: encodedPackageId } = useParams<{ packageId: string }>();
 	const navigate = useNavigate();
 	const { isAdmin } = useAuth();
 	const packageId = encodedPackageId ? decodeURIComponent(encodedPackageId) : undefined;
+
+	// State
 	const [packageData, setPackageData] = useState<Package | null>(null);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 	const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
 
+	// Refs
+	const mountedRef = useRef(true);
+
+	// Event handlers
 	const handleEditClick = () => {
 		if (packageId) {
 			navigate(`/edit-package/${encodeURIComponent(packageId)}`);
@@ -134,82 +142,9 @@ const PackageDetailPage: React.FC = () => {
 		setOpenDeleteConfirm(false);
 	};
 
-	useEffect(() => {
-		const fetchPackage = async () => {
-			if (!packageId) {
-				setError('Package ID is missing.');
-				setLoading(false);
-				return;
-			}
-			setLoading(true);
-			setError(null);
-			try {
-				const { data, error: dbError } = await supabase
-					.from('packages')
-					.select('*')
-					.eq('id', packageId)
-					.limit(1);
-
-				if (dbError) {
-					throw dbError;
-				}
-
-				if (data && data.length > 0) {
-					setPackageData(data[0] as Package);
-				} else {
-					setError('Package not found.');
-				}
-			} catch (err: any) {
-				console.error("Error fetching package:", err);
-				setError(`Failed to fetch package data: ${err?.message || 'Unknown error'}`);
-			} finally {
-				setLoading(false);
-			}
-		};
-
-		fetchPackage();
-
-		// Listen for rating updates
-		const handleRatingUpdate = (event: Event) => {
-			const customEvent = event as CustomEvent;
-			const { packageId: ratedPackageId, newAverageRating, newRatingsCount } = customEvent.detail;
-
-			// Only update if this is the current package
-			if (ratedPackageId === packageId && packageData) {
-				console.log(`PackageDetailPage received rating update for package ${ratedPackageId}: ${newAverageRating} (${newRatingsCount} ratings)`);
-
-				setPackageData(prev => prev ? {
-					...prev,
-					average_rating: newAverageRating,
-					ratings_count: newRatingsCount
-				} : null);
-			}
-		};
-
-		document.addEventListener('package-rating-updated', handleRatingUpdate);
-
-		return () => {
-			document.removeEventListener('package-rating-updated', handleRatingUpdate);
-		};
-	}, [packageId, packageData]);
-
-	if (loading) {
-		return <Box display="flex" justifyContent="center" alignItems="center" height="50vh"><CircularProgress /></Box>;
-	}
-
-	if (error) {
-		return <Typography color="error" align="center">{error}</Typography>;
-	}
-
-	if (!packageData) {
-		return <Typography align="center">Package data is not available.</Typography>;
-	}
-
 	// Helper to calculate time ago
 	const timeAgo = (date: string | Date | null | undefined): string => {
 		if (!date) return 'N/A';
-		// Use pre-calculated string if available (assuming Supabase might provide this)
-		// if (packageData?.last_commit_ago) return packageData.last_commit_ago; // Remove if not provided by Supabase
 
 		try {
 			const d = date instanceof Date ? date : new Date(date);
@@ -232,6 +167,89 @@ const PackageDetailPage: React.FC = () => {
 		}
 	};
 
+	// Effects
+	useEffect(() => {
+		return () => {
+			mountedRef.current = false;
+		};
+	}, []);
+
+	useEffect(() => {
+		const fetchPackage = async () => {
+			if (!packageId) {
+				setError('Package ID is missing.');
+				setLoading(false);
+				return;
+			}
+			setLoading(true);
+			setError(null);
+			try {
+				const { data, error: dbError } = await supabase
+					.from('packages')
+					.select('*')
+					.eq('id', packageId)
+					.limit(1);
+
+				if (dbError) {
+					throw dbError;
+				}
+
+				if (data && data.length > 0) {
+					if (mountedRef.current) {
+						setPackageData(data[0] as Package);
+					}
+				} else {
+					if (mountedRef.current) {
+						setError('Package not found.');
+					}
+				}
+			} catch (err: any) {
+				console.error("Error fetching package:", err);
+				if (mountedRef.current) {
+					setError(`Failed to fetch package data: ${err?.message || 'Unknown error'}`);
+				}
+			} finally {
+				if (mountedRef.current) {
+					setLoading(false);
+				}
+			}
+		};
+
+		fetchPackage();
+
+		// Listen for rating updates
+		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
+			// Only update if this is the current package
+			if (event.packageId === packageId && mountedRef.current) {
+				console.log(`PackageDetailPage received rating update for package ${event.packageId}: ${event.averageRating} (${event.ratingsCount} ratings)`);
+
+				setPackageData(prev => prev ? {
+					...prev,
+					average_rating: event.averageRating,
+					ratings_count: event.ratingsCount
+				} : null);
+			}
+		});
+
+		return () => {
+			unsubscribe();
+		};
+	}, [packageId]);
+
+	// Loading state
+	if (loading) {
+		return <Box display="flex" justifyContent="center" alignItems="center" height="50vh"><CircularProgress /></Box>;
+	}
+
+	// Error state
+	if (error) {
+		return <Typography color="error" align="center">{error}</Typography>;
+	}
+
+	// No data state
+	if (!packageData) {
+		return <Typography align="center">Package data is not available.</Typography>;
+	}
 
 	return (
 		<Paper elevation={3} sx={{
@@ -252,6 +270,7 @@ const PackageDetailPage: React.FC = () => {
 			overflow: 'hidden',
 			borderRadius: 2,
 		}}>
+			{/* Admin Controls */}
 			{isAdmin && (
 				<Stack direction="row" spacing={1} sx={{ position: 'absolute', top: 16, right: 16 }}>
 					<Button
@@ -272,6 +291,7 @@ const PackageDetailPage: React.FC = () => {
 					</Button>
 				</Stack>
 			)}
+
 			{/* Rating in top right corner */}
 			{packageId && (
 				<Box sx={{ position: 'absolute', top: 20, right: isAdmin ? (packageData?.package_name && packageData.package_name.length > 15 ? 300 : 210) : 16, zIndex: 1 }}>
@@ -282,6 +302,8 @@ const PackageDetailPage: React.FC = () => {
 					/>
 				</Box>
 			)}
+
+			{/* Title */}
 			<Typography variant="h4" gutterBottom component="div" sx={{
 				pr: isAdmin ? '100px' : 0,
 				fontWeight: 600,
@@ -291,7 +313,7 @@ const PackageDetailPage: React.FC = () => {
 				{packageData.package_name || 'Unnamed Package'}
 			</Typography>
 
-			{/* Description without header */}
+			{/* Description */}
 			<Box mb={3}>
 				<Typography variant="body1" paragraph sx={{
 					whiteSpace: 'pre-wrap',
@@ -302,6 +324,7 @@ const PackageDetailPage: React.FC = () => {
 				</Typography>
 			</Box>
 
+			{/* Main Content Grid */}
 			<Grid container spacing={4} mb={3}>
 				{/* Code Section */}
 				<Grid item xs={12} md={4}>
@@ -345,6 +368,7 @@ const PackageDetailPage: React.FC = () => {
 							)}
 						</Box>
 
+						{/* GitHub Stars */}
 						{typeof packageData.github_stars === 'number' && (
 							<Box mb={2}>
 								<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
@@ -355,6 +379,7 @@ const PackageDetailPage: React.FC = () => {
 							</Box>
 						)}
 
+						{/* Last Commit */}
 						{packageData.last_commit && (
 							<Box mb={2}>
 								<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
@@ -365,6 +390,7 @@ const PackageDetailPage: React.FC = () => {
 							</Box>
 						)}
 
+						{/* License */}
 						<Box mb={2}>
 							<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
 								<Gavel sx={{ mr: 1, color: theme.palette.info.main }} />
@@ -401,6 +427,7 @@ const PackageDetailPage: React.FC = () => {
 							color: (theme) => theme.palette.mode === 'dark' ? theme.palette.text.primary : theme.palette.text.primary,
 						}}>Publication</Typography>
 
+						{/* Publication Link */}
 						{packageData.publication && (
 							<Box mb={2}>
 								<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
@@ -430,6 +457,7 @@ const PackageDetailPage: React.FC = () => {
 							</Box>
 						)}
 
+						{/* Citations */}
 						{typeof packageData.citations === 'number' && packageData.citations > 0 && (
 							<Box mb={2}>
 								<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
@@ -586,36 +614,38 @@ const PackageDetailPage: React.FC = () => {
 							color: (theme) => theme.palette.mode === 'dark' ? theme.palette.text.primary : theme.palette.text.primary,
 						}}>Tags</Typography>
 						<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-							{packageData.tags.map((tag: string) => (<Chip
-								key={tag}
-								label={tag}
-								size="medium"
-								sx={{
-									height: '28px',
-									borderRadius: 4,
-									bgcolor: (theme) => theme.palette.mode === 'dark'
-										? alpha(theme.palette.primary.main, 0.12)
-										: alpha(theme.palette.primary.light, 0.12),
-									color: (theme) => theme.palette.mode === 'dark'
-										? theme.palette.primary.light
-										: theme.palette.primary.main,
-									fontWeight: 500,
-									fontSize: '0.8rem',
-									padding: '0 4px',
-									'&:hover': {
+							{packageData.tags.map((tag: string) => (
+								<Chip
+									key={tag}
+									label={tag}
+									size="medium"
+									sx={{
+										height: '28px',
+										borderRadius: 4,
 										bgcolor: (theme) => theme.palette.mode === 'dark'
-											? alpha(theme.palette.primary.main, 0.18)
-											: alpha(theme.palette.primary.light, 0.18),
-									},
-									cursor: 'default', // Tags on detail page are not for filtering
-								}}
-							/>
+											? alpha(theme.palette.primary.main, 0.12)
+											: alpha(theme.palette.primary.light, 0.12),
+										color: (theme) => theme.palette.mode === 'dark'
+											? theme.palette.primary.light
+											: theme.palette.primary.main,
+										fontWeight: 500,
+										fontSize: '0.8rem',
+										padding: '0 4px',
+										'&:hover': {
+											bgcolor: (theme) => theme.palette.mode === 'dark'
+												? alpha(theme.palette.primary.main, 0.18)
+												: alpha(theme.palette.primary.light, 0.18),
+										},
+										cursor: 'default', // Tags on detail page are not for filtering
+									}}
+								/>
 							))}
 						</Box>
 					</Box>
 				</Box>
 			)}
 
+			{/* Delete Confirmation Dialog */}
 			<Dialog
 				open={openDeleteConfirm}
 				onClose={handleCloseDeleteConfirm}

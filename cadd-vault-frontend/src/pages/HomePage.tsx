@@ -4,6 +4,7 @@ import { supabase } from '../supabase';
 import { useFilterStore } from '../store/filterStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Package } from '../types';
+import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import {
 	Container, Box, Typography, CircularProgress, Alert, Select, MenuItem, IconButton,
 	ToggleButtonGroup, ToggleButton, Grid, Pagination, FormControl, SelectChangeEvent
@@ -53,7 +54,6 @@ async function fetchAllSupabaseData(
 	return allData;
 }
 
-
 const HomePage: React.FC = () => {
 	// --- Zustand Store Selectors using useShallow ---
 	const {
@@ -90,7 +90,6 @@ const HomePage: React.FC = () => {
 		setCurrentPage: state.setCurrentPage,
 		setOriginalPackagesAndDeriveMetadata: state.setOriginalPackagesAndDeriveMetadata,
 	})));
-
 
 	// --- Local State for this component ---
 	const [displayedPackagesInComponent, setDisplayedPackagesInComponent] = useState<Package[]>([]);
@@ -129,40 +128,43 @@ const HomePage: React.FC = () => {
 		};
 
 		fetchGlobalDataAndSetMetadata();
+	}, [setOriginalPackagesAndDeriveMetadata]); // Dependency array ensures this runs once
 
-		// Add event listener for rating updates
-		const handleRatingUpdate = (event: Event) => {
-			const customEvent = event as CustomEvent;
-			const { packageId, newAverageRating, newRatingsCount } = customEvent.detail;
-
-			console.log(`HomePage received rating update for package ${packageId}: ${newAverageRating} (${newRatingsCount} ratings)`);
+	// --- Rating update event listener ---
+	useEffect(() => {
+		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
+			console.log(`HomePage received rating update for package ${event.packageId}: ${event.averageRating} (${event.ratingsCount} ratings)`);
 
 			// Update the displayed packages with the new rating data
 			setDisplayedPackagesInComponent(prevPackages =>
 				prevPackages.map(pkg =>
-					pkg.id === packageId
-						? { ...pkg, average_rating: newAverageRating, ratings_count: newRatingsCount }
+					pkg.id === event.packageId
+						? {
+							...pkg,
+							average_rating: event.averageRating,
+							ratings_count: event.ratingsCount
+						}
 						: pkg
 				)
 			);
 
 			// Also update in the store
-			setDisplayedPackages(useFilterStore.getState().displayedPackages.map(pkg =>
-				pkg.id === packageId
-					? { ...pkg, average_rating: newAverageRating, ratings_count: newRatingsCount }
+			const currentDisplayedPackages = useFilterStore.getState().displayedPackages;
+			const updatedDisplayedPackages = currentDisplayedPackages.map(pkg =>
+				pkg.id === event.packageId
+					? {
+						...pkg,
+						average_rating: event.averageRating,
+						ratings_count: event.ratingsCount
+					}
 					: pkg
-			));
-		};
-
-		document.addEventListener('package-rating-updated', handleRatingUpdate);
+			);
+			setDisplayedPackages(updatedDisplayedPackages);
+		});
 
 		// Cleanup the event listener on component unmount
-		return () => {
-			document.removeEventListener('package-rating-updated', handleRatingUpdate);
-		};
-
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [setOriginalPackagesAndDeriveMetadata]); // Dependency array ensures this runs once
+		return unsubscribe;
+	}, [setDisplayedPackages]);
 
 	// --- Data Fetching for packages (paginated and filtered) ---
 	useEffect(() => {
@@ -242,7 +244,6 @@ const HomePage: React.FC = () => {
 		setDisplayedPackages, setTotalFilteredCount, // itemsPerPage is stable
 		// No longer depends on originalPackages directly for this effect
 	]);
-
 
 	// --- Event Handlers ---
 	const handlePageChange = (_event: ChangeEvent<unknown>, value: number) => {

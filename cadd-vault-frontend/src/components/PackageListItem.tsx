@@ -1,5 +1,5 @@
 // src/components/PackageListItem.tsx
-import React, { memo } from 'react';
+import React, { memo, useState, useEffect, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
 	ListItem,
@@ -10,31 +10,58 @@ import {
 	Stack,
 	Tooltip,
 	Chip,
-	Theme // Keep Theme for sx props if needed directly, otherwise alpha is used within common components
+	Theme
 } from '@mui/material';
-import { alpha } from '@mui/material/styles'; // alpha might still be used for non-button/chip specific styles
+import { alpha } from '@mui/material/styles';
 import { Package } from '../types';
 import { useFilterStore } from '../store/filterStore';
+import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import RatingInput from './RatingInput';
-import PackageActions from './common/PackageActions'; // Adjust path as needed
-import PackageMetrics from './common/PackageMetrics'; // Adjust path
+import PackageActions from './common/PackageActions';
+import PackageMetrics from './common/PackageMetrics';
 
 interface PackageListItemProps {
 	pkg: Package;
 }
 
-// buttonStyle definition is removed from here as it's encapsulated in PackageLinkButton.tsx
-// and used via PackageActions.tsx
-
 const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 	const addTag = useFilterStore((state) => state.addTag);
+
+	// Local state for rating data
+	const [localPkg, setLocalPkg] = useState<Package>(pkg);
+	const mountedRef = useRef(true);
+
+	// Update local package data when props change
+	useEffect(() => {
+		setLocalPkg(pkg);
+	}, [pkg]);
+
+	// Subscribe to rating updates
+	useEffect(() => {
+		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
+			if (event.packageId === pkg.id && mountedRef.current) {
+				setLocalPkg(prevPkg => ({
+					...prevPkg,
+					average_rating: event.averageRating,
+					ratings_count: event.ratingsCount
+				}));
+			}
+		});
+
+		return unsubscribe;
+	}, [pkg.id]);
+
+	// Cleanup on unmount
+	useEffect(() => {
+		return () => {
+			mountedRef.current = false;
+		};
+	}, []);
 
 	const handleTagClick = (event: React.MouseEvent, tag: string) => {
 		event.stopPropagation(); // Prevent ListItem's own click if it has one
 		addTag(tag);
 	};
-
-	// formatLastCommitAgo is now part of PackageMetrics.tsx, no need to define it here
 
 	return (
 		<ListItem
@@ -69,15 +96,14 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 					mb: 0,
 				},
 			}}
-			button // Makes the ListItem itself interactive, consider if this is needed or if only internal links are
-			component="div" // To allow complex children structure for flex
+			component="div"
 		>
 			<Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', mr: 2, overflow: 'hidden' }}>
 				<ListItemText
 					primary={
 						<Link
 							component={RouterLink}
-							to={`/package/${encodeURIComponent(pkg.id)}`}
+							to={`/package/${encodeURIComponent(localPkg.id)}`}
 							underline="none"
 							sx={{
 								fontWeight: 600,
@@ -108,13 +134,13 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 								},
 							}}
 						>
-							{pkg.package_name}
+							{localPkg.package_name}
 						</Link>
 					}
 					sx={{ mt: 0.5, mb: 0.5 }}
 				/>
-				{pkg.description && (
-					<Tooltip title={pkg.description}>
+				{localPkg.description && (
+					<Tooltip title={localPkg.description}>
 						<Typography
 							variant="body2"
 							color="text.secondary"
@@ -128,11 +154,11 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 								lineHeight: 1.5,
 							}}
 						>
-							{pkg.description}
+							{localPkg.description}
 						</Typography>
 					</Tooltip>
 				)}
-				{pkg.tags && pkg.tags.length > 0 && (
+				{localPkg.tags && localPkg.tags.length > 0 && (
 					<Stack
 						direction="row"
 						spacing={0.5}
@@ -148,7 +174,7 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 							},
 						}}
 					>
-						{pkg.tags.map((tag: string) => (
+						{localPkg.tags.map((tag: string) => (
 							<Chip
 								key={tag}
 								label={tag}
@@ -180,15 +206,15 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 
 			<Stack direction="column" spacing={1} alignItems="flex-end" sx={{ flexShrink: 0, pt: 0.5 }}>
 				<RatingInput
-					packageId={pkg.id}
-					initialAverageRating={pkg.average_rating ?? 0}
-					initialRatingsCount={pkg.ratings_count ?? 0}
+					packageId={localPkg.id}
+					initialAverageRating={localPkg.average_rating ?? 0}
+					initialRatingsCount={localPkg.ratings_count ?? 0}
 				/>
 				{/* Replaced with PackageActions component */}
-				<PackageActions pkg={pkg} spacing={0.5} />
+				<PackageActions pkg={localPkg} spacing={0.5} />
 
 				{/* Replaced with PackageMetrics component */}
-				<PackageMetrics pkg={pkg} variant="list" spacing={1} />
+				<PackageMetrics pkg={localPkg} variant="list" spacing={1} />
 			</Stack>
 		</ListItem>
 	);

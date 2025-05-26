@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/components/RatingInput.tsx
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
 	Box,
 	Rating,
@@ -7,251 +8,318 @@ import {
 	IconButton,
 	CircularProgress,
 	Tooltip,
+	Button,
+	Stack,
+	Alert
 } from '@mui/material';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
-import { useAuth } from '../context/AuthContext'; // Import useAuth hook
-import { supabase } from '../supabase'; // Assuming supabase client is exported from here
+import DeleteIcon from '@mui/icons-material/Delete';
+import { useAuth } from '../context/AuthContext';
+import { RatingService, RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 
 interface RatingInputProps {
 	packageId: string;
-	initialAverageRating: number;
-	initialRatingsCount: number;
+	initialAverageRating?: number;
+	initialRatingsCount?: number;
 }
 
 const RatingInput: React.FC<RatingInputProps> = ({
 	packageId,
-	initialAverageRating,
-	initialRatingsCount,
+	initialAverageRating = 0,
+	initialRatingsCount = 0,
 }) => {
-	const { currentUser } = useAuth(); // Use the hook and get currentUser
+	const { currentUser } = useAuth();
+
+	// Local state for this component
 	const [averageRating, setAverageRating] = useState(initialAverageRating);
 	const [ratingsCount, setRatingsCount] = useState(initialRatingsCount);
 	const [userRating, setUserRating] = useState<number | null>(null);
-	const [loadingUserRating, setLoadingUserRating] = useState(false);
-	const [submittingRating, setSubmittingRating] = useState(false);
-	const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
 	const [popoverRating, setPopoverRating] = useState<number | null>(null);
 
-	const fetchUserRating = async () => {
-		if (!currentUser) return; // Check currentUser
-		setLoadingUserRating(true);
-		try {
-			// Use limit(1) instead of single() to avoid potential 406 errors with RLS
-			const { data, error } = await supabase
-				.from('ratings')
-				.select('rating')
-				.eq('user_id', currentUser.id) // Use currentUser.id
-				.eq('package_id', packageId)
-				.limit(1); // Fetch max 1 row
+	// UI state
+	const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
-			if (error) {
-				console.error('Error fetching user rating:', error);
-			} else if (data && data.length > 0) {
-				// Handle array result
-				setUserRating(data[0].rating);
-				setPopoverRating(data[0].rating);
-			} else {
-				setUserRating(null);
-				setPopoverRating(null);
-			}
-		} catch (err) {
-			console.error('Unexpected error fetching user rating:', err);
-		} finally {
-			setLoadingUserRating(false);
-		}
-	};
+	// Refs to prevent stale closures
+	const packageIdRef = useRef(packageId);
+	const mountedRef = useRef(true);
 
-	// Function to fetch the latest average rating and count
-	const fetchAggregatedRating = async () => {
-		try {
-			const { data, error } = await supabase
-				.from('packages')
-				.select('average_rating, ratings_count')
-				.eq('id', packageId)
-				.limit(1);
-
-			if (error) {
-				console.error('Error fetching aggregated rating:', error);
-			} else if (data && data.length > 0) {
-				// Update local state with values from the database
-				const newAverageRating = data[0].average_rating ?? 0;
-				const newRatingsCount = data[0].ratings_count ?? 0;
-
-				setAverageRating(newAverageRating);
-				setRatingsCount(newRatingsCount);
-
-				// Create and dispatch a custom event to notify all components about the rating change
-				const ratingUpdateEvent = new CustomEvent('package-rating-updated', {
-					detail: {
-						packageId,
-						newAverageRating,
-						newRatingsCount
-					},
-					bubbles: true,
-					cancelable: false,
-					composed: true // Allows the event to pass through shadow DOM boundaries if needed
-				});
-
-				// Dispatch the event from the document object to ensure global visibility
-				document.dispatchEvent(ratingUpdateEvent);
-				console.log(`Rating update event dispatched for package ${packageId}`);
-			}
-		} catch (err) {
-			console.error('Unexpected error fetching aggregated rating:', err);
-		}
-	};
-
-
+	// Update refs when props change
 	useEffect(() => {
-		if (currentUser) { // Check currentUser
-			fetchUserRating();
-		} else {
-			setUserRating(null); // Reset user rating if logged out
-			setPopoverRating(null);
-		}
-		// Fetch initial aggregated rating regardless of user state
-		fetchAggregatedRating();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [currentUser, packageId]); // Rerun when currentUser or packageId changes
+		packageIdRef.current = packageId;
+	}, [packageId]);
 
+	// Cleanup on unmount
+	useEffect(() => {
+		return () => {
+			mountedRef.current = false;
+		};
+	}, []);
+
+	// Initialize component data
+	const fetchInitialData = useCallback(async () => {
+		if (!currentUser) {
+			setUserRating(null);
+		return;
+	}
+
+	  setLoading(true);
+	  setError(null);
+
+	  try {
+		// Fetch user's current rating
+		const userRatingData = await RatingService.getUserRating(packageId);
+
+		  if (mountedRef.current) {
+			  setUserRating(userRatingData?.rating || null);
+			  setPopoverRating(userRatingData?.rating || null);
+		  }
+	  } catch (err: any) {
+		  console.error('Error fetching initial rating data:', err);
+		  if (mountedRef.current) {
+			  setError('Failed to load rating data');
+		  }
+	  } finally {
+		  if (mountedRef.current) {
+			  setLoading(false);
+		  }
+	  }
+  }, [currentUser, packageId]);
+
+	// Subscribe to rating updates from other components
+	useEffect(() => {
+		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
+			if (event.packageId === packageIdRef.current && mountedRef.current) {
+				setAverageRating(event.averageRating);
+				setRatingsCount(event.ratingsCount);
+
+		  // Update user rating if provided
+		  if (event.userRating !== undefined) {
+			  setUserRating(event.userRating);
+			  setPopoverRating(event.userRating);
+		  }
+	  }
+	});
+
+	  return unsubscribe;
+  }, []);
+
+	// Update local state when props change
+	useEffect(() => {
+	  setAverageRating(initialAverageRating);
+	  setRatingsCount(initialRatingsCount);
+  }, [initialAverageRating, initialRatingsCount]);
+
+	// Fetch initial data when component mounts or user changes
+	useEffect(() => {
+		fetchInitialData();
+	}, [fetchInitialData]);
+
+	// Event handlers
 	const handlePopoverOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
-		if (!currentUser) { // Check currentUser
-			// Optionally show login prompt or disable interaction
-			console.log('User must be logged in to rate.');
-			return;
-		}
-		setAnchorEl(event.currentTarget);
-		// Set initial popover rating to user's current rating or null
-		setPopoverRating(userRating);
-	};
+	  if (!currentUser) {
+		  return;
+	  }
+	  setAnchorEl(event.currentTarget);
+	  setError(null);
+  };
 
 	const handlePopoverClose = () => {
 		setAnchorEl(null);
-	};
+	  setPopoverRating(userRating);
+	  setError(null);
+  };
 
 	const handleRatingChange = async (
 		_event: React.SyntheticEvent,
 		newValue: number | null,
 	) => {
-		if (!currentUser || newValue === null) return; // Check currentUser
+	  if (!currentUser || newValue === null || submitting) return;
 
-		setSubmittingRating(true);
-		setPopoverRating(newValue); // Optimistically update popover UI
+	  setSubmitting(true);
+	  setError(null);
+	  setPopoverRating(newValue);
 
-		try {
-			// Check if user already has a rating (for upsert logic)
-			// Use limit(1) instead of single() to avoid potential 406 errors with RLS
-			const { data: existingRatingData, error: fetchError } = await supabase
-				.from('ratings')
-				.select('id')
-				.eq('user_id', currentUser.id) // Use currentUser.id
-				.eq('package_id', packageId)
-				.limit(1);
+	  try {
+		const result = await RatingService.upsertRating(packageId, newValue);
 
-			// Extract the first rating (if any) from the array result
-			const existingRating = existingRatingData && existingRatingData.length > 0 ? existingRatingData[0] : null;
+		if (mountedRef.current) {
+			// Update local state
+			setAverageRating(result.average_rating);
+			setRatingsCount(result.ratings_count);
+			setUserRating(result.user_rating);
+			setPopoverRating(result.user_rating);
 
-			if (fetchError) {
-				throw fetchError; // Throw if there's any error
-			}
+		  // Emit event for other components
+		  RatingEventEmitter.emit({
+			  packageId,
+			  averageRating: result.average_rating,
+			  ratingsCount: result.ratings_count,
+			  userRating: result.user_rating
+		  });
 
-			const { error: upsertError } = await supabase.from('ratings').upsert({
-				id: existingRating?.id, // Provide id for update, undefined for insert
-				user_id: currentUser.id, // Use currentUser.id
-				package_id: packageId,
-				rating: newValue,
-				created_at: existingRating ? undefined : new Date().toISOString(), // Only set created_at on insert
-			});
-
-
-			if (upsertError) {
-				console.error('Error submitting rating:', upsertError);
-				setPopoverRating(userRating); // Revert optimistic update on error
-			} else {
-				// Update local state on success
-				setUserRating(newValue);
-
-				// Close popover immediately for better UX
-				handlePopoverClose();
-
-				// Add a slight delay to allow the database trigger to update the aggregated rating
-				setTimeout(async () => {
-					// Fetch the updated rating data from the server
-					// This ensures we get the correct aggregated rating that accounts for this rating
-					await fetchAggregatedRating();
-				}, 200);
-			}
-		} catch (err) {
-			console.error('Unexpected error submitting rating:', err);
-			setPopoverRating(userRating); // Revert optimistic update on error
-		} finally {
-			setSubmittingRating(false);
+			// Close popover after successful submission
+			setTimeout(() => {
+				if (mountedRef.current) {
+					handlePopoverClose();
+				}
+			}, 500);
 		}
+	} catch (err: any) {
+		console.error('Error submitting rating:', err);
+		if (mountedRef.current) {
+			setError('Failed to submit rating. Please try again.');
+			setPopoverRating(userRating); // Revert optimistic update
+		}
+	} finally {
+		if (mountedRef.current) {
+			setSubmitting(false);
+		}
+	}
 	};
+
+	const handleDeleteRating = async () => {
+		if (!currentUser || !userRating || submitting) return;
+
+		setSubmitting(true);
+		setError(null);
+
+	  try {
+		  const result = await RatingService.deleteRating(packageId);
+
+		if (mountedRef.current) {
+			// Update local state
+			setAverageRating(result.average_rating);
+			setRatingsCount(result.ratings_count);
+			setUserRating(null);
+			setPopoverRating(null);
+
+		  // Emit event for other components
+		  RatingEventEmitter.emit({
+			  packageId,
+			  averageRating: result.average_rating,
+			  ratingsCount: result.ratings_count,
+			  userRating: undefined
+		  });
+
+		  // Close popover
+		  handlePopoverClose();
+	  }
+	} catch (err: any) {
+		console.error('Error deleting rating:', err);
+		if (mountedRef.current) {
+			setError('Failed to delete rating. Please try again.');
+		}
+	} finally {
+		  if (mountedRef.current) {
+			  setSubmitting(false);
+		  }
+	  }
+  };
 
 	const open = Boolean(anchorEl);
 	const id = open ? `rating-popover-${packageId}` : undefined;
 
-	const displayRating = averageRating ?? 0; // Use 0 if averageRating is null/undefined
-	const displayCount = ratingsCount ?? 0; // Use 0 if ratingsCount is null/undefined
-
 	return (
 		<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-			{/* Wrap IconButton in a span for Tooltip when disabled */}
-			<Tooltip title={currentUser ? "Rate this package" : "Login to rate"}>
-				<span> {/* Wrapper span */}
-					<IconButton
-						size="small"
-						onClick={handlePopoverOpen}
-						aria-describedby={id}
-						disabled={loadingUserRating || submittingRating || !currentUser} // Also disable if not logged in
-						sx={{ p: 0.5 }} // Add some padding
-					>
-						{loadingUserRating || submittingRating ? (
-							<CircularProgress size={20} />
-						) : (
-							<StarIcon fontSize="inherit" sx={{ color: displayRating > 0 ? 'warning.main' : 'action.disabled' }} />
-						)}
-					</IconButton>
-				</span>
-			</Tooltip>
-			<Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-				{displayRating.toFixed(1)}
-			</Typography>
-			<Typography variant="body2" color="text.secondary">
-				({displayCount})
-			</Typography>
+		  <Tooltip title={currentUser ? "Rate this package" : "Login to rate"}>
+			  <span>
+				  <IconButton
+					  size="small"
+					  onClick={handlePopoverOpen}
+					  aria-describedby={id}
+					  disabled={loading || submitting || !currentUser}
+					  sx={{ p: 0.5 }}
+				  >
+					  {loading || submitting ? (
+						  <CircularProgress size={20} />
+					  ) : (
+						  <StarIcon
+							  fontSize="inherit"
+							  sx={{
+								  color: averageRating > 0 ? 'warning.main' : 'action.disabled'
+							  }}
+						  />
+					  )}
+				  </IconButton>
+			  </span>
+		  </Tooltip>
 
-			<Popover
-				id={id}
-				open={open}
-				anchorEl={anchorEl}
-				onClose={handlePopoverClose}
-				anchorOrigin={{
-					vertical: 'bottom',
-					horizontal: 'center',
-				}}
-				transformOrigin={{
-					vertical: 'top',
-					horizontal: 'center',
-				}}
-			>
-				<Box sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-					<Typography variant="subtitle2" gutterBottom sx={{ color: (theme) => theme.palette.text.primary }}>Your Rating</Typography>
-					<Rating
-						name={`rating-${packageId}`}
-						value={popoverRating}
-						onChange={handleRatingChange}
-						precision={1} // Allow only whole stars
-						emptyIcon={<StarBorderIcon fontSize="inherit" />}
-						disabled={submittingRating}
-					/>
-					{submittingRating && <CircularProgress size={20} sx={{ mt: 1 }} />}
-				</Box>
-			</Popover>
-		</Box>
-	);
+		  <Typography variant="body2" sx={{ fontWeight: 'medium', minWidth: '2ch' }}>
+			  {averageRating.toFixed(1)}
+		  </Typography>
+
+		  <Typography variant="body2" color="text.secondary" sx={{ minWidth: '3ch' }}>
+			  ({ratingsCount})
+		  </Typography>
+
+		  <Popover
+			  id={id}
+			  open={open}
+			  anchorEl={anchorEl}
+			  onClose={handlePopoverClose}
+			  anchorOrigin={{
+				  vertical: 'bottom',
+				  horizontal: 'center',
+			  }}
+			  transformOrigin={{
+				  vertical: 'top',
+				  horizontal: 'center',
+			  }}
+			  PaperProps={{
+				  sx: { p: 2, minWidth: 200 }
+			  }}
+		  >
+			  <Stack spacing={2} alignItems="center">
+				  <Typography variant="subtitle2" color="text.primary">
+					  {userRating ? 'Update Your Rating' : 'Rate This Package'}
+				  </Typography>
+
+				  {error && (
+					  <Alert severity="error" sx={{ width: '100%', py: 0.5 }}>
+						  {error}
+					  </Alert>
+				  )}
+
+				  <Rating
+					  name={`rating-${packageId}`}
+					  value={popoverRating}
+					  onChange={handleRatingChange}
+					  precision={1}
+					  emptyIcon={<StarBorderIcon fontSize="inherit" />}
+					  disabled={submitting}
+					  sx={{ fontSize: '1.5rem' }}
+				  />
+
+				  {userRating && (
+					  <Button
+						  variant="outlined"
+						  color="error"
+						  size="small"
+						  startIcon={<DeleteIcon />}
+						  onClick={handleDeleteRating}
+						  disabled={submitting}
+						  sx={{ mt: 1 }}
+					  >
+						  Remove Rating
+					  </Button>
+				  )}
+
+				  {submitting && (
+					  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+						  <CircularProgress size={16} />
+						  <Typography variant="caption" color="text.secondary">
+							  {userRating ? 'Updating...' : 'Submitting...'}
+						  </Typography>
+					  </Box>
+				  )}
+			  </Stack>
+		  </Popover>
+	  </Box>
+  );
 };
 
 export default RatingInput;

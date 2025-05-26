@@ -1,5 +1,5 @@
 // src/components/PackageCard.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
 	Card,
@@ -20,6 +20,7 @@ import { MoreHoriz as MoreHorizIcon } from '@mui/icons-material';
 import { FiTag } from 'react-icons/fi';
 import { Package } from '../types';
 import { useFilterStore } from '../store/filterStore';
+import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import RatingInput from './RatingInput';
 import PackageActions from './common/PackageActions';
 import PackageMetrics from './common/PackageMetrics';
@@ -31,6 +32,37 @@ interface PackageCardProps {
 const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 	const addTag = useFilterStore((state) => state.addTag);
 	const [tagsPopoverAnchor, setTagsPopoverAnchor] = useState<HTMLButtonElement | null>(null);
+
+	// Local state for rating data
+	const [localPkg, setLocalPkg] = useState<Package>(pkg);
+	const mountedRef = useRef(true);
+
+	// Update local package data when props change
+	useEffect(() => {
+		setLocalPkg(pkg);
+	}, [pkg]);
+
+	// Subscribe to rating updates
+	useEffect(() => {
+		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
+			if (event.packageId === pkg.id && mountedRef.current) {
+				setLocalPkg(prevPkg => ({
+					...prevPkg,
+					average_rating: event.averageRating,
+					ratings_count: event.ratingsCount
+				}));
+			}
+		});
+
+		return unsubscribe;
+	}, [pkg.id]);
+
+	// Cleanup on unmount
+	useEffect(() => {
+		return () => {
+			mountedRef.current = false;
+		};
+	}, []);
 
 	const handleTagClick = (tag: string) => {
 		addTag(tag);
@@ -45,8 +77,6 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 	};
 
 	const tagsPopoverOpen = Boolean(tagsPopoverAnchor);
-
-	// buttonStyle definition is removed from here, as it's encapsulated in PackageLinkButton.tsx
 
 	return (
 		<Card
@@ -90,7 +120,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 					>
 						<Link
 							component={RouterLink}
-							to={`/package/${encodeURIComponent(pkg.id)}`}
+							to={`/package/${encodeURIComponent(localPkg.id)}`}
 							underline="none"
 							sx={{
 								position: 'relative',
@@ -118,21 +148,21 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 								}
 							}}
 						>
-							{pkg.package_name}
+							{localPkg.package_name}
 						</Link>
 					</Typography>
 
 					{/* Rating in top right */}
 					<Box sx={{ flexShrink: 0 }}>
 						<RatingInput
-							packageId={pkg.id}
-							initialAverageRating={pkg.average_rating ?? 0}
-							initialRatingsCount={pkg.ratings_count ?? 0}
+							packageId={localPkg.id}
+							initialAverageRating={localPkg.average_rating ?? 0}
+							initialRatingsCount={localPkg.ratings_count ?? 0}
 						/>
 					</Box>
 				</Box>
 
-				<Tooltip title={pkg.description}>
+				<Tooltip title={localPkg.description}>
 					<Typography
 						variant="body2"
 						color="text.secondary"
@@ -146,7 +176,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 							lineHeight: 1.5,
 						}}
 					>
-						{pkg.description}
+						{localPkg.description}
 					</Typography>
 				</Tooltip>
 
@@ -155,17 +185,17 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 
 				{/* Links Row - Replaced with PackageActions component */}
 				<Box sx={{ pt: 1 }}>
-					<PackageActions pkg={pkg} />
+					<PackageActions pkg={localPkg} />
 				</Box>
 
 				{/* Info Chips Row - Replaced with PackageMetrics component */}
 				<Box sx={{ pt: 1 }}>
-					<PackageMetrics pkg={pkg} variant="card" />
+					<PackageMetrics pkg={localPkg} variant="card" />
 				</Box>
 			</CardContent>
 
 			{/* Tags Section - with consistent height and "See All Tags" button */}
-			{pkg.tags && pkg.tags.length > 0 && (
+			{localPkg.tags && localPkg.tags.length > 0 && (
 				<>
 					<Divider sx={{ mx: 0 }} />
 					<CardContent
@@ -196,7 +226,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 									pr: 1
 								}}
 							>
-								{pkg.tags.map((tag: string) => (
+								{localPkg.tags.map((tag: string) => (
 									<Chip
 										key={tag}
 										label={tag}
@@ -268,7 +298,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 								All Tags
 							</Typography>
 							<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-								{pkg.tags.map((tag: string) => (
+								{localPkg.tags.map((tag: string) => (
 									<Chip
 										key={tag}
 										label={tag}
