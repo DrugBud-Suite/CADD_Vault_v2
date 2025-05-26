@@ -1,7 +1,7 @@
 // src/components/EditSuggestionModal.tsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { PackageSuggestion } from '../types';
+import { PackageSuggestion, Package as PackageType } from '../types'; // Import PackageType
 import {
 	Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
 	CircularProgress, Alert, Grid, Autocomplete, Chip, Select, MenuItem, FormControl, InputLabel,
@@ -10,6 +10,7 @@ import {
 	IconButton,
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import AddIcon from '@mui/icons-material/Add';
 import { SelectChangeEvent } from '@mui/material/Select';
 import { useFilterStore } from '../store/filterStore';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +34,12 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
+	const [isAddingFolder, setIsAddingFolder] = useState(false);
+	const [isAddingCategory, setIsAddingCategory] = useState(false);
+	const [newFolderName, setNewFolderName] = useState('');
+	const [newCategoryName, setNewCategoryName] = useState('');
+	const [folderCreationLoading, setFolderCreationLoading] = useState(false);
+	const [categoryCreationLoading, setCategoryCreationLoading] = useState(false);
 
 	const { currentUser } = useAuth();
 
@@ -59,6 +66,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				admin_notes: isAdmin ? (suggestion.admin_notes || '') : undefined,
 			};
 
+			// Auto-suggest tags from description if no tags are present
 			if ((!suggestion.tags || suggestion.tags.length === 0) && suggestion.description) {
 				const descriptionWords = suggestion.description
 					.toLowerCase()
@@ -90,6 +98,10 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		}
 		setError(null);
 		setSuccessMessage(null);
+		setIsAddingFolder(false);
+		setIsAddingCategory(false);
+		setNewFolderName('');
+		setNewCategoryName('');
 	}, [suggestion, isAdmin, open, allAvailableCategoriesMap, allAvailableTags]);
 
 	useEffect(() => {
@@ -98,16 +110,18 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		} else {
 			setCurrentCategories([]);
 		}
+		// Reset category if the current category is not valid for the selected folder
 		if (formData.folder1 && !allAvailableCategoriesMap[formData.folder1]?.includes(formData.category1 || '')) {
 			setFormData(prev => ({ ...prev, category1: '' }));
 		}
 	}, [formData.folder1, allAvailableCategoriesMap, formData.category1]);
 
+
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
 		const { name, value } = event.target;
 		setFormData(prev => ({ ...prev, [name as string]: value }));
 		if (name === 'folder1') {
-			setFormData(prev => ({ ...prev, category1: '' }));
+			setFormData(prev => ({ ...prev, category1: '' })); // Reset category when folder changes
 		}
 	};
 
@@ -117,9 +131,18 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 	const handleSelectChange = (event: SelectChangeEvent<string>, fieldName: 'folder1' | 'category1') => {
 		const { value } = event.target;
+
+		if (value === "__add_new__" && fieldName === 'folder1') {
+			setIsAddingFolder(true);
+			return;
+		} else if (value === "__add_new__" && fieldName === 'category1') {
+			setIsAddingCategory(true);
+			return;
+		}
+
 		setFormData(prev => ({ ...prev, [fieldName]: value }));
 		if (fieldName === 'folder1') {
-			setFormData(prev => ({ ...prev, category1: '' }));
+			setFormData(prev => ({ ...prev, category1: '' })); // Reset category when folder changes
 			if (value && allAvailableCategoriesMap[value]) {
 				setCurrentCategories(allAvailableCategoriesMap[value]);
 			} else {
@@ -173,7 +196,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 			setSuccessMessage("Suggestion updated successfully!");
 			setLoading(false);
-			onSaveSuccess();
+			onSaveSuccess(); // Callback to refresh parent component's data
 		} catch (err: any) {
 			console.error("Error in handleSubmit:", err);
 			setError(err.message || "Failed to update suggestion.");
@@ -194,7 +217,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		setError(null);
 		setSuccessMessage(null);
 
-		const updates: Partial<Omit<PackageSuggestion, 'id' | 'created_at' | 'status' | 'suggested_by_user_id' | 'reviewed_at' | 'reviewed_by_admin_id' | 'suggester_email'>> = {
+		// First, save the suggestion details
+		const suggestionUpdates: Partial<Omit<PackageSuggestion, 'id' | 'created_at' | 'status' | 'suggested_by_user_id' | 'reviewed_at' | 'reviewed_by_admin_id' | 'suggester_email'>> = {
 			package_name: formData.package_name,
 			description: formData.description || undefined,
 			publication_url: formData.publication_url || undefined,
@@ -212,7 +236,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		try {
 			const { error: saveError } = await supabase
 				.from('package_suggestions')
-				.update(updates)
+				.update(suggestionUpdates)
 				.eq('id', suggestion.id);
 
 			if (saveError) {
@@ -220,6 +244,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				throw new Error(`Failed to save suggestion details: ${saveError.message}`);
 			}
 
+			// Then, approve the suggestion
 			const approvalData = {
 				status: 'approved',
 				reviewed_at: new Date().toISOString(),
@@ -235,36 +260,37 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				throw new Error(`Suggestion saved, but failed to approve: ${approveError.message}`);
 			}
 
-			const newPackageData = {
-				package_name: formData.package_name!,
-				description: formData.description || null,
-				publication_url: formData.publication_url || null,
-				webserver_url: formData.webserver_url || null,
-				repo_url: formData.repo_url || null,
-				link_url: formData.link_url || null,
-				license: formData.license || null,
-				tags: formData.tags && formData.tags.length > 0 ? formData.tags : null,
-				folder1: formData.folder1 || null,
-				category1: formData.category1 || null,
-				added_by_user_id: suggestion.suggested_by_user_id || null,
-				added_at: new Date().toISOString(),
-				last_updated_at: new Date().toISOString(),
-				view_count: 0,
-				avg_rating: 0,
-				rating_count: 0,
+			// Finally, create the package in the 'packages' table
+			// Ensure this object matches the 'packages' table schema from supabase_setup.txt
+			// and the PackageType from types.ts, omitting fields handled by DB or not applicable.
+			const newPackageDataForTable: Omit<PackageType, 'id' | 'average_rating' | 'ratings_count' | 'last_commit_ago' | 'github_stars' | 'citations' | 'jif' | 'journal' | 'last_commit' | 'page_icon' | 'primary_language' | 'github_owner' | 'github_repo' | 'name' | 'version' | 'repository' | 'subcategory1' | 'subsubcategory1'> = {
+				package_name: formData.package_name!, // This is required
+				description: formData.description || undefined,
+				publication: formData.publication_url || undefined, // Maps to 'publication'
+				webserver: formData.webserver_url || undefined,     // Maps to 'webserver'
+				repo_link: formData.repo_url || undefined,         // Maps to 'repo_link'
+				link: formData.link_url || undefined,              // Maps to 'link'
+				license: formData.license || undefined,
+				tags: formData.tags && formData.tags.length > 0 ? formData.tags : undefined,
+				folder1: formData.folder1 || undefined,
+				category1: formData.category1 || undefined,
+			// Omitting: average_rating, ratings_count (handled by triggers)
+			// Omitting: github_stars, last_commit, citations, jif, journal etc. (populated by backend scripts)
 			};
+
 
 			const { error: createPackageError } = await supabase
 				.from('packages')
-				.insert([newPackageData]);
+				.insert([newPackageDataForTable]);
 
 			if (createPackageError) {
 				console.error("Error creating package from suggestion:", createPackageError);
+				// Potentially roll back suggestion approval or mark it for retry
 				throw new Error(`Suggestion approved, but failed to create package: ${createPackageError.message}`);
 			}
 
 			setSuccessMessage("Suggestion saved, approved, and package created successfully!");
-			onSaveSuccess();
+			onSaveSuccess(); // Callback to refresh parent component's data
 
 		} catch (err: any) {
 			console.error("Error in handleSaveAndApprove:", err);
@@ -273,6 +299,172 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			setLoading(false);
 		}
 	};
+
+	const handleCreateFolder = async () => {
+		if (!isAdmin) {
+			setError("You must be an admin to create new folders.");
+			return;
+		}
+
+		if (!newFolderName.trim()) {
+			setError("Please enter a folder name.");
+			return;
+		}
+
+		setFolderCreationLoading(true);
+		setError(null);
+		setSuccessMessage(null);
+
+		try {
+			// Check if folder already exists
+			if (allAvailableFolders.includes(newFolderName.trim())) {
+				setError(`Folder "${newFolderName.trim()}" already exists.`);
+				setFolderCreationLoading(false);
+				return;
+			}
+
+			// Get existing folders to check if folder already exists in any package
+			const { data: existingData, error: existingError } = await supabase
+				.from('packages')
+				.select('folder1')
+				.eq('folder1', newFolderName.trim())
+				.limit(1);
+
+			if (existingError) throw existingError;
+
+			if (existingData && existingData.length > 0) {
+				setError(`Folder "${newFolderName.trim()}" already exists in the database.`);
+				setFolderCreationLoading(false);
+				return;
+			}
+
+			// Create a placeholder package with the new folder to establish it in the database
+			const { error: insertError } = await supabase
+				.from('packages')
+				.insert({
+					package_name: `__folder_placeholder_${Date.now()}`,
+					folder1: newFolderName.trim(),
+					description: `This is a placeholder entry to establish the folder "${newFolderName.trim()}". This entry can be safely deleted once other packages use this folder.`
+				});
+
+			if (insertError) throw insertError;
+
+			// Update the folders list in the filter store
+			const updatedFolders = [...allAvailableFolders, newFolderName.trim()].sort();
+			const updatedCategories = {
+				...allAvailableCategoriesMap,
+				[newFolderName.trim()]: []
+			};
+
+			// Reset the form
+			setNewFolderName('');
+			setIsAddingFolder(false);
+			setSuccessMessage(`Folder "${newFolderName.trim()}" has been created successfully.`);
+
+			// Update the store with the new folder
+			useFilterStore.setState({
+				allAvailableFolders: updatedFolders,
+				allAvailableCategories: updatedCategories
+			});
+
+			// Set the newly created folder as the selected folder
+			setFormData(prev => ({ ...prev, folder1: newFolderName.trim(), category1: '' }));
+
+		} catch (err: any) {
+			console.error("Error creating folder:", err);
+			setError(`Failed to create folder: ${err.message}`);
+		} finally {
+			setFolderCreationLoading(false);
+		}
+	};
+
+	const handleCreateCategory = async () => {
+		if (!isAdmin) {
+			setError("You must be an admin to create new categories.");
+			return;
+		}
+
+		if (!formData.folder1) {
+			setError("Please select a folder first.");
+			return;
+		}
+
+		if (!newCategoryName.trim()) {
+			setError("Please enter a category name.");
+			return;
+		}
+
+		setCategoryCreationLoading(true);
+		setError(null);
+		setSuccessMessage(null);
+
+		try {
+			// Check if category already exists in selected folder
+			if (allAvailableCategoriesMap[formData.folder1]?.includes(newCategoryName.trim())) {
+				setError(`Category "${newCategoryName.trim()}" already exists in this folder.`);
+				setCategoryCreationLoading(false);
+				return;
+			}
+
+			// Get existing categories to check if category already exists in the selected folder
+			const { data: existingData, error: existingError } = await supabase
+				.from('packages')
+				.select('category1')
+				.eq('folder1', formData.folder1)
+				.eq('category1', newCategoryName.trim())
+				.limit(1);
+
+			if (existingError) throw existingError;
+
+			if (existingData && existingData.length > 0) {
+				setError(`Category "${newCategoryName.trim()}" already exists in this folder.`);
+				setCategoryCreationLoading(false);
+				return;
+			}
+
+			// Create a placeholder package with this folder and category to establish it in the database
+			const { error: insertError } = await supabase
+				.from('packages')
+				.insert({
+					package_name: `__category_placeholder_${Date.now()}`,
+					folder1: formData.folder1,
+					category1: newCategoryName.trim(),
+					description: `This is a placeholder entry to establish the category "${newCategoryName.trim()}" in folder "${formData.folder1}". This entry can be safely deleted once other packages use this category.`
+				});
+
+			if (insertError) throw insertError;
+
+			// Update the categories list in the filter store
+			const updatedCategories = {
+				...allAvailableCategoriesMap,
+				[formData.folder1]: [
+					...(allAvailableCategoriesMap[formData.folder1] || []),
+					newCategoryName.trim()
+				].sort()
+			};
+
+			// Reset the form
+			setNewCategoryName('');
+			setIsAddingCategory(false);
+			setSuccessMessage(`Category "${newCategoryName.trim()}" has been created successfully in folder "${formData.folder1}".`);
+
+			// Update the store with the new category
+			useFilterStore.setState({
+				allAvailableCategories: updatedCategories
+			});
+
+			// Set the newly created category as the selected category
+			setFormData(prev => ({ ...prev, category1: newCategoryName.trim() }));
+			setCurrentCategories(updatedCategories[formData.folder1]);
+
+		} catch (err: any) {
+			console.error("Error creating category:", err);
+			setError(`Failed to create category: ${err.message}`);
+		} finally {
+			setCategoryCreationLoading(false);
+		}
+	};
+
 
 	if (!suggestion) return null;
 
@@ -475,8 +667,42 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 									{allAvailableFolders.map((folder) => (
 										<MenuItem key={folder} value={folder}>{folder}</MenuItem>
 									))}
+									{isAdmin && (
+										<MenuItem value="__add_new__" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
+											<AddIcon fontSize="small" sx={{ mr: 1 }} /> Add New Folder
+										</MenuItem>
+									)}
 								</Select>
 							</FormControl>
+							{isAddingFolder && isAdmin && (
+								<Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+									<TextField
+										size="small"
+										placeholder="Enter new folder name"
+										value={newFolderName}
+										onChange={(e) => setNewFolderName(e.target.value)}
+										sx={{ flexGrow: 1 }}
+										autoFocus
+									/>
+									<Button
+										size="small"
+										variant="contained"
+										onClick={handleCreateFolder}
+										sx={{ ml: 1 }}
+										disabled={folderCreationLoading || !newFolderName.trim()}
+									>
+										{folderCreationLoading ? <CircularProgress size={20} /> : "Create"}
+									</Button>
+									<Button
+										size="small"
+										onClick={() => setIsAddingFolder(false)}
+										sx={{ ml: 1 }}
+										disabled={folderCreationLoading}
+									>
+										Cancel
+									</Button>
+								</Box>
+							)}
 						</Grid>
 						<Grid item xs={12} sm={6}>
 							<FormControl fullWidth variant="outlined" size="small" disabled={!formData.folder1}>
@@ -493,8 +719,42 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 									{currentCategories.map((category) => (
 										<MenuItem key={category} value={category}>{category}</MenuItem>
 									))}
+									{isAdmin && formData.folder1 && (
+										<MenuItem value="__add_new__" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
+											<AddIcon fontSize="small" sx={{ mr: 1 }} /> Add New Category
+										</MenuItem>
+									)}
 								</Select>
 							</FormControl>
+							{isAddingCategory && isAdmin && (
+								<Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+									<TextField
+										size="small"
+										placeholder="Enter new category name"
+										value={newCategoryName}
+										onChange={(e) => setNewCategoryName(e.target.value)}
+										sx={{ flexGrow: 1 }}
+										autoFocus
+									/>
+									<Button
+										size="small"
+										variant="contained"
+										onClick={handleCreateCategory}
+										sx={{ ml: 1 }}
+										disabled={categoryCreationLoading || !newCategoryName.trim()}
+									>
+										{categoryCreationLoading ? <CircularProgress size={20} /> : "Create"}
+									</Button>
+									<Button
+										size="small"
+										onClick={() => setIsAddingCategory(false)}
+										sx={{ ml: 1 }}
+										disabled={categoryCreationLoading}
+									>
+										Cancel
+									</Button>
+								</Box>
+							)}
 						</Grid>
 						<Grid item xs={12}>
 							<TextField
@@ -506,7 +766,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								rows={3}
 								fullWidth
 								variant="outlined"
-								disabled={!isAdmin && suggestion?.status !== 'pending'}
+								disabled={!isAdmin && suggestion?.status !== 'pending'} // User can only edit reason if pending
 							/>
 						</Grid>
 						{isAdmin && (
@@ -530,7 +790,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 					<Button type="submit" variant="contained" color="primary" disabled={loading || (suggestion?.status !== 'pending' && !isAdmin)}>
 						{loading ? <CircularProgress size={24} color="inherit" /> : "Save Changes"}
 					</Button>
-					{isAdmin && suggestion?.status === 'pending' && (
+					{isAdmin && suggestion?.status === 'pending' && ( // Only show if suggestion is still pending
 						<Button
 							variant="contained"
 							color="success"
@@ -538,7 +798,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 							disabled={loading}
 							sx={{ ml: 1 }}
 						>
-							{loading ? <CircularProgress size={24} color="inherit" /> : "Save & Approve"}
+							{loading ? <CircularProgress size={24} color="inherit" /> : "Save & Approve & Add to DB"}
 						</Button>
 					)}
 				</DialogActions>
