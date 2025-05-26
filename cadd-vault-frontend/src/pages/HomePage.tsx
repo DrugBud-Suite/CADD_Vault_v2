@@ -58,7 +58,7 @@ const HomePage: React.FC = () => {
 	// --- Zustand Store Selectors using useShallow ---
 	const {
 		searchTerm, selectedTags, minStars, hasGithub, hasWebserver, hasPublication,
-		minCitations, folder1, category1, selectedLicenses, sortBy, sortDirection, viewMode, currentPage,
+		minCitations, minRating, folder1, category1, selectedLicenses, sortBy, sortDirection, viewMode, currentPage,
 		totalFilteredCount,
 	} = useFilterStore(useShallow(state => ({
 		searchTerm: state.searchTerm,
@@ -68,6 +68,7 @@ const HomePage: React.FC = () => {
 		hasWebserver: state.hasWebserver,
 		hasPublication: state.hasPublication,
 		minCitations: state.minCitations,
+		minRating: state.minRating,
 		folder1: state.folder1,
 		category1: state.category1,
 		selectedLicenses: state.selectedLicenses,
@@ -142,7 +143,7 @@ const HomePage: React.FC = () => {
 						? {
 							...pkg,
 							average_rating: event.averageRating,
-							ratings_count: event.ratingsCount
+							ratings_count: event.ratingsCount 
 						}
 						: pkg
 				)
@@ -155,7 +156,7 @@ const HomePage: React.FC = () => {
 					? {
 						...pkg,
 						average_rating: event.averageRating,
-						ratings_count: event.ratingsCount
+						ratings_count: event.ratingsCount 
 					}
 					: pkg
 			);
@@ -200,6 +201,7 @@ const HomePage: React.FC = () => {
 				if (hasWebserver) queryBuilder = queryBuilder.not('webserver', 'is', null);
 				if (hasPublication) queryBuilder = queryBuilder.not('publication', 'is', null);
 				if (minCitations !== null && minCitations > 0) queryBuilder = queryBuilder.gte('citations', minCitations);
+				if (minRating !== null && minRating > 0) queryBuilder = queryBuilder.gte('average_rating', minRating);
 				if (folder1) queryBuilder = queryBuilder.eq('folder1', folder1);
 				if (category1) queryBuilder = queryBuilder.eq('category1', category1);
 				if (selectedLicenses.length > 0) queryBuilder = queryBuilder.in('license', selectedLicenses);
@@ -239,7 +241,7 @@ const HomePage: React.FC = () => {
 		performFetchPackages();
 	}, [
 		currentPage, searchTerm, selectedTags, minStars, hasGithub, hasWebserver,
-		hasPublication, minCitations, folder1, category1, selectedLicenses,
+		hasPublication, minCitations, minRating, folder1, category1, selectedLicenses,
 		sortBy, sortDirection,
 		setDisplayedPackages, setTotalFilteredCount, // itemsPerPage is stable
 		// No longer depends on originalPackages directly for this effect

@@ -16,6 +16,7 @@ const FilterSidebar: React.FC = () => {
 		hasPublication,
 		minStars,
 		minCitations,
+		minRating,
 		selectedTags,
 		allAvailableTags,
 		selectedLicenses,
@@ -27,6 +28,7 @@ const FilterSidebar: React.FC = () => {
 		setHasPublication,
 		setMinStars,
 		setMinCitations,
+		setMinRating,
 		setSelectedTags,
 		setSelectedLicenses,
 		resetFilters,
@@ -36,6 +38,7 @@ const FilterSidebar: React.FC = () => {
 		hasPublication: state.hasPublication,
 		minStars: state.minStars,
 		minCitations: state.minCitations,
+		minRating: state.minRating,
 		selectedTags: state.selectedTags,
 		allAvailableTags: state.allAvailableTags,
 		selectedLicenses: state.selectedLicenses,
@@ -47,18 +50,21 @@ const FilterSidebar: React.FC = () => {
 		setHasPublication: state.setHasPublication,
 		setMinStars: state.setMinStars,
 		setMinCitations: state.setMinCitations,
+		setMinRating: state.setMinRating,
 		setSelectedTags: state.setSelectedTags,
 		setSelectedLicenses: state.setSelectedLicenses,
 		resetFilters: state.resetFilters,
-	}))); // Corrected: Added closing parenthesis for useShallow
+	})));
 
 	// Local state for slider values to provide immediate UI feedback
 	const [localMinStars, setLocalMinStars] = useState<number | null>(minStars);
 	const [localMinCitations, setLocalMinCitations] = useState<number | null>(minCitations);
+	const [localMinRating, setLocalMinRating] = useState<number | null>(minRating);
 
 	// Memoized debounced setters for store updates
 	const debouncedSetMinStars = useMemo(() => debounce((value: number | null) => setMinStars(value), 300), [setMinStars]);
 	const debouncedSetMinCitations = useMemo(() => debounce((value: number | null) => setMinCitations(value), 300), [setMinCitations]);
+	const debouncedSetMinRating = useMemo(() => debounce((value: number | null) => setMinRating(value), 300), [setMinRating]);
 
 	// Update local slider state when store values change (e.g., on reset)
 	useEffect(() => {
@@ -69,11 +75,9 @@ const FilterSidebar: React.FC = () => {
 		setLocalMinCitations(minCitations);
 	}, [minCitations]);
 
-	// The useEffect that derived uniqueLicenses, maxStars, and maxCitations
-	// from `originalPackages` (now `displayedPackages`) is removed.
-	// `allAvailableLicenses`, `datasetMaxStars`, and `datasetMaxCitations`
-	// should now be populated in the store by a one-time fetch in HomePage.tsx
-	// or a similar global data loading mechanism.
+	useEffect(() => {
+		setLocalMinRating(minRating);
+	}, [minRating]);
 
 	return (
 		<Box sx={{
@@ -259,7 +263,48 @@ const FilterSidebar: React.FC = () => {
 			{/* Metrics Section */}
 			<Box sx={{ mb: 3 }}>
 				<Typography gutterBottom variant="body2" color="text.primary" sx={{ mt: 2, fontWeight: 500, fontSize: '0.9rem' }}>
-					{/* Corrected Label for Stars Slider */}
+					Minimum Rating ({localMinRating?.toFixed(1) ?? '0.0'}+)
+				</Typography>
+				<Slider
+					value={localMinRating ?? 0}
+					onChange={(_, newValue) => {
+						const value = Array.isArray(newValue) ? newValue[0] : newValue;
+						setLocalMinRating(value === 0 ? null : value);
+					}}
+					onChangeCommitted={(_, newValue) => {
+						const value = Array.isArray(newValue) ? newValue[0] : newValue;
+						debouncedSetMinRating(value === 0 ? null : value);
+					}}
+					valueLabelDisplay="auto"
+					valueLabelFormat={(value) => `${value.toFixed(1)}★`}
+					step={0.1}
+					min={0}
+					max={5}
+					size="small"
+					marks={[
+						{ value: 0, label: '0' },
+						{ value: 1, label: '1★' },
+						{ value: 2, label: '2★' },
+						{ value: 3, label: '3★' },
+						{ value: 4, label: '4★' },
+						{ value: 5, label: '5★' }
+					]}
+					sx={{
+						color: 'warning.main',
+						'& .MuiSlider-valueLabel': {
+							bgcolor: 'warning.main',
+						},
+						'& .MuiSlider-mark': {
+							bgcolor: (theme) => alpha(theme.palette.warning.main, 0.3),
+						},
+						'& .MuiSlider-markLabel': {
+							fontSize: '0.75rem',
+							color: 'text.secondary'
+						}
+					}}
+				/>
+
+				<Typography gutterBottom variant="body2" color="text.primary" sx={{ mt: 3, fontWeight: 500, fontSize: '0.9rem' }}>
 					GitHub Stars ({localMinStars ?? 0}+)
 				</Typography>
 				<Slider
@@ -267,16 +312,15 @@ const FilterSidebar: React.FC = () => {
 					onChange={(_, newValue) => {
 						const value = Array.isArray(newValue) ? newValue[0] : newValue;
 						setLocalMinStars(value === 0 ? null : value);
-						// Debounced call to update the store
 					}}
-					onChangeCommitted={(_, newValue) => { // Update store on commit
+					onChangeCommitted={(_, newValue) => {
 						const value = Array.isArray(newValue) ? newValue[0] : newValue;
 						debouncedSetMinStars(value === 0 ? null : value);
 					}}
 					valueLabelDisplay="auto"
 					step={10}
 					min={0}
-					max={datasetMaxStars || 1000} // Use global max from store, fallback if not yet loaded
+					max={datasetMaxStars || 1000}
 					size="small"
 					sx={{
 						color: 'primary.main',
@@ -297,16 +341,15 @@ const FilterSidebar: React.FC = () => {
 					onChange={(_, newValue) => {
 						const value = Array.isArray(newValue) ? newValue[0] : newValue;
 						setLocalMinCitations(value === 0 ? null : value);
-						// Debounced call to update the store
 					}}
-					onChangeCommitted={(_, newValue) => { // Update store on commit
+					onChangeCommitted={(_, newValue) => {
 						const value = Array.isArray(newValue) ? newValue[0] : newValue;
 						debouncedSetMinCitations(value === 0 ? null : value);
 					}}
 					valueLabelDisplay="auto"
 					step={10}
 					min={0}
-					max={datasetMaxCitations || 1000} // Use global max from store, fallback if not yet loaded
+					max={datasetMaxCitations || 1000}
 					size="small"
 					sx={{
 						color: 'primary.main',
@@ -325,7 +368,7 @@ const FilterSidebar: React.FC = () => {
 			<Autocomplete
 				multiple
 				id="license-filter"
-				options={allAvailableLicenses || []} // Ensure options is an array
+				options={allAvailableLicenses || []}
 				value={selectedLicenses}
 				onChange={(_, newValue) => {
 					setSelectedLicenses(newValue);

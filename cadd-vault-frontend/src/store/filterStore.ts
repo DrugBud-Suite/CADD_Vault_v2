@@ -15,6 +15,7 @@ export interface FilterState { // Exporting for use in components
     hasWebserver: boolean;
     hasPublication: boolean;
     minCitations: number | null;
+    minRating: number | null; // New rating filter
     folder1: string | null;
     category1: string | null;
     selectedLicenses: string[];
@@ -50,6 +51,7 @@ export interface FilterState { // Exporting for use in components
     setHasWebserver: (has: boolean) => void;
     setHasPublication: (has: boolean) => void;
     setMinCitations: (citations: number | null) => void;
+    setMinRating: (rating: number | null) => void; // New rating filter action
     setFolder1: (folder: string | null) => void;
     setCategory1: (category: string | null) => void;
     setSelectedLicenses: (licenses: string[]) => void;
@@ -73,7 +75,7 @@ export interface FilterState { // Exporting for use in components
 const initialStateValues: Omit<FilterState,
     // Omit actions
     'setSearchTerm' | 'setSelectedTags' | 'addTag' | 'setMinStars' | 'setHasGithub' |
-    'setHasWebserver' | 'setHasPublication' | 'setMinCitations' | 'setFolder1' |
+    'setHasWebserver' | 'setHasPublication' | 'setMinCitations' | 'setMinRating' | 'setFolder1' |
     'setCategory1' | 'setSelectedLicenses' | 'setSort' | 'setDisplayedPackages' |
     'setTotalFilteredCount' | 'setCurrentPage' | 'setOriginalPackagesAndDeriveMetadata' |
     'resetFilters' | 'setViewMode' | 'toggleFilterSidebar' | 'toggleNavSidebar' |
@@ -89,6 +91,7 @@ const initialStateValues: Omit<FilterState,
     hasWebserver: false,
     hasPublication: false,
     minCitations: null,
+    minRating: null, // New rating filter initial value
     folder1: null,
     category1: null,
     selectedLicenses: [],
@@ -128,6 +131,7 @@ export const useFilterStore = create<FilterState>()(
             setHasWebserver: (hasWebserver) => set({ hasWebserver, currentPage: 1 }),
             setHasPublication: (hasPublication) => set({ hasPublication, currentPage: 1 }),
             setMinCitations: (minCitations) => set({ minCitations: minCitations !== null && !isNaN(minCitations) && minCitations >= 0 ? Number(minCitations) : null, currentPage: 1 }),
+            setMinRating: (minRating) => set({ minRating: minRating !== null && !isNaN(minRating) && minRating >= 0 && minRating <= 5 ? Number(minRating) : null, currentPage: 1 }), // New rating filter action
             setFolder1: (folder1) => set({ folder1, category1: null, currentPage: 1 }),
             setCategory1: (category1) => set({ category1, currentPage: 1 }),
             setSelectedLicenses: (selectedLicenses) => set({ selectedLicenses, currentPage: 1 }),
@@ -197,6 +201,7 @@ export const useFilterStore = create<FilterState>()(
                 hasWebserver: initialStateValues.hasWebserver,
                 hasPublication: initialStateValues.hasPublication,
                 minCitations: initialStateValues.minCitations,
+                minRating: initialStateValues.minRating, // Reset rating filter
                 folder1: initialStateValues.folder1,
                 category1: initialStateValues.category1,
                 selectedLicenses: initialStateValues.selectedLicenses,
@@ -223,7 +228,7 @@ export const useFilterStore = create<FilterState>()(
             toggleNavSidebar: () => set((state) => ({ isNavSidebarVisible: !state.isNavSidebarVisible })),
         }),
         {
-            name: 'cadd-vault-filter-storage-v3', // Incremented version
+            name: 'cadd-vault-filter-storage-v4', // Incremented version for new rating filter
             partialize: (state) => ({
                 searchTerm: state.searchTerm,
                 selectedTags: state.selectedTags,
@@ -232,6 +237,7 @@ export const useFilterStore = create<FilterState>()(
                 hasWebserver: state.hasWebserver,
                 hasPublication: state.hasPublication,
                 minCitations: state.minCitations,
+                minRating: state.minRating, // Include rating filter in persistence
                 folder1: state.folder1,
                 category1: state.category1,
                 selectedLicenses: state.selectedLicenses,
