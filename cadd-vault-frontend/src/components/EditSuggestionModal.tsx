@@ -351,7 +351,10 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 					package_name: `__folder_placeholder_${Date.now()}`,
 					folder1: newFolderName.trim(),
 					description: `This is a placeholder entry to establish the folder "${newFolderName.trim()}". This entry can be safely deleted once other packages use this folder.`,
-					last_updated: new Date().toISOString() // Add current timestamp
+					last_updated: new Date().toISOString(), // Current timestamp
+					// Add required fields with default values
+					tags: [],
+					license: 'Placeholder'
 				});
 
 			if (insertError) throw insertError;
@@ -439,7 +442,10 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 					folder1: formData.folder1,
 					category1: newCategoryName.trim(),
 					description: `This is a placeholder entry to establish the category "${newCategoryName.trim()}" in folder "${formData.folder1}". This entry can be safely deleted once other packages use this category.`,
-					last_updated: new Date().toISOString() // Add current timestamp
+					last_updated: new Date().toISOString(), // Current timestamp
+					// Add potential missing required fields with default values
+					tags: [], 
+					license: 'Placeholder'
 				});
 
 			if (insertError) throw insertError;
