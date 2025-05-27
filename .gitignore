@@ -33,3 +33,10 @@ transformed_packages.csv
 supabase/
 schema.sql
 cadd_vault_suggestions_2025-05-20T23-07-31-371Z.csv
+cadd-vault-backend-scripts/__pycache__/models.cpython-310.pyc
+cadd-vault-backend-scripts/__pycache__/services.cpython-310.pyc
+cadd-vault-backend-scripts/__pycache__/test_integration.cpython-310-pytest-8.3.5.pyc
+cadd-vault-backend-scripts/__pycache__/test_runner.cpython-310-pytest-8.3.5.pyc
+cadd-vault-backend-scripts/__pycache__/tests_integration.cpython-310-pytest-8.3.5.pyc
+cadd-vault-backend-scripts/__pycache__/update_database.cpython-310.pyc
+cadd-vault-backend-scripts/*.csv
