@@ -277,6 +277,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				tags: formData.tags && formData.tags.length > 0 ? formData.tags : undefined,
 				folder1: formData.folder1 || undefined,
 				category1: formData.category1 || undefined,
+				last_updated: new Date().toISOString(), // Add current timestamp
 			// Omitting: average_rating, ratings_count (handled by triggers)
 			// Omitting: github_stars, last_commit, citations, jif, journal etc. (populated by backend scripts)
 			};
@@ -342,12 +343,15 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			}
 
 			// Create a placeholder package with the new folder to establish it in the database
+			const placeholderId = crypto.randomUUID(); // Generate a new UUID for the placeholder
 			const { error: insertError } = await supabase
 				.from('packages')
 				.insert({
+					id: placeholderId, // Required primary key
 					package_name: `__folder_placeholder_${Date.now()}`,
 					folder1: newFolderName.trim(),
-					description: `This is a placeholder entry to establish the folder "${newFolderName.trim()}". This entry can be safely deleted once other packages use this folder.`
+					description: `This is a placeholder entry to establish the folder "${newFolderName.trim()}". This entry can be safely deleted once other packages use this folder.`,
+					last_updated: new Date().toISOString() // Add current timestamp
 				});
 
 			if (insertError) throw insertError;
@@ -426,13 +430,16 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			}
 
 			// Create a placeholder package with this folder and category to establish it in the database
+			const placeholderId = crypto.randomUUID(); // Generate a new UUID for the placeholder
 			const { error: insertError } = await supabase
 				.from('packages')
 				.insert({
+					id: placeholderId, // Required primary key
 					package_name: `__category_placeholder_${Date.now()}`,
 					folder1: formData.folder1,
 					category1: newCategoryName.trim(),
-					description: `This is a placeholder entry to establish the category "${newCategoryName.trim()}" in folder "${formData.folder1}". This entry can be safely deleted once other packages use this category.`
+					description: `This is a placeholder entry to establish the category "${newCategoryName.trim()}" in folder "${formData.folder1}". This entry can be safely deleted once other packages use this category.`,
+					last_updated: new Date().toISOString() // Add current timestamp
 				});
 
 			if (insertError) throw insertError;
