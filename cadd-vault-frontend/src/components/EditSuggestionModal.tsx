@@ -263,7 +263,10 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			// Finally, create the package in the 'packages' table
 			// Ensure this object matches the 'packages' table schema from supabase_setup.txt
 			// and the PackageType from types.ts, omitting fields handled by DB or not applicable.
-			const newPackageDataForTable: Omit<PackageType, 'id' | 'average_rating' | 'ratings_count' | 'last_commit_ago' | 'github_stars' | 'citations' | 'jif' | 'journal' | 'last_commit' | 'page_icon' | 'primary_language' | 'github_owner' | 'github_repo' | 'name' | 'version' | 'repository' | 'subcategory1' | 'subsubcategory1'> = {
+			const newPackageId = crypto.randomUUID(); // Generate a new UUID for the package
+
+			const newPackageDataForTable: Omit<PackageType, 'average_rating' | 'ratings_count' | 'last_commit_ago' | 'github_stars' | 'citations' | 'jif' | 'journal' | 'last_commit' | 'page_icon' | 'primary_language' | 'github_owner' | 'github_repo' | 'name' | 'version' | 'repository' | 'subcategory1' | 'subsubcategory1'> & { id: string } = {
+				id: newPackageId, // Assign the generated UUID
 				package_name: formData.package_name!, // This is required
 				description: formData.description || undefined,
 				publication: formData.publication_url || undefined, // Maps to 'publication'
