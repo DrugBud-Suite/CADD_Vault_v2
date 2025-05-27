@@ -356,13 +356,14 @@ class DatabaseUpdater:
                 if repo_data.stars is not None:
                     updates['github_stars'] = repo_data.stars
                 
-                # Only update other fields if they are None or need updating
-                if entry.last_commit is None and repo_data.last_commit is not None:
+                # Always update last commit information when available
+                if repo_data.last_commit is not None:
                     updates['last_commit'] = repo_data.last_commit
                 
-                if entry.last_commit_ago is None and repo_data.last_commit_ago is not None:
+                if repo_data.last_commit_ago is not None:
                     updates['last_commit_ago'] = repo_data.last_commit_ago
                 
+                # Only update license if it is None
                 if entry.license is None and repo_data.license is not None:
                     updates['license'] = repo_data.license
                 
@@ -715,17 +716,16 @@ async def main():
     setup_logging(args.verbose, args.quiet)
     
     # Load environment variables
-    load_dotenv(dotenv_path='.env')
-    load_dotenv(dotenv_path='../cadd-vault-frontend/.env')
+    load_dotenv()
     
     # Get configuration
     supabase_url = os.environ.get("VITE_SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     github_token = os.environ.get("PERSONAL_ACCESS_TOKEN")
-    email = os.environ.get("CONTACT_EMAIL", "your_email@example.com")
+    email = os.environ.get("CROSSREF_EMAIL", "your_email@example.com")
     
     if not supabase_url or not supabase_key:
-        logger.error("Missing required environment variables: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY")
+        logger.error("Missing required environment variables")
         return 1
     
     # Initialize clients
