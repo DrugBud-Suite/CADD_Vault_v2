@@ -53,6 +53,7 @@ class Entry:
     average_rating: Optional[float] = None
     ratings_count: Optional[int] = None
     ratingsum: Optional[int] = None  # Note: schema uses 'ratings_sum'
+    last_updated: Optional[str] = None  # ISO timestamp string for when the record was last updated
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Entry":

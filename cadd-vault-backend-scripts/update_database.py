@@ -338,7 +338,8 @@ class DatabaseUpdater:
             github_repo=data.get('github_repo'),
             primary_language=data.get('primary_language'),
             ratings_count=data.get('ratings_count'),
-            ratingsum=data.get('ratings_sum')  # Note: field name difference
+            ratingsum=data.get('ratings_sum'),  # Note: field name difference
+            last_updated=data.get('last_updated')
         )
 
     async def _process_repository_data(self, entry: Entry) -> Dict[str, Any]:
@@ -814,7 +815,11 @@ def build_package_filter_query(query, package_filter: Dict[str, Any]):
         query = query.in_("id", package_filter["ids"])
     
     if "updated_before" in package_filter:
-        query = query.lt("last_updated", package_filter["updated_before"])
+        # Handle null last_updated values (treat as very old)
+        query = query.or_(
+            f"last_updated.lt.{package_filter['updated_before']}",
+            "last_updated.is.null"
+        )
     
     if package_filter.get("github_only"):
         query = query.not_.is_("repo_link", "null").like("repo_link", "%github.com%")
