@@ -532,7 +532,8 @@ const AdminBulkOperationsPage: React.FC = () => {
 				.insert({
 					package_name: `__folder_placeholder_${Date.now()}`,
 					folder1: folderCategoryForm.newFolder.trim(),
-					description: `This is a placeholder entry to establish the folder "${folderCategoryForm.newFolder.trim()}". This entry can be safely deleted once other packages use this folder.`
+					description: `This is a placeholder entry to establish the folder "${folderCategoryForm.newFolder.trim()}". This entry can be safely deleted once other packages use this folder.`,
+					last_updated: new Date().toISOString() // Add current timestamp
 				});
 
 			if (insertError) throw insertError;
@@ -618,7 +619,8 @@ const AdminBulkOperationsPage: React.FC = () => {
 					package_name: `__category_placeholder_${Date.now()}`,
 					folder1: folderCategoryForm.selectedFolder,
 					category1: folderCategoryForm.newCategory.trim(),
-					description: `This is a placeholder entry to establish the category "${folderCategoryForm.newCategory.trim()}" in folder "${folderCategoryForm.selectedFolder}". This entry can be safely deleted once other packages use this category.`
+					description: `This is a placeholder entry to establish the category "${folderCategoryForm.newCategory.trim()}" in folder "${folderCategoryForm.selectedFolder}". This entry can be safely deleted once other packages use this category.`,
+					last_updated: new Date().toISOString() // Add current timestamp
 				});
 
 			if (insertError) throw insertError;

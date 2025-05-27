@@ -156,6 +156,7 @@ const EditPackagePage: React.FC = () => {
 				// These fields are likely managed by backend processes or set on creation.
 				// Ensure 'id' is not included in the update payload.
 				id: undefined,
+				last_updated: new Date().toISOString(), // Add current timestamp
 			};
 
 			const { error: updateError } = await supabase

@@ -27,6 +27,7 @@ export interface Package {
 	name?: string;
 	version?: string;
 	repository?: string;
+	last_updated?: string; // ISO timestamp of when the package was last updated
 }
 
 // Interface for individual user ratings (Supabase schema)

@@ -100,6 +100,7 @@ const AddPackagePage: React.FC = () => {
 				link: formData.link || '',
 				license: formData.license || '',
 				tags: formData.tags || [],
+				last_updated: new Date().toISOString(), // Add current timestamp
 			};
 
 			const { data, error: insertError } = await supabase
