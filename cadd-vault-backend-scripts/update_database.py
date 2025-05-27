@@ -1,17 +1,29 @@
+"""
+Database update script for CADD Vault.
+
+This script updates package information by fetching data from external APIs like GitHub
+and publication sources. It handles pagination for the Supabase client, which has a 
+default limit of 1000 rows per query, to ensure all packages in the database can be 
+processed even when there are more than 1000 entries.
+"""
+
 import asyncio
 import os
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Set
+import argparse
+import pandas as pd
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 import json
+from pathlib import Path
 
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
 # Import services and models (assuming they're updated to match new schema)
 from services import PublicationService, RepositoryService
-from models import Config, Entry, ProcessingResult
+from models import Config, Entry
 
 # Set up logging with more detailed formatting
 logging.basicConfig(
@@ -40,6 +52,9 @@ class UpdateStats:
     github_data_updates: int = 0
     citation_updates: int = 0
     
+    # Dry run specific
+    dry_run_changes: List[Dict[str, Any]] = field(default_factory=list)
+    
     def add_error(self, package_id: str, error_message: str, error_type: str = "general"):
         """Add an error to the tracking."""
         self.errors.append({
@@ -48,14 +63,26 @@ class UpdateStats:
             "type": error_type,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
+    
+    def add_dry_run_change(self, package_id: str, package_name: str, field: str, old_value: Any, new_value: Any):
+        """Add a change record for dry run mode."""
+        self.dry_run_changes.append({
+            "package_id": package_id,
+            "package_name": package_name,
+            "field": field,
+            "old_value": old_value,
+            "new_value": new_value,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
 
 class DatabaseUpdater:
     """Main class for updating database with external API data."""
     
-    def __init__(self, config: Config, supabase_client: Client):
+    def __init__(self, config: Config, supabase_client: Client, dry_run: bool = False):
         self.config = config
         self.supabase = supabase_client
         self.stats = UpdateStats()
+        self.dry_run = dry_run
         
         # Initialize services
         self.publication_service = PublicationService(config)
@@ -65,6 +92,8 @@ class DatabaseUpdater:
         self.batch_size = 50  # Process packages in batches
         self.delay_between_batches = 5.0  # seconds
         self.max_retries = 3
+        
+        logger.info(f"DatabaseUpdater initialized in {'DRY RUN' if dry_run else 'LIVE'} mode")
         
     async def update_database(self, package_filter: Optional[Dict[str, Any]] = None):
         """
@@ -102,27 +131,85 @@ class DatabaseUpdater:
     async def _fetch_packages(self, package_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Fetch packages from database with optional filtering."""
         try:
-            query = self.supabase.table("packages").select("*")
+            all_packages = []
             
-            # Apply filters if provided
-            if package_filter:
-                for key, value in package_filter.items():
-                    if key == "limit":
-                        query = query.limit(value)
-                    elif key == "ids":
-                        query = query.in_("id", value)
-                    elif key == "updated_before":
-                        # Only update packages not updated recently
-                        query = query.lt("last_updated", value)
-                    # Add more filter conditions as needed
-            
-            response = query.execute()
-            
-            if response.data is None:
-                logger.error("Failed to fetch packages from database")
-                return []
+            # If we are fetching specific IDs, we can do it in one query
+            if package_filter and "ids" in package_filter:
+                query = self.supabase.table("packages").select("*")
+                query = build_package_filter_query(query, package_filter)
+                response = query.execute()
                 
-            return response.data
+                if response.data is None:
+                    logger.error("Failed to fetch packages from database")
+                    return []
+                
+                return response.data
+            
+            # For other cases, we need to handle pagination to get all rows
+            # since Supabase has a default limit of 1000 rows per query
+            page_size = 1000  # Maximum allowed by Supabase
+            current_page = 0
+            total_fetched = 0
+            has_more = True
+            
+            # Log if we're fetching all packages
+            if not package_filter or ("limit" not in package_filter):
+                logger.info("Fetching ALL packages from the database (with pagination)")
+            
+            # For limit queries, adjust to fetch only what's needed
+            max_packages = None
+            if package_filter and "limit" in package_filter:
+                max_packages = package_filter["limit"]
+                logger.info(f"Fetching up to {max_packages} packages from the database")
+            
+            # Create a copy of package_filter without the limit for pagination handling
+            pagination_filter = package_filter.copy() if package_filter else {}
+            if "limit" in pagination_filter:
+                del pagination_filter["limit"]
+            
+            while has_more:
+                # Calculate how many records to fetch in this page
+                fetch_count = page_size
+                if max_packages is not None:
+                    remaining = max_packages - total_fetched
+                    if remaining <= 0:
+                        break
+                    fetch_count = min(fetch_count, remaining)
+                
+                # Build query with pagination
+                query = self.supabase.table("packages").select("*").range(
+                    current_page * page_size, 
+                    (current_page * page_size) + fetch_count - 1
+                )
+                
+                # Apply other filters
+                if pagination_filter:
+                    query = build_package_filter_query(query, pagination_filter)
+                
+                # Execute query
+                response = query.execute()
+                
+                if response.data is None:
+                    logger.error("Failed to fetch packages from database")
+                    return []
+                
+                # Add results to our collection
+                packages_count = len(response.data)
+                all_packages.extend(response.data)
+                total_fetched += packages_count
+                
+                # Check if we need to fetch more
+                has_more = packages_count == fetch_count
+                if has_more:
+                    current_page += 1
+                    logger.info(f"Fetched {total_fetched} packages so far, getting more...")
+                
+                # If we've reached our limit, stop
+                if max_packages is not None and total_fetched >= max_packages:
+                    has_more = False
+            
+            logger.info(f"Successfully fetched {len(all_packages)} packages in total")
+            return all_packages
             
         except Exception as e:
             logger.error(f"Error fetching packages: {e}")
@@ -191,11 +278,19 @@ class DatabaseUpdater:
                 updates.update(pub_updates)
                 self.stats.publication_updates += 1
             
-            # Apply updates to database if any changes
+            # Handle updates (either apply to database or record for dry run)
             if updates:
-                await self._apply_updates(package_id, updates)
+                if self.dry_run:
+                    # Record changes for dry run output
+                    for field, new_value in updates.items():
+                        old_value = getattr(entry, field, None) if hasattr(entry, field) else package_data.get(field)
+                        self.stats.add_dry_run_change(package_id, package_name, field, old_value, new_value)
+                    logger.info(f"[DRY RUN] Would update package {package_name} with {len(updates)} fields")
+                else:
+                    await self._apply_updates(package_id, updates)
+                    logger.info(f"Updated package {package_name} with {len(updates)} fields")
+                
                 self.stats.updated_packages += 1
-                logger.info(f"Updated package {package_name} with {len(updates)} fields")
             else:
                 self.stats.skipped_packages += 1
                 logger.debug(f"No updates needed for package {package_name}")
@@ -257,10 +352,11 @@ class DatabaseUpdater:
             repo_data = await self.repository_service.get_repository_data(entry.repo_link)
             
             if repo_data:
-                # Only update fields that are None or need updating
-                if entry.github_stars is None and repo_data.stars is not None:
+                # Always update GitHub stars
+                if repo_data.stars is not None:
                     updates['github_stars'] = repo_data.stars
                 
+                # Only update other fields if they are None or need updating
                 if entry.last_commit is None and repo_data.last_commit is not None:
                     updates['last_commit'] = repo_data.last_commit
                 
@@ -320,15 +416,14 @@ class DatabaseUpdater:
                 
                 # Fetch citation data for published papers (not preprints)
                 if lookup_url and not self.publication_service.is_preprint(lookup_url):
-                    # Get citations
-                    if entry.citations is None:
-                        try:
-                            citations = await self.publication_service.get_citations(lookup_url)
-                            if citations is not None:
-                                updates['citations'] = citations
-                                self.stats.citation_updates += 1
-                        except Exception as e:
-                            logger.warning(f"Failed to get citations for {entry.package_name}: {e}")
+                    # Always get latest citations
+                    try:
+                        citations = await self.publication_service.get_citations(lookup_url)
+                        if citations is not None:
+                            updates['citations'] = citations
+                            self.stats.citation_updates += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to get citations for {entry.package_name}: {e}")
                     
                     # Get journal information and impact factor
                     if entry.journal is None or entry.jif is None:
@@ -384,8 +479,9 @@ class DatabaseUpdater:
 
     def _log_final_stats(self):
         """Log comprehensive final statistics."""
+        mode = "DRY RUN" if self.dry_run else "LIVE UPDATE"
         logger.info("=" * 60)
-        logger.info("DATABASE UPDATE COMPLETE")
+        logger.info(f"DATABASE UPDATE COMPLETE - {mode}")
         logger.info("=" * 60)
         logger.info(f"Total packages processed: {self.stats.total_packages}")
         logger.info(f"Successfully processed: {self.stats.processed_packages}")
@@ -398,6 +494,9 @@ class DatabaseUpdater:
         logger.info(f"GitHub data updates: {self.stats.github_data_updates}")
         logger.info(f"Citation updates: {self.stats.citation_updates}")
         
+        if self.dry_run:
+            logger.info(f"Total field changes (dry run): {len(self.stats.dry_run_changes)}")
+        
         if self.stats.errors:
             logger.error(f"Errors encountered: {len(self.stats.errors)}")
             # Log first few errors for immediate visibility
@@ -407,52 +506,326 @@ class DatabaseUpdater:
             if len(self.stats.errors) > 5:
                 logger.error(f"  ... and {len(self.stats.errors) - 5} more errors (check full log)")
 
+    def export_dry_run_results(self, output_file: str, format_type: str = "csv"):
+        """Export dry run results to CSV or Excel file."""
+        if not self.dry_run or not self.stats.dry_run_changes:
+            logger.warning("No dry run changes to export")
+            return
+        
+        # Prepare data for export
+        df = pd.DataFrame(self.stats.dry_run_changes)
+        
+        # Add summary data
+        summary_data = {
+            "total_packages": self.stats.total_packages,
+            "processed_packages": self.stats.processed_packages,
+            "updated_packages": self.stats.updated_packages,
+            "skipped_packages": self.stats.skipped_packages,
+            "failed_packages": self.stats.failed_packages,
+            "repository_updates": self.stats.repository_updates,
+            "publication_updates": self.stats.publication_updates,
+            "github_data_updates": self.stats.github_data_updates,
+            "citation_updates": self.stats.citation_updates,
+            "total_changes": len(self.stats.dry_run_changes)
+        }
+        
+        output_path = Path(output_file)
+        
+        if format_type.lower() == "excel":
+            # Export to Excel with multiple sheets
+            if not output_path.suffix or output_path.suffix.lower() not in ['.xlsx', '.xls']:
+                output_path = output_path.with_suffix('.xlsx')
+            
+            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+                # Main changes sheet
+                df.to_excel(writer, sheet_name='Changes', index=False)
+                
+                # Summary sheet
+                summary_df = pd.DataFrame([summary_data])
+                summary_df.to_excel(writer, sheet_name='Summary', index=False)
+                
+                # Errors sheet (if any)
+                if self.stats.errors:
+                    errors_df = pd.DataFrame(self.stats.errors)
+                    errors_df.to_excel(writer, sheet_name='Errors', index=False)
+            
+            logger.info(f"Dry run results exported to Excel: {output_path}")
+            
+        else:
+            # Export to CSV
+            if not output_path.suffix or output_path.suffix.lower() != '.csv':
+                output_path = output_path.with_suffix('.csv')
+            
+            df.to_csv(output_path, index=False)
+            
+            # Also create a summary CSV
+            summary_path = output_path.with_name(f"{output_path.stem}_summary.csv")
+            summary_df = pd.DataFrame([summary_data])
+            summary_df.to_csv(summary_path, index=False)
+            
+            # Export errors if any
+            if self.stats.errors:
+                errors_path = output_path.with_name(f"{output_path.stem}_errors.csv")
+                errors_df = pd.DataFrame(self.stats.errors)
+                errors_df.to_csv(errors_path, index=False)
+            
+            logger.info(f"Dry run results exported to CSV: {output_path}")
+            logger.info(f"Summary exported to: {summary_path}")
+            if self.stats.errors:
+                logger.info(f"Errors exported to: {errors_path}")
+
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Update CADD Vault database with external API data",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Dry run on 10 packages, export to CSV
+  python update_database.py --dry-run --limit 10 --output results.csv
+
+  # Dry run on specific packages, export to Excel
+  python update_database.py --dry-run --ids pkg1,pkg2,pkg3 --output results.xlsx --format excel
+
+  # Live update of packages not updated in 7 days
+  python update_database.py --days-since-update 7 --limit 50
+
+  # Update all packages (no limit)
+  python update_database.py --all
+
+  # Update packages with GitHub repos only
+  python update_database.py --github-only --limit 20
+        """
+    )
+    
+    # Mode selection
+    parser.add_argument(
+        "--dry-run", 
+        action="store_true", 
+        help="Run in dry-run mode (no database changes, export results to file)"
+    )
+    
+    # Package selection
+    selection_group = parser.add_mutually_exclusive_group()
+    selection_group.add_argument(
+        "--limit", 
+        type=int, 
+        help="Limit number of packages to process"
+    )
+    selection_group.add_argument(
+        "--ids", 
+        type=str, 
+        help="Comma-separated list of specific package IDs to process"
+    )
+    selection_group.add_argument(
+        "--all", 
+        action="store_true", 
+        help="Process ALL packages in the database without any limit"
+    )
+    
+    # Filtering options
+    parser.add_argument(
+        "--days-since-update", 
+        type=int, 
+        help="Only process packages not updated in X days"
+    )
+    parser.add_argument(
+        "--github-only", 
+        action="store_true", 
+        help="Only process packages with GitHub repositories"
+    )
+    parser.add_argument(
+        "--publications-only", 
+        action="store_true", 
+        help="Only process packages with publication URLs"
+    )
+    
+    # Output options (for dry run)
+    parser.add_argument(
+        "--output", 
+        type=str, 
+        help="Output file for dry run results (auto-detects format from extension)"
+    )
+    parser.add_argument(
+        "--format", 
+        choices=["csv", "excel"], 
+        default="csv", 
+        help="Output format for dry run results (default: csv)"
+    )
+    
+    # Processing options
+    parser.add_argument(
+        "--batch-size", 
+        type=int, 
+        default=50, 
+        help="Number of packages to process in each batch (default: 50)"
+    )
+    parser.add_argument(
+        "--delay", 
+        type=float, 
+        default=5.0, 
+        help="Delay in seconds between batches (default: 5.0)"
+    )
+    
+    # Logging
+    parser.add_argument(
+        "--verbose", "-v", 
+        action="store_true", 
+        help="Enable verbose logging"
+    )
+    parser.add_argument(
+        "--quiet", "-q", 
+        action="store_true", 
+        help="Suppress non-error output"
+    )
+    
+    return parser.parse_args()
+
+
+def setup_logging(verbose: bool = False, quiet: bool = False):
+    """Configure logging based on command line options."""
+    if quiet:
+        level = logging.ERROR
+    elif verbose:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    
+    # Update the existing logging configuration
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('database_update.log'),
+            logging.StreamHandler()
+        ]
+    )
+
 
 async def main():
     """Main entry point for the database update script."""
+    # Parse command line arguments
+    args = parse_arguments()
+    
+    # Setup logging
+    setup_logging(args.verbose, args.quiet)
+    
     # Load environment variables
     load_dotenv(dotenv_path='.env')
     load_dotenv(dotenv_path='../cadd-vault-frontend/.env')
     
     # Get configuration
     supabase_url = os.environ.get("VITE_SUPABASE_URL")
-    supabase_key = os.environ.get("VITE_SUPABASE_ANON_KEY")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     github_token = os.environ.get("PERSONAL_ACCESS_TOKEN")
     email = os.environ.get("CONTACT_EMAIL", "your_email@example.com")
     
     if not supabase_url or not supabase_key:
-        logger.error("Missing required environment variables: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY")
-        return
+        logger.error("Missing required environment variables: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY")
+        return 1
     
     # Initialize clients
     supabase = create_client(supabase_url, supabase_key)
-    config = Config(email=email, github_token=github_token)
+    config = Config(
+        email=email, 
+        github_token=github_token,
+        batch_size=args.batch_size
+    )
     
-    # Create updater and run
-    updater = DatabaseUpdater(config, supabase)
+    # Create updater
+    updater = DatabaseUpdater(config, supabase, dry_run=args.dry_run)
+    updater.delay_between_batches = args.delay
     
-    # Example: Update only packages that haven't been updated in the last 7 days
-    # package_filter = {
-    #     "updated_before": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(),
-    #     "limit": 100  # Process only 100 packages for testing
-    # }
+    # Build package filter based on arguments
+    package_filter = {}
     
-    # Or update specific packages by ID
-    # package_filter = {"ids": ["specific-package-id-1", "specific-package-id-2"]}
+    if args.limit:
+        package_filter["limit"] = args.limit
+    elif args.ids:
+        package_ids = [id.strip() for id in args.ids.split(',')]
+        package_filter["ids"] = package_ids
+    elif not args.all:
+        # Default to a safe limit if no specific selection is made
+        package_filter["limit"] = 10
+        logger.warning("No specific package selection provided. Defaulting to 10 packages. Use --all to process all packages.")
+    else:
+        # When --all is specified, we don't set a limit to process the entire database
+        logger.info("Processing ALL packages in the database")
     
-    # Or update all packages (be careful with rate limits!)
-    package_filter = {"limit": 50}  # Start with a small batch for testing
+    if args.days_since_update:
+        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=args.days_since_update)).isoformat()
+        package_filter["updated_before"] = cutoff_date
+    
+    if args.github_only:
+        package_filter["github_only"] = True
+    
+    if args.publications_only:
+        package_filter["publications_only"] = True
+    
+    # Log what we're about to do
+    mode = "DRY RUN" if args.dry_run else "LIVE UPDATE"
+    logger.info(f"Starting database update in {mode} mode")
+    logger.info(f"Filter: {package_filter}")
+    
+    if args.dry_run and not args.output:
+        # Default output filename for dry run
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        args.output = f"dry_run_results_{timestamp}.csv"
+        logger.info(f"No output file specified for dry run. Using: {args.output}")
     
     try:
-        stats = await updater.update_database(package_filter)
+        # Run the update
+        await updater.update_database(package_filter)
         
-        # Could add webhook notification, email reporting, etc. here
+        # Export dry run results if applicable
+        if args.dry_run and args.output:
+            # Auto-detect format from file extension if not specified
+            output_format = args.format
+            if args.output.lower().endswith('.xlsx') or args.output.lower().endswith('.xls'):
+                output_format = "excel"
+            elif args.output.lower().endswith('.csv'):
+                output_format = "csv"
+            
+            updater.export_dry_run_results(args.output, output_format)
+        
         logger.info("Database update completed successfully")
+        return 0
         
+    except KeyboardInterrupt:
+        logger.warning("Update interrupted by user")
+        return 130
     except Exception as e:
         logger.critical(f"Database update failed: {e}")
-        raise
+        return 1
+
+
+def build_package_filter_query(query, package_filter: Dict[str, Any]):
+    """Build Supabase query with filters applied."""
+    # Note: For pagination, the 'limit' should be handled separately
+    # But we still handle it here for backward compatibility
+    if "limit" in package_filter:
+        query = query.limit(package_filter["limit"])
+    
+    if "ids" in package_filter:
+        query = query.in_("id", package_filter["ids"])
+    
+    if "updated_before" in package_filter:
+        query = query.lt("last_updated", package_filter["updated_before"])
+    
+    if package_filter.get("github_only"):
+        query = query.not_.is_("repo_link", "null").like("repo_link", "%github.com%")
+    
+    if package_filter.get("publications_only"):
+        query = query.not_.is_("publication", "null")
+    
+    return query
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    exit_code = asyncio.run(main())
+    sys.exit(exit_code)

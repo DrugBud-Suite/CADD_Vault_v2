@@ -2,28 +2,23 @@
 External API services for fetching publication and repository data.
 Updated to align with database schema and improved error handling.
 """
-import json
 import logging
 import re
 import asyncio
-from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from functools import lru_cache, partial
-from typing import Any, Dict, List, Optional, Tuple
+from functools import lru_cache
+from typing import Dict, Optional, Tuple
 from urllib.parse import unquote, urlparse
 
 import backoff
 import httpx
-import requests
-from habanero import Crossref, counts
+from habanero import Crossref
 
 # Assuming models.py is in the same directory
-from models import Config, Entry, ProcessingResult, Publication, Repository
+from models import Config, Repository
 
 from paperscraper.impact import Impactor
-from rich.console import Console
-from rich.progress import Progress
 
 
 @dataclass

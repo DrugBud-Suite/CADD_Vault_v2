@@ -12,6 +12,8 @@ rich>=12.0.0
 # New dependencies for improved functionality
 tenacity>=8.0.0
 pydantic>=1.10.0
+pandas>=1.5.0
+openpyxl>=3.1.0
 
 # Test dependencies
 pytest>=7.0.0
