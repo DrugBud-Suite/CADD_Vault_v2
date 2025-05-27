@@ -40,3 +40,4 @@ cadd-vault-backend-scripts/__pycache__/test_runner.cpython-310-pytest-8.3.5.pyc
 cadd-vault-backend-scripts/__pycache__/tests_integration.cpython-310-pytest-8.3.5.pyc
 cadd-vault-backend-scripts/__pycache__/update_database.cpython-310.pyc
 cadd-vault-backend-scripts/*.csv
+cadd-vault-backend-scripts/tests/__pycache__/test_all.cpython-310-pytest-8.3.5.pyc
