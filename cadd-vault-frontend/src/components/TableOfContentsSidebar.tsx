@@ -52,8 +52,6 @@ const TableOfContentsSidebar: React.FC = () => {
 	const setCategory1Filter = useFilterStore((state) => state.setCategory1);
 	const selectedFolder1 = useFilterStore((state) => state.folder1);
 	const selectedCategory1 = useFilterStore((state) => state.category1);
-	// Original packages are used to know when the initial data load is complete
-	const originalPackages = useFilterStore((state) => state.originalPackages);
 
 
 	const [tocData, setTocData] = useState<TocData>({});
@@ -65,20 +63,14 @@ const TableOfContentsSidebar: React.FC = () => {
 
 	useEffect(() => {
 		// Check if the necessary data is loaded in the store
-		// We consider data loaded if originalPackages has items,
-		// as allAvailableFolders and allAvailableCategoriesMap are derived from it.
-		if (originalPackages.length > 0) {
+		// We consider data loaded if allAvailableFolders has items, since metadata is now loaded directly
+		if (allAvailableFolders.length > 0) {
 			setLoading(true); // Indicate processing of store data
 			setError(null);
 			try {
 				// Directly use the data from the store
 				// The allAvailableCategoriesMap is already structured as { folder: [categories] }
 				// and allAvailableFolders is a sorted list of folders.
-				// We just need to ensure the "Uncategorized" logic is handled if necessary,
-				// though it's better if the store's derivation logic already handles this.
-
-				// Assuming allAvailableFolders and allAvailableCategoriesMap from the store
-				// are already sorted and structured correctly (including "Uncategorized" handling).
 				setTocData(allAvailableCategoriesMap);
 				setLoading(false);
 			} catch (err: any) {
@@ -88,10 +80,10 @@ const TableOfContentsSidebar: React.FC = () => {
 			}
 		} else {
 			// Data not yet loaded in store, can show a loading state or wait.
-			// Setting loading to true here means it will show loading until originalPackages is populated.
+			// Setting loading to true here means it will show loading until metadata is populated.
 			setLoading(true);
 		}
-	}, [allAvailableFolders, allAvailableCategoriesMap, originalPackages]); // Depend on store data
+	}, [allAvailableFolders, allAvailableCategoriesMap]); // Depend on store data
 
 	const handleFolderClick = (folder: string) => {
 		setOpenFolders(prevOpen => {
