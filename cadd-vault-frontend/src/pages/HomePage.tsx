@@ -1,10 +1,10 @@
 // src/pages/HomePage.tsx
 import React, { useEffect, useState, lazy, Suspense, ChangeEvent, Fragment } from 'react';
-import { supabase } from '../supabase';
 import { useFilterStore } from '../store/filterStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Package } from '../types';
 import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
+import { DataService } from '../services/dataService';
 import {
 	Container, Box, Typography, CircularProgress, Alert, Select, MenuItem, IconButton,
 	ToggleButtonGroup, ToggleButton, Grid, Pagination, FormControl, SelectChangeEvent
@@ -14,71 +14,6 @@ import { ViewList as ViewListIcon, ViewModule as ViewModuleIcon, ArrowUpward as 
 // Lazy load components
 const PackageCard = lazy(() => import('../components/PackageCard'));
 const PackageList = lazy(() => import('../components/PackageList'));
-
-// Helper function to fetch all data with pagination
-async function fetchAllSupabaseData(
-	queryBuilder: any, // Adjust type based on Supabase client version if possible
-	selectFields: string,
-	pageSize: number = 1000, // Supabase default limit
-	logPrefix: string = "📊" // Default emoji for logging
-): Promise<Package[]> {
-	let allData: Package[] = [];
-	let offset = 0;
-	let hasMore = true;
-	let totalCount = 0;
-	let batchNumber = 0;
-	const startTime = performance.now();
-
-	console.log(`${logPrefix} Starting paginated data fetch...`);
-
-	while (hasMore) {
-		batchNumber++;
-		const batchStartTime = performance.now();
-		console.log(`${logPrefix} Fetching batch #${batchNumber}, offset: ${offset}...`);
-
-		const { data, error, count } = await queryBuilder
-			.select(selectFields, { count: 'exact' }) // Ensure count is requested
-			.range(offset, offset + pageSize - 1);
-
-		if (error) {
-			console.error(`${logPrefix} ❌ Error fetching paginated data batch #${batchNumber}:`, error.message);
-			throw error; // Propagate error to be caught by caller
-		}
-
-		// Store total count from first response
-		if (count !== null && totalCount === 0) {
-			totalCount = count;
-		}
-
-		if (data && data.length > 0) {
-			const batchTime = ((performance.now() - batchStartTime) / 1000).toFixed(2);
-			allData = allData.concat(data as Package[]);
-			const newOffset = offset + data.length;
-			console.log(`${logPrefix} ✅ Batch #${batchNumber} complete in ${batchTime}s: ${data.length} items, progress: ${newOffset}/${totalCount || 'unknown'} (${totalCount ? Math.round((newOffset / totalCount) * 100) : '?'}%)`);
-			offset = newOffset;
-		} else {
-			console.log(`${logPrefix} Batch #${batchNumber} returned no data, ending pagination.`);
-			hasMore = false;
-		}
-
-		// If Supabase provides a total count and we've fetched that many, stop
-		if (totalCount > 0 && offset >= totalCount) {
-			console.log(`${logPrefix} Reached total count (${totalCount}), ending pagination.`);
-			hasMore = false;
-		}
-
-		// Safety break if data length is less than page size, means no more data
-		if (data && data.length < pageSize) {
-			console.log(`${logPrefix} Received fewer items (${data.length}) than page size (${pageSize}), ending pagination.`);
-			hasMore = false;
-		}
-	}
-
-	const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-	console.log(`${logPrefix} 🏁 All batches complete in ${totalTime}s! Total items: ${allData.length}`);
-
-	return allData;
-}
 
 const HomePage: React.FC = () => {
 	// --- Zustand Store Selectors using useShallow ---
@@ -127,86 +62,65 @@ const HomePage: React.FC = () => {
 
 	const itemsPerPage = 24;
 
-	// --- Effect to fetch global data for filters and set metadata (runs once) ---
+	// --- Effect to fetch metadata for filters (runs once) ---
 	useEffect(() => {
-		const fetchGlobalDataAndSetMetadata = async () => {
+		const fetchMetadata = async () => {
 			setError('');
 			setLoadingState('metadata');
 			setLoading(true);
-			const startTime = performance.now();
 
-			try {
-				console.log("📊 Fetching metadata for filters...");
+		// Add a timeout to prevent indefinite hanging
+		const timeoutId = setTimeout(() => {
+			setError("Loading is taking longer than expected. Please refresh the page.");
+			setLoading(false);
+			setLoadingState('none');
+		}, 30000); // 30 second timeout
 
-				// Fetch all package data needed for filter metadata using the helper.
-				// Select all fields necessary for metadata derivation.
-				const selectFieldsForMetadata = 'id, package_name, description, tags, license, github_stars, citations, repo_link, webserver, publication, folder1, category1, last_commit, average_rating, ratings_count, github_owner, github_repo, jif, journal, last_commit_ago, link, page_icon, primary_language, ratings_sum';
-				const allPackagesData = await fetchAllSupabaseData(
-					supabase.from('packages'),
-					selectFieldsForMetadata,
-					1000, // page size
-					"📊" // log prefix
-				);
+		try {
+			const metadata = await DataService.fetchFilterMetadata();
 
-				const fetchTime = ((performance.now() - startTime) / 1000).toFixed(2);
-				console.log(`📊 Metadata fetch complete in ${fetchTime}s. Found ${allPackagesData?.length || 0} packages for metadata.`);
+			clearTimeout(timeoutId); // Clear timeout if successful
 
-				if (allPackagesData && allPackagesData.length > 0) {
-					console.log(`📊 Starting metadata processing...`);
-					const processStartTime = performance.now();
-					setOriginalPackagesAndDeriveMetadata(allPackagesData);
-					const processTime = ((performance.now() - processStartTime) / 1000).toFixed(2);
-					const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-					console.log(`📊 Metadata processing completed in ${processTime}s`);
-					console.log(`📊 Total metadata operation completed in ${totalTime}s`);
+			// Update the filter store with metadata
+			useFilterStore.setState({
+				allAvailableTags: metadata.allAvailableTags,
+				allAvailableLicenses: metadata.allAvailableLicenses,
+				allAvailableFolders: metadata.allAvailableFolders,
+				allAvailableCategories: metadata.allAvailableCategories,
+				datasetMaxStars: metadata.datasetMaxStars,
+				datasetMaxCitations: metadata.datasetMaxCitations,
+			});
 
-					setDebugInfo(prev => ({
-						...prev,
-						metadataFetch: {
-							success: true,
-							count: allPackagesData.length,
-							fetchTime: `${fetchTime}s`,
-							processTime: `${processTime}s`,
-							totalTime: `${totalTime}s`,
-							timestamp: new Date().toISOString()
-						}
-					}));
-				} else {
-					setOriginalPackagesAndDeriveMetadata([]);
-					setError("No packages found for filtering options.");
-					setDebugInfo(prev => ({
-						...prev,
-						metadataFetch: {
-							success: false,
-							count: 0,
-							time: `${fetchTime}s`,
-							error: "No data returned",
-							timestamp: new Date().toISOString()
-						}
-					}));
-					console.warn("⚠️ No packages found for metadata.");
+			// Set empty originalPackages since we're not using it for filtering anymore
+			setOriginalPackagesAndDeriveMetadata([]);
+
+			setDebugInfo(prev => ({
+				...prev,
+				metadataFetch: {
+					success: true,
+					totalPackages: metadata.totalPackageCount,
+					timestamp: new Date().toISOString()
 				}
-			} catch (err: any) {
-				const fetchTime = ((performance.now() - startTime) / 1000).toFixed(2);
-				console.error("❌ Error in fetchGlobalDataAndSetMetadata:", err);
-				setError("Failed to load filter options. Please try refreshing the page.");
-				setOriginalPackagesAndDeriveMetadata([]);
-				setDebugInfo(prev => ({
-					...prev,
-					metadataFetch: {
-						success: false,
-						time: `${fetchTime}s`,
-						error: err.message || "Unknown error",
-						timestamp: new Date().toISOString()
-					}
-				}));
-			} finally {
-				setLoadingState('packages');
-			}
-		};
+			}));
+		} catch (err: any) {
+			clearTimeout(timeoutId); // Clear timeout on error
+			console.error("❌ Error fetching metadata:", err);
+			setError("Failed to load filter options. Please try refreshing the page.");
+			setDebugInfo(prev => ({
+				...prev,
+				metadataFetch: {
+					success: false,
+					error: err.message || "Unknown error",
+					timestamp: new Date().toISOString()
+				}
+			}));
+		} finally {
+			setLoadingState('packages');
+		}
+	};
 
-		fetchGlobalDataAndSetMetadata();
-	}, [setOriginalPackagesAndDeriveMetadata]); // Dependency array ensures this runs once
+		fetchMetadata();
+	}, []); // Only run once on mount
 
 	// --- Rating update event listener ---
 	useEffect(() => {
@@ -246,13 +160,12 @@ const HomePage: React.FC = () => {
 
 	// --- Data Fetching for packages (paginated and filtered) ---
 	useEffect(() => {
-		const performFetchPackages = async () => {
-			// Only proceed if metadata (like allAvailableFolders) is loaded,
-			// which indicates fetchGlobalDataAndSetMetadata has likely completed.
+		const fetchPackagesData = async () => {
+		// Only proceed if metadata is loaded
 			const metadataLoaded = useFilterStore.getState().allAvailableFolders.length > 0 ||
-				useFilterStore.getState().originalPackages.length > 0;
+				useFilterStore.getState().allAvailableTags.length > 0;
 
-			if (!metadataLoaded) {
+			if (!metadataLoaded && loadingState === 'metadata') {
 				console.log("⏳ Metadata not yet loaded, packages fetch will wait for metadata.");
 				return;
 			}
@@ -261,155 +174,52 @@ const HomePage: React.FC = () => {
 			setLoadingState('packages');
 			setError('');
 
-			const startTime = performance.now();
-			const pageIndex = currentPage - 1;
-			const rangeFrom = pageIndex * itemsPerPage;
-			const rangeTo = rangeFrom + itemsPerPage - 1;
-
-			console.log(`🔎 Fetching packages (page ${currentPage}):`, {
-				sortBy,
-				sortDirection,
-				searchTerm: searchTerm || 'none',
-				filters: {
-					tags: selectedTags.length > 0 ? selectedTags : 'none',
-					minStars: minStars || 'none',
+			try {
+				const result = await DataService.fetchPackages({
+					searchTerm,
+					selectedTags,
+					minStars,
 					hasGithub,
 					hasWebserver,
 					hasPublication,
-					minCitations: minCitations || 'none',
-					minRating: minRating || 'none',
-					folder1: folder1 || 'none',
-					category1: category1 || 'none',
-					licenses: selectedLicenses.length > 0 ? selectedLicenses : 'none'
-				},
-				pagination: { from: rangeFrom, to: rangeTo }
-			});
+					minCitations,
+					minRating,
+					folder1,
+					category1,
+					selectedLicenses,
+					sortBy,
+					sortDirection,
+					page: currentPage,
+					pageSize: itemsPerPage
+				});
 
-			try {
-				console.log(`🔎 Building query with filters...`);
-				let queryBuilder = supabase
-					.from('packages')
-					.select('*, average_rating, ratings_count', { count: 'exact' });
+				setDisplayedPackagesInComponent(result.packages);
+				setDisplayedPackages(result.packages);
+				setTotalFilteredCount(result.totalCount);
 
-				if (searchTerm) queryBuilder = queryBuilder.or(`package_name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
-				if (selectedTags.length > 0) {
-					const jsonFormattedTags = JSON.stringify(selectedTags);
-					queryBuilder = queryBuilder.contains('tags', jsonFormattedTags);
-				}
-				if (minStars !== null && minStars > 0) queryBuilder = queryBuilder.gte('github_stars', minStars);
-				if (hasGithub) queryBuilder = queryBuilder.not('repo_link', 'is', null);
-				if (hasWebserver) queryBuilder = queryBuilder.not('webserver', 'is', null);
-				if (hasPublication) queryBuilder = queryBuilder.not('publication', 'is', null);
-				if (minCitations !== null && minCitations > 0) queryBuilder = queryBuilder.gte('citations', minCitations);
-				if (minRating !== null && minRating > 0) queryBuilder = queryBuilder.gte('average_rating', minRating);
-				if (folder1) queryBuilder = queryBuilder.eq('folder1', folder1);
-				if (category1) queryBuilder = queryBuilder.eq('category1', category1);
-				if (selectedLicenses.length > 0) queryBuilder = queryBuilder.in('license', selectedLicenses);
-
-				if (sortBy && sortDirection) {
-					queryBuilder = queryBuilder.order(sortBy, { ascending: sortDirection === 'asc', nullsFirst: false });
-				} else {
-					queryBuilder = queryBuilder.order('package_name', { ascending: true, nullsFirst: false });
-				}
-
-				queryBuilder = queryBuilder.range(rangeFrom, rangeTo);
-				console.log(`🔎 Executing query for page ${currentPage}...`);
-				const queryStartTime = performance.now();
-
-				const { data, error: dbError, count } = await queryBuilder;
-				const queryTime = ((performance.now() - queryStartTime) / 1000).toFixed(2);
-				const fetchTime = ((performance.now() - startTime) / 1000).toFixed(2);
-
-				if (dbError) {
-					console.error(`🔎 ❌ Query error after ${queryTime}s:`, dbError);
-					throw dbError;
-				}
-
-				if (data) {
-					console.log(`🔎 ✅ Query successful in ${queryTime}s. Total matches: ${count || 0}, current page items: ${data.length}`);
-
-					const processingStartTime = performance.now();
-					console.log(`🔎 Processing package data...`);
-					setDisplayedPackagesInComponent(data as Package[]);
-					setDisplayedPackages(data as Package[]); // Update store
-					const processingTime = ((performance.now() - processingStartTime) / 1000).toFixed(2);
-
-					console.log(`🔎 Data processing complete in ${processingTime}s. Total operation time: ${fetchTime}s`);
-					setDebugInfo(prev => ({
-						...prev,
-						packageFetch: {
-							success: true,
-							totalCount: count,
-							displayedCount: data.length,
-							queryTime: `${queryTime}s`,
-							processingTime: `${processingTime}s`,
-							totalTime: `${fetchTime}s`,
-							filters: {
-								searchTerm: searchTerm || 'none',
-								tags: selectedTags.length,
-								minStars,
-								hasGithub,
-								hasWebserver,
-								hasPublication,
-								minCitations,
-								minRating,
-								folder1,
-								category1,
-								licenses: selectedLicenses.length
-							},
-							timestamp: new Date().toISOString()
-						}
-					}));
-				} else {
-					console.warn(`⚠️ No packages found for current filters (${fetchTime}s).`);
-					setDisplayedPackagesInComponent([]);
-					setDisplayedPackages([]); // Update store
-					setDebugInfo(prev => ({
-						...prev,
-						packageFetch: {
-							success: true,
-							totalCount: 0,
-							displayedCount: 0,
-							time: `${fetchTime}s`,
-							timestamp: new Date().toISOString()
-						}
-					}));
-				}
-				setTotalFilteredCount(count ?? 0); // Update store
-
+				setDebugInfo(prev => ({
+					...prev,
+					packageFetch: {
+						success: true,
+						totalCount: result.totalCount,
+						displayedCount: result.packages.length,
+						timestamp: new Date().toISOString()
+					}
+				}));
 			} catch (err: any) {
-				const fetchTime = ((performance.now() - startTime) / 1000).toFixed(2);
 				const errorMessage = `Failed to fetch packages: ${err?.message || 'Unknown error'}`;
 				setError(errorMessage);
 				console.error("❌ Error fetching packages:", err);
-				console.error("Query parameters:", {
-					page: currentPage,
-					sortBy,
-					sortDirection,
-					searchTerm,
-					filters: {
-						tags: selectedTags,
-						minStars,
-						hasGithub,
-						hasWebserver,
-						hasPublication,
-						minCitations,
-						minRating,
-						folder1,
-						category1,
-						licenses: selectedLicenses
-					}
-				});
 
 				setDisplayedPackagesInComponent([]);
-				setDisplayedPackages([]); // Update store
-				setTotalFilteredCount(0); // Update store
+				setDisplayedPackages([]);
+				setTotalFilteredCount(0);
+
 				setDebugInfo(prev => ({
 					...prev,
 					packageFetch: {
 						success: false,
 						error: err?.message || 'Unknown error',
-						time: `${fetchTime}s`,
 						timestamp: new Date().toISOString()
 					}
 				}));
@@ -419,13 +229,12 @@ const HomePage: React.FC = () => {
 			}
 		};
 
-		performFetchPackages();
+		fetchPackagesData();
 	}, [
 		currentPage, searchTerm, selectedTags, minStars, hasGithub, hasWebserver,
 		hasPublication, minCitations, minRating, folder1, category1, selectedLicenses,
-		sortBy, sortDirection,
-		setDisplayedPackages, setTotalFilteredCount, // itemsPerPage is stable
-		// No longer depends on originalPackages directly for this effect
+		sortBy, sortDirection, loadingState,
+		setDisplayedPackages, setTotalFilteredCount
 	]);
 
 	// Output debug info to console when it changes
@@ -468,7 +277,7 @@ const HomePage: React.FC = () => {
 	// Loading messages based on state
 	const getLoadingMessage = () => {
 		if (loadingState === 'metadata') {
-			return "Loading filter options and metadata...";
+			return "Loading filter options...";
 		} else if (loadingState === 'packages') {
 			return `Loading packages (page ${currentPage})...`;
 		}
@@ -485,7 +294,7 @@ const HomePage: React.FC = () => {
 					</Typography>
 					<Typography variant="body2" color="text.secondary" align="center" sx={{ maxWidth: 600 }}>
 						{loadingState === 'metadata' ?
-							"This may take a moment as we're loading all metadata needed for filtering." :
+							"Loading filter options for the best browsing experience." :
 							"Applying filters and sorting to find matching packages."}
 					</Typography>
 				</Box>

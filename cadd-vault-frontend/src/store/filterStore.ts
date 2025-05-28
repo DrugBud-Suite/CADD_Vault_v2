@@ -154,43 +154,11 @@ export const useFilterStore = create<FilterState>()(
             setTotalFilteredCount: (totalFilteredCount) => set({ totalFilteredCount }),
             setCurrentPage: (currentPage) => set({ currentPage }),
 
-            setOriginalPackagesAndDeriveMetadata: (packages: Package[]) => {
-                const allTags = [...new Set(packages.flatMap(p => p.tags || []))].sort();
-                const allLicenses = [...new Set(packages.map(p => p.license).filter(Boolean) as string[])].sort();
-                
-                let maxStars = 0;
-                let maxCitations = 0;
-                const folderCategoryMap: Record<string, Set<string>> = {};
-                
-                packages.forEach(pkg => {
-                    if (pkg.github_stars && pkg.github_stars > maxStars) maxStars = pkg.github_stars;
-                    if (pkg.citations && pkg.citations > maxCitations) maxCitations = pkg.citations;
-                    if (pkg.folder1) {
-                        if (!folderCategoryMap[pkg.folder1]) {
-                            folderCategoryMap[pkg.folder1] = new Set();
-                        }
-                        if (pkg.category1) {
-                            folderCategoryMap[pkg.folder1].add(pkg.category1);
-                        }
-                    }
-                });
-
-                const allFolders = Object.keys(folderCategoryMap).sort();
-                const allCategoriesResult: Record<string, string[]> = {};
-                for (const folder in folderCategoryMap) {
-                    allCategoriesResult[folder] = Array.from(folderCategoryMap[folder]).sort();
-                }
-
-                set({
-                    originalPackages: packages,
-                    allAvailableTags: allTags,
-                    allAvailableLicenses: allLicenses,
-                    allAvailableFolders: allFolders,
-                    allAvailableCategories: allCategoriesResult,
-                    datasetMaxStars: maxStars > 0 ? maxStars : null,
-                    datasetMaxCitations: maxCitations > 0 ? maxCitations : null,
-                });
-            },
+			setOriginalPackagesAndDeriveMetadata: (packages: Package[]) => {
+				// This function is now deprecated but kept for compatibility
+				// Metadata is now loaded separately via DataService
+				set({ originalPackages: packages });
+			},
 
             resetFilters: () => set((state) => ({
                 // Reset filter criteria to their initial values

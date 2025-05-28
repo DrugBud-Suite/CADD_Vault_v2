@@ -47,22 +47,18 @@ const SuggestPackagePage: React.FC = () => {
 	}, [currentUser, authLoading, navigate]);
 
 	useEffect(() => {
-		const folders = [...new Set(originalPackages.map((p: PackageType) => p.folder1).filter(Boolean) as string[])].sort();
+		const folders = useFilterStore.getState().allAvailableFolders;
 		setAvailableFolders(folders);
-	}, [originalPackages]);
+	}, []);
 
 	useEffect(() => {
 		if (formData.folder1) {
-			const categories = [...new Set(
-				originalPackages
-					.filter((p: PackageType) => p.folder1 === formData.folder1 && p.category1)
-					.map((p: PackageType) => p.category1) as string[]
-			)].sort();
+			const categories = useFilterStore.getState().allAvailableCategories[formData.folder1] || [];
 			setAvailableCategories(categories);
 		} else {
 			setAvailableCategories([]);
 		}
-	}, [formData.folder1, originalPackages]);
+	}, [formData.folder1]);
 
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
