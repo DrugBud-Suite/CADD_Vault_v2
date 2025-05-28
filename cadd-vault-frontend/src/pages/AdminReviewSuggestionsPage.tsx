@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
+import { useFilterStore } from '../store/filterStore';
 import { PackageSuggestion, Package as PackageType } from '../types'; // PackageType for adding to packages table
 import {
 	Box, Typography, CircularProgress, Paper, Alert, Container,
@@ -439,7 +440,17 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 		if (!authLoading && !isAdmin) {
 			navigate('/');
 		} else if (isAdmin) {
-			fetchSuggestions(filterStatus);
+			// Refresh metadata when admin accesses the page to ensure fresh folder/category data
+			const refreshAndFetch = async () => {
+				try {
+					await useFilterStore.getState().refreshMetadata();
+				} catch (error) {
+					console.warn('Failed to refresh metadata on AdminReviewSuggestionsPage:', error);
+					// Don't block the page loading if metadata refresh fails
+				}
+				await fetchSuggestions(filterStatus);
+			};
+			refreshAndFetch();
 		}
 	}, [isAdmin, authLoading, navigate, fetchSuggestions, filterStatus]);
 

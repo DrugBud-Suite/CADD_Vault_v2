@@ -117,6 +117,33 @@ export class DataService {
 	}
 
 	/**
+	 * Refresh metadata and update the filter store
+	 * This should be called after folder/category creation or when accessing admin pages
+	 */
+	static async refreshFilterMetadata(): Promise<void> {
+		console.log("🔄 Refreshing filter metadata...");
+		try {
+			const metadata = await this.fetchFilterMetadata();
+
+			// Update the filter store with fresh metadata
+			const { useFilterStore } = await import('../store/filterStore');
+			useFilterStore.setState({
+				allAvailableTags: metadata.allAvailableTags,
+				allAvailableLicenses: metadata.allAvailableLicenses,
+				allAvailableFolders: metadata.allAvailableFolders,
+				allAvailableCategories: metadata.allAvailableCategories,
+				datasetMaxStars: metadata.datasetMaxStars,
+				datasetMaxCitations: metadata.datasetMaxCitations,
+			});
+
+			console.log("✅ Filter metadata refreshed successfully");
+		} catch (error) {
+			console.error("❌ Error refreshing filter metadata:", error);
+			throw error;
+		}
+	}
+
+	/**
 	 * Fetch packages with filters and pagination
 	 */
 	static async fetchPackages(params: PackageQueryParams): Promise<PackageQueryResult> {

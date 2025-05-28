@@ -380,6 +380,14 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			// Set the newly created folder as the selected folder
 			setFormData(prev => ({ ...prev, folder1: newFolderName.trim(), category1: '' }));
 
+			// Refresh metadata to ensure consistency
+			try {
+				await useFilterStore.getState().refreshMetadata();
+			} catch (refreshError) {
+				console.warn("⚠️ Failed to refresh metadata after folder creation:", refreshError);
+				// Don't fail the entire operation if metadata refresh fails
+			}
+
 		} catch (err: any) {
 			console.error("Error creating folder:", err);
 			setError(`Failed to create folder: ${err.message}`);
@@ -472,6 +480,14 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			// Set the newly created category as the selected category
 			setFormData(prev => ({ ...prev, category1: newCategoryName.trim() }));
 			setCurrentCategories(updatedCategories[formData.folder1]);
+
+			// Refresh metadata to ensure consistency
+			try {
+				await useFilterStore.getState().refreshMetadata();
+			} catch (refreshError) {
+				console.warn("⚠️ Failed to refresh metadata after category creation:", refreshError);
+				// Don't fail the entire operation if metadata refresh fails
+			}
 
 		} catch (err: any) {
 			console.error("Error creating category:", err);

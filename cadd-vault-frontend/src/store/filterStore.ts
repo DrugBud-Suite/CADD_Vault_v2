@@ -65,6 +65,9 @@ export interface FilterState { // Exporting for use in components
     // Action to set the initial full dataset and derive all related metadata
     setOriginalPackagesAndDeriveMetadata: (packages: Package[]) => void;
 
+    // Action to refresh metadata from server
+    refreshMetadata: () => Promise<void>;
+
     resetFilters: () => void;
     setViewMode: (mode: ViewMode) => void;
     toggleFilterSidebar: () => void;
@@ -78,7 +81,7 @@ const initialStateValues: Omit<FilterState,
     'setHasWebserver' | 'setHasPublication' | 'setMinCitations' | 'setMinRating' | 'setFolder1' |
     'setCategory1' | 'setSelectedLicenses' | 'setSort' | 'setDisplayedPackages' |
     'setTotalFilteredCount' | 'setCurrentPage' | 'setOriginalPackagesAndDeriveMetadata' |
-    'resetFilters' | 'setViewMode' | 'toggleFilterSidebar' | 'toggleNavSidebar' |
+    'refreshMetadata' | 'resetFilters' | 'setViewMode' | 'toggleFilterSidebar' | 'toggleNavSidebar' |
     // Omit fields that will be derived or fetched
     'originalPackages' | 'allAvailableTags' | 'allAvailableLicenses' |
     'allAvailableFolders' | 'allAvailableCategories' | 'datasetMaxStars' |
@@ -159,6 +162,17 @@ export const useFilterStore = create<FilterState>()(
 				// Metadata is now loaded separately via DataService
 				set({ originalPackages: packages });
 			},
+
+            // Action to refresh metadata from server
+            refreshMetadata: async () => {
+                try {
+                    const { DataService } = await import('../services/dataService');
+                    await DataService.refreshFilterMetadata();
+                } catch (error) {
+                    console.error("❌ Error refreshing metadata:", error);
+                    throw error;
+                }
+            },
 
             resetFilters: () => set((state) => ({
                 // Reset filter criteria to their initial values
