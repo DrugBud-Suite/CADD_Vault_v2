@@ -123,12 +123,12 @@ export class DataService {
 		const {
 			searchTerm,
 			selectedTags = [],
-			minStars,
+			minStars = null,
 			hasGithub,
 			hasWebserver,
 			hasPublication,
-			minCitations,
-			minRating,
+			minCitations = null,
+			minRating = null,
 			folder1,
 			category1,
 			selectedLicenses = [],
@@ -226,61 +226,97 @@ export class DataService {
 
 	/**
 	 * Private helper methods
-	 */
-	private static async fetchUniqueTags(): Promise<string[]> {
+	 */	private static async fetchUniqueTags(): Promise<string[]> {
 		console.log("  📌 Fetching unique tags...");
 		const startTime = performance.now();
 
 		try {
-			const { data, error } = await supabase
-				.from('packages')
-				.select('tags')
-				.not('tags', 'is', null);
+			const tagSet = new Set<string>();
+			let from = 0;
+			const batchSize = 1000;
+			let hasMore = true;
+			let totalRows = 0;
 
-			if (error) {
-				console.error("  ❌ Tags query error:", error);
-				throw error;
+			while (hasMore) {
+				const { data, error } = await supabase
+					.from('packages')
+					.select('tags')
+					.not('tags', 'is', null)
+					.range(from, from + batchSize - 1);
+
+				if (error) {
+					console.error("  ❌ Tags query error:", error);
+					throw error;
+				}
+
+				if (!data || data.length === 0) {
+					hasMore = false;
+					break;
+				}
+
+				data.forEach(row => {
+					if (row.tags && Array.isArray(row.tags)) {
+						row.tags.forEach((tag: string) => {
+							if (tag && tag.trim()) {
+								tagSet.add(tag.trim());
+							}
+						});
+					}
+				});
+
+				totalRows += data.length;
+				hasMore = data.length === batchSize;
+				from += batchSize;
 			}
 
-			console.log(`  📌 Tags query returned ${data?.length || 0} rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
-
-			const tagSet = new Set<string>();
-			data?.forEach(row => {
-				if (row.tags && Array.isArray(row.tags)) {
-					row.tags.forEach((tag: string) => tagSet.add(tag));
-				}
-			});
+			console.log(`  📌 Tags query completed, processed ${totalRows} total rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
 
 			return Array.from(tagSet).sort();
 		} catch (error) {
 			console.error("  ❌ Failed to fetch tags:", error);
 			throw error;
 		}
-	}
-
+	 }
 	private static async fetchUniqueLicenses(): Promise<string[]> {
 		console.log("  📜 Fetching unique licenses...");
 		const startTime = performance.now();
 
 		try {
-			const { data, error } = await supabase
-				.from('packages')
-				.select('license')
-				.not('license', 'is', null);
+			const licenseSet = new Set<string>();
+			let from = 0;
+			const batchSize = 1000;
+			let hasMore = true;
+			let totalRows = 0;
 
-			if (error) {
-				console.error("  ❌ Licenses query error:", error);
-				throw error;
+			while (hasMore) {
+				const { data, error } = await supabase
+					.from('packages')
+					.select('license')
+					.not('license', 'is', null)
+					.range(from, from + batchSize - 1);
+
+				if (error) {
+					console.error("  ❌ Licenses query error:", error);
+					throw error;
+				}
+
+				if (!data || data.length === 0) {
+					hasMore = false;
+					break;
+				}
+
+				data.forEach(row => {
+					if (row.license && row.license.trim()) {
+						licenseSet.add(row.license.trim());
+					}
+				});
+
+				totalRows += data.length;
+				hasMore = data.length === batchSize;
+				from += batchSize;
 			}
 
-			console.log(`  📜 Licenses query returned ${data?.length || 0} rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
-
-			const licenseSet = new Set<string>();
-			data?.forEach(row => {
-				if (row.license) {
-					licenseSet.add(row.license);
-				}
-			});
+			console.log(`  📜 Licenses query completed, processed ${totalRows} total rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
 
 			return Array.from(licenseSet).sort();
 		} catch (error) {
@@ -288,7 +324,6 @@ export class DataService {
 			throw error;
 		}
 	}
-
 	private static async fetchFoldersAndCategories(): Promise<{
 		folders: string[];
 		categories: Record<string, string[]>;
@@ -297,30 +332,46 @@ export class DataService {
 		const startTime = performance.now();
 
 		try {
-			const { data, error } = await supabase
-				.from('packages')
-				.select('folder1, category1')
-				.not('folder1', 'is', null);
+			const folderCategoryMap: Record<string, Set<string>> = {};
+			let from = 0;
+			const batchSize = 1000;
+			let hasMore = true;
+			let totalRows = 0;
 
-			if (error) {
-				console.error("  ❌ Folders/categories query error:", error);
-				throw error;
+			while (hasMore) {
+				const { data, error } = await supabase
+					.from('packages')
+					.select('folder1, category1')
+					.not('folder1', 'is', null)
+					.range(from, from + batchSize - 1);
+
+				if (error) {
+					console.error("  ❌ Folders/categories query error:", error);
+					throw error;
+				}
+
+				if (!data || data.length === 0) {
+					hasMore = false;
+					break;
+				}
+
+				data.forEach(row => {
+					if (row.folder1) {
+						if (!folderCategoryMap[row.folder1]) {
+							folderCategoryMap[row.folder1] = new Set();
+						}
+						if (row.category1) {
+							folderCategoryMap[row.folder1].add(row.category1);
+						}
+					}
+				});
+
+				totalRows += data.length;
+				hasMore = data.length === batchSize;
+				from += batchSize;
 			}
 
-			console.log(`  📁 Folders/categories query returned ${data?.length || 0} rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
-
-			const folderCategoryMap: Record<string, Set<string>> = {};
-
-			data?.forEach(row => {
-				if (row.folder1) {
-					if (!folderCategoryMap[row.folder1]) {
-						folderCategoryMap[row.folder1] = new Set();
-					}
-					if (row.category1) {
-						folderCategoryMap[row.folder1].add(row.category1);
-					}
-				}
-			});
+			console.log(`  📁 Folders/categories query completed, processed ${totalRows} total rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
 
 			const folders = Object.keys(folderCategoryMap).sort();
 			const categories: Record<string, string[]> = {};
