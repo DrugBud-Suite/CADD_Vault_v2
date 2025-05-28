@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react'; // Removed unused useCallbac
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
-import { PackageSuggestion, Package as PackageType } from '../types'; // Ensure PackageSuggestion and Package are defined in types.ts
+import { PackageSuggestion } from '../types'; // Ensure PackageSuggestion and Package are defined in types.ts
 import {
 	Box, Typography, TextField, Button, CircularProgress, Paper, Grid,
 	Autocomplete, Chip, Alert, MenuItem, FormControl, InputLabel, Select, SelectChangeEvent, Container
@@ -31,9 +31,6 @@ const SuggestPackagePage: React.FC = () => {
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
 	const allAvailableTags = useFilterStore(state => state.allAvailableTags);
-	// Assuming FilterState correctly has originalPackages. If TS still complains here,
-	// it might be an issue with the global FilterState type not being picked up correctly.
-	const originalPackages = useFilterStore(state => state.originalPackages);
 
 	const [availableFolders, setAvailableFolders] = useState<string[]>([]);
 	const [availableCategories, setAvailableCategories] = useState<string[]>([]);
