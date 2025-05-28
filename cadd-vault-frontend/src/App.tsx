@@ -6,7 +6,6 @@ import Layout from './components/Layout';
 import AdminRoute from './components/AdminRoute';
 import './App.css';
 import AdminBulkUploadPage from './pages/AdminBulkUploadPage';
-
 // Lazy load page components
 const HomePage = lazy(() => import('./pages/HomePage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
@@ -42,7 +41,6 @@ function App() {
 					<Route path="/" element={<HomePage />} />
 					<Route path="/about" element={<AboutPage />} />
 					<Route path="/package/:packageId" element={<PackageDetailPage />} />
-
 					{/* Routes requiring authentication (can be wrapped if more complex auth logic is needed per route) */}
 					<Route path="/suggest-package" element={<SuggestPackagePage />} />
 					<Route path="/my-suggestions" element={<MySuggestionsPage />} />
