@@ -1,5 +1,5 @@
 // src/pages/HomePage.tsx
-import React, { useEffect, useState, lazy, Suspense, ChangeEvent, Fragment } from 'react';
+import React, { useEffect, useState, lazy, Suspense, ChangeEvent, Fragment, useRef } from 'react';
 import { useFilterStore } from '../store/filterStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Package } from '../types';
@@ -59,65 +59,92 @@ const HomePage: React.FC = () => {
 	const [loadingState, setLoadingState] = useState<'metadata' | 'packages' | 'none'>('metadata');
 	const [error, setError] = useState('');
 	const [debugInfo, setDebugInfo] = useState<Record<string, any>>({});
+	const [metadataLoaded, setMetadataLoaded] = useState(false);
+
+	// Use refs to prevent duplicate fetches
+	const metadataFetchingRef = useRef(false);
+	const packagesFetchingRef = useRef(false);
 
 	const itemsPerPage = 24;
 
 	// --- Effect to fetch metadata for filters (runs once) ---
 	useEffect(() => {
+		// Check if metadata is already loaded in the store
+		const existingMetadata = useFilterStore.getState();
+		if (existingMetadata.allAvailableTags.length > 0 ||
+			existingMetadata.allAvailableFolders.length > 0) {
+			console.log("📊 Metadata already loaded, skipping fetch");
+			setMetadataLoaded(true);
+			setLoadingState('packages');
+			return;
+		}
+
+		// Prevent duplicate fetches
+		if (metadataFetchingRef.current) {
+			console.log("📊 Metadata fetch already in progress, skipping");
+			return;
+		}
+
 		const fetchMetadata = async () => {
+			metadataFetchingRef.current = true;
 			setError('');
 			setLoadingState('metadata');
 			setLoading(true);
 
-		// Add a timeout to prevent indefinite hanging
-		const timeoutId = setTimeout(() => {
-			setError("Loading is taking longer than expected. Please refresh the page.");
-			setLoading(false);
-			setLoadingState('none');
-		}, 30000); // 30 second timeout
+			// Add a timeout to prevent indefinite hanging
+			const timeoutId = setTimeout(() => {
+				setError("Loading is taking longer than expected. Please refresh the page.");
+				setLoading(false);
+				setLoadingState('none');
+				metadataFetchingRef.current = false;
+			}, 30000); // 30 second timeout
 
-		try {
-			const metadata = await DataService.fetchFilterMetadata();
+			try {
+				console.log("📊 Starting metadata fetch...");
+				const metadata = await DataService.fetchFilterMetadata();
 
-			clearTimeout(timeoutId); // Clear timeout if successful
+				clearTimeout(timeoutId); // Clear timeout if successful
 
-			// Update the filter store with metadata
-			useFilterStore.setState({
-				allAvailableTags: metadata.allAvailableTags,
-				allAvailableLicenses: metadata.allAvailableLicenses,
-				allAvailableFolders: metadata.allAvailableFolders,
-				allAvailableCategories: metadata.allAvailableCategories,
-				datasetMaxStars: metadata.datasetMaxStars,
-				datasetMaxCitations: metadata.datasetMaxCitations,
-			});
+				// Update the filter store with metadata
+				useFilterStore.setState({
+					allAvailableTags: metadata.allAvailableTags,
+					allAvailableLicenses: metadata.allAvailableLicenses,
+					allAvailableFolders: metadata.allAvailableFolders,
+					allAvailableCategories: metadata.allAvailableCategories,
+					datasetMaxStars: metadata.datasetMaxStars,
+					datasetMaxCitations: metadata.datasetMaxCitations,
+				});
 
-			// Set empty originalPackages since we're not using it for filtering anymore
-			setOriginalPackagesAndDeriveMetadata([]);
+				// Set empty originalPackages since we're not using it for filtering anymore
+				setOriginalPackagesAndDeriveMetadata([]);
 
-			setDebugInfo(prev => ({
-				...prev,
-				metadataFetch: {
-					success: true,
-					totalPackages: metadata.totalPackageCount,
-					timestamp: new Date().toISOString()
-				}
-			}));
-		} catch (err: any) {
-			clearTimeout(timeoutId); // Clear timeout on error
-			console.error("❌ Error fetching metadata:", err);
-			setError("Failed to load filter options. Please try refreshing the page.");
-			setDebugInfo(prev => ({
-				...prev,
-				metadataFetch: {
-					success: false,
-					error: err.message || "Unknown error",
-					timestamp: new Date().toISOString()
-				}
-			}));
-		} finally {
-			setLoadingState('packages');
-		}
-	};
+				setDebugInfo(prev => ({
+					...prev,
+					metadataFetch: {
+						success: true,
+						totalPackages: metadata.totalPackageCount,
+						timestamp: new Date().toISOString()
+					}
+				}));
+
+				setMetadataLoaded(true);
+			} catch (err: any) {
+				clearTimeout(timeoutId); // Clear timeout on error
+				console.error("❌ Error fetching metadata:", err);
+				setError("Failed to load filter options. Please try refreshing the page.");
+				setDebugInfo(prev => ({
+					...prev,
+					metadataFetch: {
+						success: false,
+						error: err.message || "Unknown error",
+						timestamp: new Date().toISOString()
+					}
+				}));
+			} finally {
+				setLoadingState('packages');
+				metadataFetchingRef.current = false;
+			}
+		};
 
 		fetchMetadata();
 	}, []); // Only run once on mount
@@ -160,16 +187,20 @@ const HomePage: React.FC = () => {
 
 	// --- Data Fetching for packages (paginated and filtered) ---
 	useEffect(() => {
-		const fetchPackagesData = async () => {
 		// Only proceed if metadata is loaded
-			const metadataLoaded = useFilterStore.getState().allAvailableFolders.length > 0 ||
-				useFilterStore.getState().allAvailableTags.length > 0;
+		if (!metadataLoaded) {
+			console.log("⏳ Waiting for metadata to load before fetching packages");
+			return;
+		}
 
-			if (!metadataLoaded && loadingState === 'metadata') {
-				console.log("⏳ Metadata not yet loaded, packages fetch will wait for metadata.");
-				return;
-			}
+		// Prevent duplicate fetches
+		if (packagesFetchingRef.current) {
+			console.log("📦 Package fetch already in progress, skipping");
+			return;
+		}
 
+		const fetchPackagesData = async () => {
+			packagesFetchingRef.current = true;
 			setLoading(true);
 			setLoadingState('packages');
 			setError('');
@@ -226,14 +257,15 @@ const HomePage: React.FC = () => {
 			} finally {
 				setLoading(false);
 				setLoadingState('none');
+				packagesFetchingRef.current = false;
 			}
 		};
 
 		fetchPackagesData();
 	}, [
-		currentPage, searchTerm, selectedTags, minStars, hasGithub, hasWebserver,
+		metadataLoaded, currentPage, searchTerm, selectedTags, minStars, hasGithub, hasWebserver,
 		hasPublication, minCitations, minRating, folder1, category1, selectedLicenses,
-		sortBy, sortDirection, loadingState,
+		sortBy, sortDirection,
 		setDisplayedPackages, setTotalFilteredCount
 	]);
 
@@ -274,31 +306,8 @@ const HomePage: React.FC = () => {
 
 	const pageCount = Math.ceil(totalFilteredCount / itemsPerPage);
 
-	// Loading messages based on state
-	const getLoadingMessage = () => {
-		if (loadingState === 'metadata') {
-			return "Loading filter options...";
-		} else if (loadingState === 'packages') {
-			return `Loading packages (page ${currentPage})...`;
-		}
-		return "Loading...";
-	};
-
 	return (
 		<Container maxWidth="lg" sx={{ pt: 2, px: { xs: 1, sm: 2 }, pb: 0 }}>
-			{loading && (
-				<Box display="flex" flexDirection="column" alignItems="center" py={4} gap={2}>
-					<CircularProgress />
-					<Typography variant="body1" color="text.secondary" align="center">
-						{getLoadingMessage()}
-					</Typography>
-					<Typography variant="body2" color="text.secondary" align="center" sx={{ maxWidth: 600 }}>
-						{loadingState === 'metadata' ?
-							"Loading filter options for the best browsing experience." :
-							"Applying filters and sorting to find matching packages."}
-					</Typography>
-				</Box>
-			)}
 			{error && !loading && (
 				<Box py={4}>
 					<Alert
@@ -315,15 +324,45 @@ const HomePage: React.FC = () => {
 				</Box>
 			)}
 
-			<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-				<Typography variant="h4" component="h1" sx={{
-					mb: { xs: 1, sm: 0 },
-					color: 'text.primary',
-					fontWeight: 500,
-					letterSpacing: '-0.01em'
-				}}>
-					{totalFilteredCount} Entries Found
-				</Typography>
+			{/* Show full loading state only for initial metadata load */}
+			{loading && loadingState === 'metadata' && (
+				<Box display="flex" flexDirection="column" alignItems="center" py={6} gap={2}>
+					<CircularProgress />
+					<Typography variant="body1" color="text.secondary" align="center">
+						Loading filter options...
+					</Typography>
+					<Typography variant="body2" color="text.secondary" align="center" sx={{ maxWidth: 600 }}>
+						Loading filter options for the best browsing experience.
+					</Typography>
+				</Box>
+			)}
+
+			{/* Header with loading state integration */}
+			{loadingState !== 'metadata' && (
+				<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+					<Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+						{loading && loadingState === 'packages' ? (
+							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+								<CircularProgress size={24} />
+								<Typography variant="h4" component="h1" sx={{
+									color: 'text.secondary',
+									fontWeight: 500,
+									letterSpacing: '-0.01em'
+								}}>
+									Loading packages...
+								</Typography>
+							</Box>
+						) : (
+								<Typography variant="h4" component="h1" sx={{
+									mb: { xs: 1, sm: 0 },
+									color: 'text.primary',
+									fontWeight: 500,
+									letterSpacing: '-0.01em'
+								}}>
+									{totalFilteredCount} Entries Found
+								</Typography>
+						)}
+					</Box>
 				<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
 					<Typography variant="body2" sx={{ mr: 1, minWidth: 55, color: 'text.secondary' }}>Sort by:</Typography>
 					<FormControl size="small" variant="outlined" sx={{ minWidth: 150 }}>
@@ -380,6 +419,7 @@ const HomePage: React.FC = () => {
 					</ToggleButtonGroup>
 				</Box>
 			</Box>
+			)}
 
 			{!loading && !error && (
 				<Suspense fallback={suspenseFallback}>
