@@ -9,7 +9,7 @@ import {
 	Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip,
 	Button, IconButton, Tooltip, Dialog, DialogActions, DialogContent,
 	DialogContentText, DialogTitle, TextField, Tabs, Tab, Snackbar,
-	Checkbox, FormControlLabel, ButtonGroup
+	Checkbox, FormControlLabel, ButtonGroup, Badge
 	// Grid and MuiLink removed as they were unused
 } from '@mui/material';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
@@ -21,6 +21,8 @@ import CodeIcon from '@mui/icons-material/Code'; // For repository
 import ArticleIcon from '@mui/icons-material/Article'; // For publication
 import WebIcon from '@mui/icons-material/Web'; // For webserver
 import LinkIcon from '@mui/icons-material/Link'; // For other links
+import WarningIcon from '@mui/icons-material/Warning'; // For duplicate warnings
+import ErrorIcon from '@mui/icons-material/Error'; // For exact duplicates
 import EditSuggestionModal from '../components/EditSuggestionModal';
 
 const isValidUrl = (urlString: string | undefined | null): boolean => {
@@ -209,11 +211,168 @@ const PackageTooltipContent: React.FC<{ suggestion: PackageSuggestion }> = ({ su
 	);
 };
 
+// Interface for duplicate detection
+interface DuplicateInfo {
+	type: 'exact_duplicate' | 'similar_suggestion' | 'similar_package';
+	conflictingItem: string;
+	conflictingId?: string;
+	source: 'suggestions' | 'packages';
+}
+
+// Utility functions for duplicate detection
+const normalizeString = (str: string): string => {
+	return str.toLowerCase()
+		.replace(/[^\w\s]/g, '') // Remove punctuation
+		.replace(/\s+/g, ' ') // Normalize whitespace
+		.trim();
+};
+
+const calculateSimilarity = (str1: string, str2: string): number => {
+	const norm1 = normalizeString(str1);
+	const norm2 = normalizeString(str2);
+
+	if (norm1 === norm2) return 1.0;
+
+	// Simple word-based similarity
+	const words1 = norm1.split(' ');
+	const words2 = norm2.split(' ');
+	const allWords = new Set([...words1, ...words2]);
+	const commonWords = words1.filter(word => words2.includes(word));
+
+	return commonWords.length / allWords.size;
+};
+
+const findDuplicates = (
+	suggestion: PackageSuggestion,
+	allSuggestions: PackageSuggestion[],
+	existingPackages: PackageType[]
+): DuplicateInfo[] => {
+	const duplicates: DuplicateInfo[] = [];
+	const suggestionName = suggestion.package_name;
+
+	// Check for exact duplicates in suggestions
+	const exactDuplicatesSuggestions = allSuggestions.filter(s =>
+		s.id !== suggestion.id &&
+		normalizeString(s.package_name) === normalizeString(suggestionName)
+	);
+
+	exactDuplicatesSuggestions.forEach(duplicate => {
+		duplicates.push({
+			type: 'exact_duplicate',
+			conflictingItem: duplicate.package_name,
+			conflictingId: duplicate.id,
+			source: 'suggestions'
+		});
+	});
+
+	// Check for exact duplicates in packages
+	const exactDuplicatesPackages = existingPackages.filter(pkg =>
+		normalizeString(pkg.package_name) === normalizeString(suggestionName)
+	);
+
+	exactDuplicatesPackages.forEach(duplicate => {
+		duplicates.push({
+			type: 'exact_duplicate',
+			conflictingItem: duplicate.package_name,
+			conflictingId: duplicate.id,
+			source: 'packages'
+		});
+	});
+
+	// Check for similar suggestions (similarity > 0.8 but not exact)
+	if (duplicates.length === 0) { // Only check for similarities if no exact duplicates
+		const similarSuggestions = allSuggestions.filter(s => {
+			if (s.id === suggestion.id) return false;
+			const similarity = calculateSimilarity(s.package_name, suggestionName);
+			return similarity > 0.8 && similarity < 1.0;
+		});
+
+		similarSuggestions.forEach(similar => {
+			duplicates.push({
+				type: 'similar_suggestion',
+				conflictingItem: similar.package_name,
+				conflictingId: similar.id,
+				source: 'suggestions'
+			});
+		});
+
+		// Check for similar packages (similarity > 0.8 but not exact)
+		const similarPackages = existingPackages.filter(pkg => {
+			const similarity = calculateSimilarity(pkg.package_name, suggestionName);
+			return similarity > 0.8 && similarity < 1.0;
+		});
+
+		similarPackages.forEach(similar => {
+			duplicates.push({
+				type: 'similar_package',
+				conflictingItem: similar.package_name,
+				conflictingId: similar.id,
+				source: 'packages'
+			});
+		});
+	}
+
+	return duplicates;
+};
+
+const DuplicateWarningComponent: React.FC<{ duplicates: DuplicateInfo[] }> = ({ duplicates }) => {
+	if (duplicates.length === 0) return null;
+
+	const exactDuplicates = duplicates.filter(d => d.type === 'exact_duplicate');
+	const similarItems = duplicates.filter(d => d.type !== 'exact_duplicate');
+
+	return (
+		<Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+			{exactDuplicates.length > 0 && (
+				<Tooltip
+					title={
+						<Box>
+							<Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+								Exact Duplicates Found:
+							</Typography>
+							{exactDuplicates.map((dup, idx) => (
+								<Typography key={idx} variant="body2" sx={{ fontSize: '0.75rem' }}>
+									• "{dup.conflictingItem}" in {dup.source}
+								</Typography>
+							))}
+						</Box>
+					}
+				>
+					<Badge color="error" variant="dot">
+						<ErrorIcon color="error" fontSize="small" />
+					</Badge>
+				</Tooltip>
+			)}
+			{similarItems.length > 0 && exactDuplicates.length === 0 && (
+				<Tooltip
+					title={
+						<Box>
+							<Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+								Similar Items Found:
+							</Typography>
+							{similarItems.map((dup, idx) => (
+								<Typography key={idx} variant="body2" sx={{ fontSize: '0.75rem' }}>
+									• "{dup.conflictingItem}" in {dup.source}
+								</Typography>
+							))}
+						</Box>
+					}
+				>
+					<Badge color="warning" variant="dot">
+						<WarningIcon color="warning" fontSize="small" />
+					</Badge>
+				</Tooltip>
+			)}
+		</Box>
+	);
+};
+
 
 const AdminReviewSuggestionsPage: React.FC = () => {
 	const navigate = useNavigate();
 	const { isAdmin, loading: authLoading, currentUser } = useAuth();
 	const [suggestions, setSuggestions] = useState<PackageSuggestion[]>([]);
+	const [existingPackages, setExistingPackages] = useState<PackageType[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [actionLoading, setActionLoading] = useState<string | null>(null); // For specific row actions
 	const [error, setError] = useState<string | null>(null);
@@ -238,6 +397,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 		setLoading(true);
 		setError(null);
 		try {
+			// Fetch suggestions
 			const { data, error: rpcError } = await supabase
 				.rpc('get_suggestions_with_user_email', { filter_status: status });
 
@@ -252,10 +412,24 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 				return;
 			}
 			setSuggestions(data as PackageSuggestion[] || []);
+
+			// Fetch existing packages for duplicate detection
+			const { data: packagesData, error: packagesError } = await supabase
+				.from('packages')
+				.select('id, package_name');
+
+			if (packagesError) {
+				console.error("Error fetching packages for duplicate detection:", packagesError);
+				// Don't fail completely, just log the error and continue without duplicate detection
+				setExistingPackages([]);
+			} else {
+				setExistingPackages(packagesData as PackageType[] || []);
+			}
 		} catch (err: any) {
 			console.error("Error fetching suggestions:", err.message);
 			setError(`Failed to load suggestions: ${err.message}`);
 			setSuggestions([]);
+			setExistingPackages([]);
 		} finally {
 			setLoading(false);
 		}
@@ -659,6 +833,11 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 										/>
 									</TableCell>
 								<TableCell>Package Name</TableCell>
+									<TableCell align="center" sx={{ width: '60px' }}>
+										<Tooltip title="Duplicate/Similar Warnings">
+											<WarningIcon fontSize="small" />
+										</Tooltip>
+									</TableCell>
 								<TableCell>Suggested By</TableCell>
 								<TableCell>Submitted</TableCell>
 								<TableCell>Status</TableCell>
@@ -686,108 +865,114 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{suggestions.map((suggestion) => (
-								<TableRow key={suggestion.id} hover sx={{ opacity: actionLoading === suggestion.id ? 0.5 : 1 }}>
-									<TableCell padding="checkbox">
-										<Checkbox
-											checked={selectedSuggestions.has(suggestion.id)}
-											onChange={() => handleSelectSuggestion(suggestion.id)}
-											disabled={batchActionLoading || actionLoading === suggestion.id}
-										/>
-									</TableCell>
-									<TableCell component="th" scope="row">
-										<Tooltip
-											title={<PackageTooltipContent suggestion={suggestion} />}
-											placement="right"
-											componentsProps={{
-												tooltip: {
-													sx: {
-														bgcolor: 'background.paper',
-														color: 'text.primary',
-														border: '1px solid',
-														borderColor: 'divider',
-														boxShadow: 3,
-														'& .MuiTooltip-arrow': {
-															color: 'background.paper',
-															'&::before': {
+								{suggestions.map((suggestion) => {
+									const duplicates = findDuplicates(suggestion, suggestions, existingPackages);
+									return (
+										<TableRow key={suggestion.id} hover sx={{ opacity: actionLoading === suggestion.id ? 0.5 : 1 }}>
+											<TableCell padding="checkbox">
+												<Checkbox
+													checked={selectedSuggestions.has(suggestion.id)}
+													onChange={() => handleSelectSuggestion(suggestion.id)}
+													disabled={batchActionLoading || actionLoading === suggestion.id}
+												/>
+											</TableCell>
+											<TableCell component="th" scope="row">
+												<Tooltip
+													title={<PackageTooltipContent suggestion={suggestion} />}
+													placement="right"
+													componentsProps={{
+														tooltip: {
+															sx: {
+																bgcolor: 'background.paper',
+																color: 'text.primary',
 																border: '1px solid',
 																borderColor: 'divider',
+																boxShadow: 3,
+																'& .MuiTooltip-arrow': {
+																	color: 'background.paper',
+																	'&::before': {
+																		border: '1px solid',
+																		borderColor: 'divider',
+																	},
+																},
 															},
 														},
-													},
-												},
-											}}
-											arrow
-										>
-											<Typography
-												sx={{
-													cursor: 'pointer',
-													fontWeight: 500,
-													color: 'primary.main',
-													'&:hover': {
-														textDecoration: 'underline'
-													}
-												}}
-												onClick={() => handleOpenEditModal(suggestion)}
-											>
-												{suggestion.package_name}
-											</Typography>
-										</Tooltip>
-									</TableCell>
-									<TableCell>{suggestion.suggester_email || 'Anonymous/Error'}</TableCell>
-									<TableCell>{new Date(suggestion.created_at).toLocaleDateString()}</TableCell>
-									<TableCell>
-										<Chip label={suggestion.status} color={getStatusChipColor(suggestion.status)} size="small" />
-									</TableCell>
-									<TableCell align="center"><URLIcon url={suggestion.repo_url} type="repo" /></TableCell>
-									<TableCell align="center"><URLIcon url={suggestion.publication_url} type="publication" isRequired={!suggestion.webserver_url && !suggestion.repo_url && !suggestion.link_url} /></TableCell>
-									<TableCell align="center"><URLIcon url={suggestion.webserver_url} type="webserver" /></TableCell>
-									<TableCell align="center"><URLIcon url={suggestion.link_url} type="link" /></TableCell>
-									<TableCell align="right">
-										<Tooltip title="View/Edit Details">
-											<span> {/* Span for Tooltip when IconButton is disabled */}
-												<IconButton size="small" onClick={() => handleOpenEditModal(suggestion)} disabled={actionLoading === suggestion.id}>
-													<EditIcon />
-												</IconButton>
-											</span>
-										</Tooltip>
-										{suggestion.status === 'pending' && (
-											<>
-												<Tooltip title="Approve">
-													<span>
-														<IconButton size="small" color="success" onClick={() => handleApproveSuggestion(suggestion.id)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
-															<ThumbUpIcon />
-														</IconButton>
-													</span>
+													}}
+													arrow
+												>
+													<Typography
+														sx={{
+															cursor: 'pointer',
+															fontWeight: 500,
+															color: 'primary.main',
+															'&:hover': {
+																textDecoration: 'underline'
+															}
+														}}
+														onClick={() => handleOpenEditModal(suggestion)}
+													>
+														{suggestion.package_name}
+													</Typography>
 												</Tooltip>
-												<Tooltip title="Reject">
-													<span>
-														<IconButton size="small" color="error" onClick={() => openRejectModal(suggestion)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
-															<ThumbDownIcon />
-														</IconButton>
-													</span>
-												</Tooltip>
-											</>
-										)}
-										{suggestion.status === 'approved' && (
-											<Tooltip title="Add to Database Directly">
-												<span>
-													<IconButton size="small" color="primary" onClick={() => handleAddPackageDirectly(suggestion)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
-														<AddToQueueIcon />
+											</TableCell>
+										<TableCell align="center">
+											<DuplicateWarningComponent duplicates={duplicates} />
+										</TableCell>
+										<TableCell>{suggestion.suggester_email || 'Anonymous/Error'}</TableCell>
+										<TableCell>{new Date(suggestion.created_at).toLocaleDateString()}</TableCell>
+										<TableCell>
+											<Chip label={suggestion.status} color={getStatusChipColor(suggestion.status)} size="small" />
+										</TableCell>
+										<TableCell align="center"><URLIcon url={suggestion.repo_url} type="repo" /></TableCell>
+										<TableCell align="center"><URLIcon url={suggestion.publication_url} type="publication" isRequired={!suggestion.webserver_url && !suggestion.repo_url && !suggestion.link_url} /></TableCell>
+										<TableCell align="center"><URLIcon url={suggestion.webserver_url} type="webserver" /></TableCell>
+										<TableCell align="center"><URLIcon url={suggestion.link_url} type="link" /></TableCell>
+										<TableCell align="right">
+											<Tooltip title="View/Edit Details">
+												<span> {/* Span for Tooltip when IconButton is disabled */}
+													<IconButton size="small" onClick={() => handleOpenEditModal(suggestion)} disabled={actionLoading === suggestion.id}>
+														<EditIcon />
 													</IconButton>
 												</span>
 											</Tooltip>
-										)}
-										<Tooltip title="Delete Suggestion Permanently">
-											<span>
-												<IconButton size="small" color="error" onClick={() => handleDeleteSuggestion(suggestion.id, suggestion.package_name)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
-													<DeleteForeverIcon />
-												</IconButton>
-											</span>
-										</Tooltip>
-									</TableCell>
-								</TableRow>
-							))}
+											{suggestion.status === 'pending' && (
+												<>
+													<Tooltip title="Approve">
+														<span>
+															<IconButton size="small" color="success" onClick={() => handleApproveSuggestion(suggestion.id)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
+																<ThumbUpIcon />
+															</IconButton>
+														</span>
+													</Tooltip>
+													<Tooltip title="Reject">
+														<span>
+															<IconButton size="small" color="error" onClick={() => openRejectModal(suggestion)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
+																<ThumbDownIcon />
+															</IconButton>
+														</span>
+													</Tooltip>
+												</>
+											)}
+											{suggestion.status === 'approved' && (
+												<Tooltip title="Add to Database Directly">
+													<span>
+														<IconButton size="small" color="primary" onClick={() => handleAddPackageDirectly(suggestion)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
+															<AddToQueueIcon />
+														</IconButton>
+													</span>
+												</Tooltip>
+											)}
+											<Tooltip title="Delete Suggestion Permanently">
+												<span>
+													<IconButton size="small" color="error" onClick={() => handleDeleteSuggestion(suggestion.id, suggestion.package_name)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
+														<DeleteForeverIcon />
+													</IconButton>
+												</span>
+											</Tooltip>
+										</TableCell>
+									</TableRow>
+								);
+							})}
 						</TableBody>
 					</Table>
 				</TableContainer>
