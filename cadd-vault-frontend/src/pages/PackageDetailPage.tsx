@@ -5,7 +5,6 @@ import { Box, Typography, Grid, Paper, Button, CircularProgress, Link, Chip, use
 import { alpha } from '@mui/material/styles';
 import { supabase } from '../supabase';
 import { Package } from '../types';
-import { DataService } from '../services/dataService';
 import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete, FolderOutlined, CategoryOutlined } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
 import { RatingEventEmitter, RatingService, type RatingUpdateEvent } from '../services/ratingService';
