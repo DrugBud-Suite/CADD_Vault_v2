@@ -1,6 +1,6 @@
 // src/services/dataService.ts
 import { supabase } from '../supabase';
-import { Package } from '../types';
+import { Package, PackageQueryResult } from '../types';
 
 export interface FilterMetadata {
 	allAvailableTags: string[];
@@ -28,11 +28,9 @@ export interface PackageQueryParams {
 	sortDirection?: 'asc' | 'desc';
 	page?: number;
 	pageSize?: number;
-}
-
-export interface PackageQueryResult {
-	packages: Package[];
-	totalCount: number;
+	// New parameter to include user ratings
+	includeUserRatings?: boolean;
+	currentUserId?: string | null;
 }
 
 export class DataService {
@@ -162,7 +160,9 @@ export class DataService {
 			sortBy = 'package_name',
 			sortDirection = 'asc',
 			page = 1,
-			pageSize = 24
+			pageSize = 24,
+			includeUserRatings = false,
+			currentUserId = null
 		} = params;
 
 		const startTime = performance.now();
@@ -182,10 +182,9 @@ export class DataService {
 			}
 
 			if (selectedTags.length > 0) {
-				// For each tag, ensure it exists in the tags array
-				selectedTags.forEach(tag => {
-					query = query.contains('tags', [tag]);
-				});
+				// Use overlaps operator to check if any selected tag exists in the tags array
+				// This creates an OR condition between tags
+				query = query.overlaps('tags', selectedTags);
 			}
 
 			if (minStars !== null && minStars > 0) {
@@ -238,16 +237,101 @@ export class DataService {
 				throw error;
 			}
 
+			let packages = (data as Package[]) || [];
+
+			// Fetch user ratings if requested and user is authenticated
+			if (includeUserRatings && currentUserId && packages.length > 0) {
+				console.log(`🔖 Fetching user ratings for ${packages.length} packages...`);
+
+				const packageIds = packages.map(pkg => pkg.id);
+				const userRatings = await this.fetchUserRatingsForPackages(packageIds, currentUserId);
+
+				// Merge user rating data into packages
+				packages = packages.map(pkg => ({
+					...pkg,
+					user_rating: userRatings.get(pkg.id)?.rating || null,
+					user_rating_id: userRatings.get(pkg.id)?.rating_id || null
+				}));
+			}
+
 			const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-			console.log(`🔎 Package fetch completed in ${totalTime}s. Total matches: ${count}, returned: ${data?.length || 0}`);
+			console.log(`🔎 Package fetch completed in ${totalTime}s. Total matches: ${count}, returned: ${packages.length}`);
 
 			return {
-				packages: (data as Package[]) || [],
+				packages,
 				totalCount: count || 0
 			};
 		} catch (error) {
 			console.error("❌ Error fetching packages:", error);
 			throw error;
+		}
+	}
+
+	/**
+	 * Fetch user ratings for multiple packages efficiently
+	 */
+	private static async fetchUserRatingsForPackages(
+		packageIds: string[],
+		userId: string
+	): Promise<Map<string, { rating: number; rating_id: string }>> {
+		try {
+			const { data, error } = await supabase
+				.from('ratings')
+				.select('package_id, rating, id')
+				.eq('user_id', userId)
+				.in('package_id', packageIds);
+
+			if (error) throw error;
+
+			const ratingsMap = new Map<string, { rating: number; rating_id: string }>();
+
+			if (data) {
+				data.forEach(rating => {
+					ratingsMap.set(rating.package_id, {
+						rating: rating.rating,
+						rating_id: rating.id
+					});
+				});
+			}
+
+			return ratingsMap;
+		} catch (error) {
+			console.error('Error fetching user ratings for packages:', error);
+			// Return empty map on error - don't fail the entire request
+			return new Map();
+		}
+	}
+
+	/**
+	 * Fetch user rating for a single package
+	 */
+	static async fetchUserRatingForPackage(
+		packageId: string,
+		userId: string
+	): Promise<{ rating: number; rating_id: string } | null> {
+		try {
+			const { data, error } = await supabase
+				.from('ratings')
+				.select('rating, id')
+				.eq('user_id', userId)
+				.eq('package_id', packageId)
+				.single();
+
+			if (error) {
+				if (error.code === 'PGRST116') {
+					// No rating found
+					return null;
+				}
+				throw error;
+			}
+
+			return {
+				rating: data.rating,
+				rating_id: data.id
+			};
+		} catch (error) {
+			console.error('Error fetching user rating for package:', error);
+			return null;
 		}
 	}
 
