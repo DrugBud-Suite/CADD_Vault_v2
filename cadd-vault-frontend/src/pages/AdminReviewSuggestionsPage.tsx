@@ -730,6 +730,102 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 		}
 	};
 
+	const handleBatchAddToDatabase = async () => {
+		if (selectedSuggestions.size === 0) return;
+		if (!window.confirm(`Are you sure you want to add ${selectedSuggestions.size} selected approved suggestion(s) to the database?`)) return;
+
+		setBatchActionLoading(true);
+		setError(null);
+		setSuccessMessage(null);
+
+		try {
+			// Get the selected suggestions
+			const selectedSuggestionsList = suggestions.filter(s => selectedSuggestions.has(s.id));
+
+			let successCount = 0;
+			let errorCount = 0;
+			const errors: string[] = [];
+
+			// Process each suggestion individually
+			for (const suggestion of selectedSuggestionsList) {
+				try {
+					const newPackageId = crypto.randomUUID(); // Generate a new UUID for the package
+
+					const packageToInsert: Omit<PackageType, 'average_rating' | 'ratings_count' | 'ratings_sum' | 'github_stars' | 'last_commit' | 'last_commit_ago' | 'citations' | 'journal' | 'jif' | 'primary_language' | 'github_owner' | 'github_repo' | 'page_icon'> & { id: string } = {
+						id: newPackageId,
+						package_name: suggestion.package_name,
+						description: suggestion.description || undefined,
+						publication: suggestion.publication_url || undefined,
+						webserver: suggestion.webserver_url || undefined,
+						repo_link: suggestion.repo_url || undefined,
+						link: suggestion.link_url || undefined,
+						license: suggestion.license || undefined,
+						tags: suggestion.tags || undefined,
+						folder1: suggestion.folder1 || undefined,
+						category1: suggestion.category1 || undefined,
+					};
+
+					// Insert package into database
+					const { data: insertedPackage, error: insertError } = await supabase
+						.from('packages')
+						.insert(packageToInsert)
+						.select()
+						.single();
+
+					if (insertError) {
+						console.error(`Error inserting package for suggestion ${suggestion.package_name}:`, insertError);
+						errors.push(`Failed to add "${suggestion.package_name}": ${insertError.message}`);
+						errorCount++;
+						continue;
+					}
+
+					if (insertedPackage) {
+						// Update suggestion status to 'added'
+						const { error: updateSuggestionError } = await supabase
+							.from('package_suggestions')
+							.update({
+								status: 'added',
+								reviewed_at: new Date().toISOString(),
+								reviewed_by_admin_id: currentUser?.id,
+								admin_notes: suggestion.admin_notes ? `${suggestion.admin_notes}; Added to DB via batch operation.` : 'Added to DB via batch operation.'
+							})
+							.eq('id', suggestion.id);
+
+						if (updateSuggestionError) {
+							console.error(`Error updating suggestion status for ${suggestion.package_name}:`, updateSuggestionError);
+							errors.push(`Package "${suggestion.package_name}" added but failed to update suggestion status: ${updateSuggestionError.message}`);
+							errorCount++;
+						} else {
+							successCount++;
+						}
+					}
+				} catch (err: any) {
+					console.error(`Error processing suggestion ${suggestion.package_name}:`, err);
+					errors.push(`Failed to process "${suggestion.package_name}": ${err.message}`);
+					errorCount++;
+				}
+			}
+
+			// Set appropriate success/error messages
+			if (successCount > 0 && errorCount === 0) {
+				setSuccessMessage(`Successfully added ${successCount} package(s) to database and marked suggestions as 'Added'.`);
+			} else if (successCount > 0 && errorCount > 0) {
+				setSuccessMessage(`Added ${successCount} package(s) successfully. ${errorCount} failed.`);
+				setError(`Some operations failed: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`);
+			} else {
+				setError(`All operations failed: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`);
+			}
+
+			setSelectedSuggestions(new Set());
+			setIsSelectAll(false);
+			fetchSuggestions(filterStatus);
+		} catch (err: any) {
+			setError(`Failed to batch add packages: ${err.message}`);
+		} finally {
+			setBatchActionLoading(false);
+		}
+	};
+
 	const getStatusChipColor = (status: PackageSuggestion['status']) => {
 		switch (status) {
 			case 'pending': return 'warning';
@@ -816,6 +912,16 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 											Reject ({selectedSuggestions.size})
 										</Button>
 									</>
+								)}
+								{filterStatus === 'approved' && (
+									<Button
+										color="primary"
+										onClick={handleBatchAddToDatabase}
+										startIcon={<AddToQueueIcon />}
+										disabled={batchActionLoading}
+									>
+										Add to Database ({selectedSuggestions.size})
+									</Button>
 								)}
 								<Button
 									color="error"
