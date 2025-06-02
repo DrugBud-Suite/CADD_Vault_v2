@@ -207,8 +207,10 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 			<Stack direction="column" spacing={1} alignItems="flex-end" sx={{ flexShrink: 0, pt: 0.5 }}>
 				<RatingInput
 					packageId={localPkg.id}
-					initialAverageRating={localPkg.average_rating ?? 0}
-					initialRatingsCount={localPkg.ratings_count ?? 0}
+					averageRating={localPkg.average_rating ?? 0}
+					ratingsCount={localPkg.ratings_count ?? 0}
+					userRating={localPkg.user_rating}
+					userRatingId={localPkg.user_rating_id}
 				/>
 				{/* Replaced with PackageActions component */}
 				<PackageActions pkg={localPkg} spacing={0.5} />
