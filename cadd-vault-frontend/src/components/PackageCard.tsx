@@ -156,8 +156,10 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 					<Box sx={{ flexShrink: 0 }}>
 						<RatingInput
 							packageId={localPkg.id}
-							initialAverageRating={localPkg.average_rating ?? 0}
-							initialRatingsCount={localPkg.ratings_count ?? 0}
+							averageRating={localPkg.average_rating ?? 0}
+							ratingsCount={localPkg.ratings_count ?? 0}
+							userRating={localPkg.user_rating}
+							userRatingId={localPkg.user_rating_id}
 						/>
 					</Box>
 				</Box>
