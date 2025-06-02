@@ -1,5 +1,5 @@
 // src/components/RatingInput.tsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
 	Box,
 	Rating,
@@ -16,107 +16,44 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useAuth } from '../context/AuthContext';
-import { RatingService, RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
+import { RatingService, RatingEventEmitter } from '../services/ratingService';
 
 interface RatingInputProps {
 	packageId: string;
-	initialAverageRating?: number;
-	initialRatingsCount?: number;
+	averageRating?: number;
+	ratingsCount?: number;
+	userRating?: number | null;
+	userRatingId?: string | null;
 }
 
 const RatingInput: React.FC<RatingInputProps> = ({
 	packageId,
-	initialAverageRating = 0,
-	initialRatingsCount = 0,
+	averageRating = 0,
+	ratingsCount = 0,
+	userRating = null,
 }) => {
 	const { currentUser } = useAuth();
 
-	// Local state for this component
-	const [averageRating, setAverageRating] = useState(initialAverageRating);
-	const [ratingsCount, setRatingsCount] = useState(initialRatingsCount);
-	const [userRating, setUserRating] = useState<number | null>(null);
-	const [popoverRating, setPopoverRating] = useState<number | null>(null);
-
-	// UI state
+	// Local state for UI interactions only
+	const [popoverRating, setPopoverRating] = useState<number | null>(userRating);
 	const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
-	const [loading, setLoading] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// Refs to prevent stale closures
-	const packageIdRef = useRef(packageId);
+	// Ref to prevent stale closures
 	const mountedRef = useRef(true);
 
-	// Update refs when props change
-	useEffect(() => {
-		packageIdRef.current = packageId;
-	}, [packageId]);
-
 	// Cleanup on unmount
-	useEffect(() => {
+	React.useEffect(() => {
 		return () => {
 			mountedRef.current = false;
 		};
 	}, []);
 
-	// Initialize component data
-	const fetchInitialData = useCallback(async () => {
-		if (!currentUser) {
-			setUserRating(null);
-		return;
-	}
-
-	  setLoading(true);
-	  setError(null);
-
-	  try {
-		// Fetch user's current rating
-		const userRatingData = await RatingService.getUserRating(packageId);
-
-		  if (mountedRef.current) {
-			  setUserRating(userRatingData?.rating || null);
-			  setPopoverRating(userRatingData?.rating || null);
-		  }
-	  } catch (err: any) {
-		  console.error('Error fetching initial rating data:', err);
-		  if (mountedRef.current) {
-			  setError('Failed to load rating data');
-		  }
-	  } finally {
-		  if (mountedRef.current) {
-			  setLoading(false);
-		  }
-	  }
-  }, [currentUser, packageId]);
-
-	// Subscribe to rating updates from other components
-	useEffect(() => {
-		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
-			if (event.packageId === packageIdRef.current && mountedRef.current) {
-				setAverageRating(event.averageRating);
-				setRatingsCount(event.ratingsCount);
-
-		  // Update user rating if provided
-		  if (event.userRating !== undefined) {
-			  setUserRating(event.userRating);
-			  setPopoverRating(event.userRating);
-		  }
-	  }
-	});
-
-	  return unsubscribe;
-  }, []);
-
-	// Update local state when props change
-	useEffect(() => {
-	  setAverageRating(initialAverageRating);
-	  setRatingsCount(initialRatingsCount);
-  }, [initialAverageRating, initialRatingsCount]);
-
-	// Fetch initial data when component mounts or user changes
-	useEffect(() => {
-		fetchInitialData();
-	}, [fetchInitialData]);
+	// Update popover rating when userRating prop changes
+	React.useEffect(() => {
+		setPopoverRating(userRating);
+	}, [userRating]);
 
 	// Event handlers
 	const handlePopoverOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -131,8 +68,7 @@ const RatingInput: React.FC<RatingInputProps> = ({
 		setAnchorEl(null);
 	  setPopoverRating(userRating);
 	  setError(null);
-  };
-
+	};
 	const handleRatingChange = async (
 		_event: React.SyntheticEvent,
 		newValue: number | null,
@@ -147,13 +83,10 @@ const RatingInput: React.FC<RatingInputProps> = ({
 		const result = await RatingService.upsertRating(packageId, newValue);
 
 		if (mountedRef.current) {
-			// Update local state
-			setAverageRating(result.average_rating);
-			setRatingsCount(result.ratings_count);
-			setUserRating(result.user_rating);
+			// Update local popover state
 			setPopoverRating(result.user_rating);
 
-		  // Emit event for other components
+			// Emit event for other components to update their data
 		  RatingEventEmitter.emit({
 			  packageId,
 			  averageRating: result.average_rating,
@@ -191,13 +124,10 @@ const RatingInput: React.FC<RatingInputProps> = ({
 		  const result = await RatingService.deleteRating(packageId);
 
 		if (mountedRef.current) {
-			// Update local state
-			setAverageRating(result.average_rating);
-			setRatingsCount(result.ratings_count);
-			setUserRating(null);
+			// Update local popover state
 			setPopoverRating(null);
 
-		  // Emit event for other components
+			// Emit event for other components to update their data
 		  RatingEventEmitter.emit({
 			  packageId,
 			  averageRating: result.average_rating,
@@ -231,10 +161,10 @@ const RatingInput: React.FC<RatingInputProps> = ({
 					  size="small"
 					  onClick={handlePopoverOpen}
 					  aria-describedby={id}
-					  disabled={loading || submitting || !currentUser}
+						disabled={submitting || !currentUser}
 					  sx={{ p: 0.5 }}
 				  >
-					  {loading || submitting ? (
+						{submitting ? (
 						  <CircularProgress size={20} />
 					  ) : (
 						  <StarIcon
