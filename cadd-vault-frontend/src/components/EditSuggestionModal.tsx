@@ -1,7 +1,7 @@
 // src/components/EditSuggestionModal.tsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { PackageSuggestion, Package as PackageType } from '../types'; // Import PackageType
+import { PackageSuggestion } from '../types';
 import {
 	Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
 	CircularProgress, Alert, Grid, Autocomplete, Chip, Select, MenuItem, FormControl, InputLabel,
@@ -203,7 +203,6 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			setLoading(false);
 		}
 	};
-
 	const handleSaveAndApprove = async () => {
 		if (!suggestion || !currentUser || !isAdmin) {
 			setError("Action not allowed or user not identified.");
@@ -217,88 +216,118 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		setError(null);
 		setSuccessMessage(null);
 
-		// First, save the suggestion details
-		const suggestionUpdates: Partial<Omit<PackageSuggestion, 'id' | 'created_at' | 'status' | 'suggested_by_user_id' | 'reviewed_at' | 'reviewed_by_admin_id' | 'suggester_email'>> = {
-			package_name: formData.package_name,
-			description: formData.description || undefined,
-			publication_url: formData.publication_url || undefined,
-			webserver_url: formData.webserver_url || undefined,
-			repo_url: formData.repo_url || undefined,
-			link_url: formData.link_url || undefined,
-			license: formData.license || undefined,
-			tags: formData.tags && formData.tags.length > 0 ? formData.tags : undefined,
-			folder1: formData.folder1 || undefined,
-			category1: formData.category1 || undefined,
-			suggestion_reason: formData.suggestion_reason || undefined,
-			admin_notes: formData.admin_notes || undefined,
-		};
+		// Create timeout promise to prevent hanging
+		const timeoutPromise = new Promise((_, reject) => {
+			setTimeout(() => reject(new Error('Operation timed out after 60 seconds')), 60000);
+		});
 
 		try {
-			const { error: saveError } = await supabase
-				.from('package_suggestions')
-				.update(suggestionUpdates)
-				.eq('id', suggestion.id);
+			// Wrap the entire operation in a timeout
+			await Promise.race([
+				(async () => {
+					// First, save the suggestion details
+					const suggestionUpdates: Partial<Omit<PackageSuggestion, 'id' | 'created_at' | 'status' | 'suggested_by_user_id' | 'reviewed_at' | 'reviewed_by_admin_id' | 'suggester_email'>> = {
+						package_name: formData.package_name,
+						description: formData.description || undefined,
+						publication_url: formData.publication_url || undefined,
+						webserver_url: formData.webserver_url || undefined,
+						repo_url: formData.repo_url || undefined,
+						link_url: formData.link_url || undefined,
+						license: formData.license || undefined,
+						tags: formData.tags && formData.tags.length > 0 ? formData.tags : undefined,
+						folder1: formData.folder1 || undefined,
+						category1: formData.category1 || undefined,
+						suggestion_reason: formData.suggestion_reason || undefined,
+						admin_notes: formData.admin_notes || undefined,
+					};
 
-			if (saveError) {
-				console.error("Error saving suggestion details:", saveError);
-				throw new Error(`Failed to save suggestion details: ${saveError.message}`);
-			}
+					console.log("Saving suggestion updates:", suggestionUpdates);
 
-			// Then, approve the suggestion
-			const approvalData = {
-				status: 'approved',
-				reviewed_at: new Date().toISOString(),
-				reviewed_by_admin_id: currentUser.id,
-			};
-			const { error: approveError } = await supabase
-				.from('package_suggestions')
-				.update(approvalData)
-				.eq('id', suggestion.id);
+					const { error: saveError } = await supabase
+						.from('package_suggestions')
+						.update(suggestionUpdates)
+						.eq('id', suggestion.id);
 
-			if (approveError) {
-				console.error("Error approving suggestion:", approveError);
-				throw new Error(`Suggestion saved, but failed to approve: ${approveError.message}`);
-			}
+					if (saveError) {
+						console.error("Error saving suggestion details:", saveError);
+						throw new Error(`Failed to save suggestion details: ${saveError.message}`);
+					}
 
-			// Finally, create the package in the 'packages' table
-			// Ensure this object matches the 'packages' table schema from supabase_setup.txt
-			// and the PackageType from types.ts, omitting fields handled by DB or not applicable.
-			const newPackageId = crypto.randomUUID(); // Generate a new UUID for the package
+					console.log("Suggestion details saved successfully");
 
-			const newPackageDataForTable: Omit<PackageType, 'average_rating' | 'ratings_count' | 'last_commit_ago' | 'github_stars' | 'citations' | 'jif' | 'journal' | 'last_commit' | 'page_icon' | 'primary_language' | 'github_owner' | 'github_repo' | 'name' | 'version' | 'repository' | 'subcategory1' | 'subsubcategory1'> & { id: string } = {
-				id: newPackageId, // Assign the generated UUID
-				package_name: formData.package_name!, // This is required
-				description: formData.description || undefined,
-				publication: formData.publication_url || undefined, // Maps to 'publication'
-				webserver: formData.webserver_url || undefined,     // Maps to 'webserver'
-				repo_link: formData.repo_url || undefined,         // Maps to 'repo_link'
-				link: formData.link_url || undefined,              // Maps to 'link'
-				license: formData.license || undefined,
-				tags: formData.tags && formData.tags.length > 0 ? formData.tags : undefined,
-				folder1: formData.folder1 || undefined,
-				category1: formData.category1 || undefined,
-				last_updated: new Date().toISOString(), // Add current timestamp
-			// Omitting: average_rating, ratings_count (handled by triggers)
-			// Omitting: github_stars, last_commit, citations, jif, journal etc. (populated by backend scripts)
-			};
+					// Then, approve the suggestion
+					const approvalData = {
+						status: 'approved',
+						reviewed_at: new Date().toISOString(),
+						reviewed_by_admin_id: currentUser.id,
+					};
 
+					console.log("Approving suggestion:", approvalData);
 
-			const { error: createPackageError } = await supabase
-				.from('packages')
-				.insert([newPackageDataForTable]);
+					const { error: approveError } = await supabase
+						.from('package_suggestions')
+						.update(approvalData)
+						.eq('id', suggestion.id);
 
-			if (createPackageError) {
-				console.error("Error creating package from suggestion:", createPackageError);
-				// Potentially roll back suggestion approval or mark it for retry
-				throw new Error(`Suggestion approved, but failed to create package: ${createPackageError.message}`);
-			}
+					if (approveError) {
+						console.error("Error approving suggestion:", approveError);
+						throw new Error(`Suggestion saved, but failed to approve: ${approveError.message}`);
+					}
 
-			setSuccessMessage("Suggestion saved, approved, and package created successfully!");
-			onSaveSuccess(); // Callback to refresh parent component's data
+					console.log("Suggestion approved successfully");
+
+					// Finally, create the package in the 'packages' table
+					// Create a simplified object that matches the database schema exactly
+					const newPackageId = crypto.randomUUID(); // Generate a new UUID for the package
+
+					const newPackageDataForTable = {
+						id: newPackageId,
+						package_name: formData.package_name!,
+						description: formData.description || null,
+						publication: formData.publication_url || null,
+						webserver: formData.webserver_url || null,
+						repo_link: formData.repo_url || null,
+						link: formData.link_url || null,
+						license: formData.license || null,
+						tags: formData.tags && formData.tags.length > 0 ? formData.tags : null,
+						folder1: formData.folder1 || null,
+						category1: formData.category1 || null,
+						last_updated: new Date().toISOString(),
+						// Set default values for fields that should have defaults
+						average_rating: 0,
+						ratings_count: 0
+					};
+
+					console.log("Creating package with data:", newPackageDataForTable);
+
+					const { error: createPackageError, data: createdPackage } = await supabase
+						.from('packages')
+						.insert([newPackageDataForTable])
+						.select()
+						.single();
+
+					if (createPackageError) {
+						console.error("Error creating package from suggestion:", createPackageError);
+						console.error("Package data that failed:", newPackageDataForTable);
+						// Potentially roll back suggestion approval or mark it for retry
+						throw new Error(`Suggestion approved, but failed to create package: ${createPackageError.message}`);
+					}
+
+					console.log("Package created successfully:", createdPackage);
+
+					setSuccessMessage("Suggestion saved, approved, and package created successfully!");
+					onSaveSuccess(); // Callback to refresh parent component's data
+				})(),
+				timeoutPromise
+			]);
 
 		} catch (err: any) {
 			console.error("Error in handleSaveAndApprove:", err);
-			setError(err.message || "An unexpected error occurred during the save and approve process.");
+			if (err.message.includes('timed out')) {
+				setError("Operation timed out. Please check your network connection and try again. If the issue persists, the suggestion may have been partially processed - please check the suggestions list.");
+			} else {
+				setError(err.message || "An unexpected error occurred during the save and approve process.");
+			}
 		} finally {
 			setLoading(false);
 		}
@@ -371,22 +400,26 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			setIsAddingFolder(false);
 			setSuccessMessage(`Folder "${newFolderName.trim()}" has been created successfully.`);
 
-			// Update the store with the new folder
-			useFilterStore.setState({
-				allAvailableFolders: updatedFolders,
-				allAvailableCategories: updatedCategories
+			const newFolderTrimmed = newFolderName.trim();
+
+			// Use requestAnimationFrame to avoid forced reflow
+			requestAnimationFrame(() => {
+				// Update the store with the new folder
+				useFilterStore.setState({
+					allAvailableFolders: updatedFolders,
+					allAvailableCategories: updatedCategories
+				});
+
+				// Set the newly created folder as the selected folder
+				setFormData(prev => ({ ...prev, folder1: newFolderTrimmed, category1: '' }));
+				setCurrentCategories([]); // Reset categories for the new folder
 			});
 
-			// Set the newly created folder as the selected folder
-			setFormData(prev => ({ ...prev, folder1: newFolderName.trim(), category1: '' }));
-
-			// Refresh metadata to ensure consistency
-			try {
-				await useFilterStore.getState().refreshMetadata();
-			} catch (refreshError) {
+			// Refresh metadata to ensure consistency (async, doesn't block UI)
+			useFilterStore.getState().refreshMetadata().catch(refreshError => {
 				console.warn("⚠️ Failed to refresh metadata after folder creation:", refreshError);
 				// Don't fail the entire operation if metadata refresh fails
-			}
+			});
 
 		} catch (err: any) {
 			console.error("Error creating folder:", err);
@@ -472,22 +505,28 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			setIsAddingCategory(false);
 			setSuccessMessage(`Category "${newCategoryName.trim()}" has been created successfully in folder "${formData.folder1}".`);
 
-			// Update the store with the new category
-			useFilterStore.setState({
-				allAvailableCategories: updatedCategories
+			const newCategoryTrimmed = newCategoryName.trim();
+			const selectedFolder = formData.folder1;
+
+			// Use requestAnimationFrame to avoid forced reflow
+			requestAnimationFrame(() => {
+				// Update the store with the new category
+				useFilterStore.setState({
+					allAvailableCategories: updatedCategories
+				});
+
+				// Set the newly created category as the selected category
+				setFormData(prev => ({ ...prev, category1: newCategoryTrimmed }));
+				if (selectedFolder && updatedCategories[selectedFolder]) {
+					setCurrentCategories(updatedCategories[selectedFolder]);
+				}
 			});
 
-			// Set the newly created category as the selected category
-			setFormData(prev => ({ ...prev, category1: newCategoryName.trim() }));
-			setCurrentCategories(updatedCategories[formData.folder1]);
-
-			// Refresh metadata to ensure consistency
-			try {
-				await useFilterStore.getState().refreshMetadata();
-			} catch (refreshError) {
+			// Refresh metadata to ensure consistency (async, doesn't block UI)
+			useFilterStore.getState().refreshMetadata().catch(refreshError => {
 				console.warn("⚠️ Failed to refresh metadata after category creation:", refreshError);
 				// Don't fail the entire operation if metadata refresh fails
-			}
+			});
 
 		} catch (err: any) {
 			console.error("Error creating category:", err);
@@ -650,7 +689,9 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								value={formData.tags || []}
 								onChange={handleTagChange}
 								freeSolo
-								disablePortal // Added this prop
+								disablePortal
+								disableCloseOnSelect
+								limitTags={5}
 								renderTags={(value, getTagProps) =>
 									value.map((option, index) => {
 										const { key, ...otherTagProps } = getTagProps({ index });
@@ -668,8 +709,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 												color: 'primary.main',
 												fontWeight: 500,
 												fontSize: '0.7rem',
-												mr: 0.5, // Add some margin between chips
-												mb: 0.5, // Add some margin below chips for wrapping
+												mr: 0.5,
+												mb: 0.5,
 												'&:hover': {
 													bgcolor: (theme) => theme.palette.mode === 'dark'
 														? alpha(theme.palette.primary.main, 0.25)
