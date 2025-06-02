@@ -5,9 +5,10 @@ import { Box, Typography, Grid, Paper, Button, CircularProgress, Link, Chip, use
 import { alpha } from '@mui/material/styles';
 import { supabase } from '../supabase';
 import { Package } from '../types';
+import { DataService } from '../services/dataService';
 import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete, FolderOutlined, CategoryOutlined } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
-import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
+import { RatingEventEmitter, RatingService, type RatingUpdateEvent } from '../services/ratingService';
 import RatingInput from '../components/RatingInput';
 import { useAuth } from '../context/AuthContext';
 
@@ -91,7 +92,7 @@ const PackageDetailPage: React.FC = () => {
 	const theme = useTheme();
 	const { packageId: encodedPackageId } = useParams<{ packageId: string }>();
 	const navigate = useNavigate();
-	const { isAdmin } = useAuth();
+	const { isAdmin, currentUser } = useAuth();
 	const packageId = encodedPackageId ? decodeURIComponent(encodedPackageId) : undefined;
 
 	// State
@@ -184,6 +185,7 @@ const PackageDetailPage: React.FC = () => {
 			setLoading(true);
 			setError(null);
 			try {
+				// Get basic package data
 				const { data, error: dbError } = await supabase
 					.from('packages')
 					.select('*')
@@ -195,8 +197,27 @@ const PackageDetailPage: React.FC = () => {
 				}
 
 				if (data && data.length > 0) {
+					let packageData = data[0] as Package;
+
+					// If user is authenticated, fetch their rating for this package
+					if (currentUser) {
+						try {
+							const userRating = await RatingService.getUserRating(packageId);
+							if (userRating) {
+								packageData = {
+									...packageData,
+									user_rating: userRating.rating,
+									user_rating_id: userRating.rating_id
+								};
+							}
+						} catch (userRatingError) {
+							console.error('Error fetching user rating:', userRatingError);
+							// Don't fail the entire request if user rating fetch fails
+						}
+					}
+
 					if (mountedRef.current) {
-						setPackageData(data[0] as Package);
+						setPackageData(packageData);
 					}
 				} else {
 					if (mountedRef.current) {
@@ -234,7 +255,7 @@ const PackageDetailPage: React.FC = () => {
 		return () => {
 			unsubscribe();
 		};
-	}, [packageId]);
+	}, [packageId, currentUser]);
 
 	// Loading state
 	if (loading) {
@@ -297,8 +318,10 @@ const PackageDetailPage: React.FC = () => {
 				<Box sx={{ position: 'absolute', top: 20, right: isAdmin ? (packageData?.package_name && packageData.package_name.length > 15 ? 300 : 210) : 16, zIndex: 1 }}>
 					<RatingInput
 						packageId={packageId}
-						initialAverageRating={packageData.average_rating ?? 0}
-						initialRatingsCount={packageData.ratings_count ?? 0}
+						averageRating={packageData.average_rating ?? 0}
+						ratingsCount={packageData.ratings_count ?? 0}
+						userRating={packageData.user_rating}
+						userRatingId={packageData.user_rating_id}
 					/>
 				</Box>
 			)}
