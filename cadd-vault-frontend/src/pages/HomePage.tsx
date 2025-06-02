@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Package } from '../types';
 import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import { DataService } from '../services/dataService';
+import { useAuth } from '../context/AuthContext';
 import {
 	Container, Box, Typography, CircularProgress, Alert, Select, MenuItem, IconButton,
 	ToggleButtonGroup, ToggleButton, Grid, Pagination, FormControl, SelectChangeEvent
@@ -16,6 +17,9 @@ const PackageCard = lazy(() => import('../components/PackageCard'));
 const PackageList = lazy(() => import('../components/PackageList'));
 
 const HomePage: React.FC = () => {
+	// --- Authentication context ---
+	const { currentUser } = useAuth();
+
 	// --- Zustand Store Selectors using useShallow ---
 	const {
 		searchTerm, selectedTags, minStars, hasGithub, hasWebserver, hasPublication,
@@ -221,7 +225,9 @@ const HomePage: React.FC = () => {
 					sortBy,
 					sortDirection,
 					page: currentPage,
-					pageSize: itemsPerPage
+					pageSize: itemsPerPage,
+					includeUserRatings: !!currentUser,
+					currentUserId: currentUser?.id || null
 				});
 
 				setDisplayedPackagesInComponent(result.packages);
@@ -265,7 +271,7 @@ const HomePage: React.FC = () => {
 	}, [
 		metadataLoaded, currentPage, searchTerm, selectedTags, minStars, hasGithub, hasWebserver,
 		hasPublication, minCitations, minRating, folder1, category1, selectedLicenses,
-		sortBy, sortDirection,
+		sortBy, sortDirection, currentUser,
 		setDisplayedPackages, setTotalFilteredCount
 	]);
 
