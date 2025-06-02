@@ -152,20 +152,24 @@ const FilterSidebar: React.FC = () => {
 					}
 				}}
 				renderTags={(value: readonly string[], getTagProps) =>
-					value.map((option: string, index: number) => (
-						<Chip
-							variant="filled"
-							label={option}
-							{...getTagProps({ index })}
-							sx={{
-								bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
-								color: 'primary.main',
-								'&:hover': {
-									bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
-								}
-							}}
-						/>
-					))
+					value.map((option: string, index: number) => {
+						const { key, ...tagProps } = getTagProps({ index });
+						return (
+							<Chip
+								key={key}
+								variant="filled"
+								label={option}
+								{...tagProps}
+								sx={{
+									bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+									color: 'primary.main',
+									'&:hover': {
+										bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
+									}
+								}}
+							/>
+						);
+					})
 				}
 				renderInput={(params) => (
 					<TextField
@@ -384,20 +388,24 @@ const FilterSidebar: React.FC = () => {
 					}
 				}}
 				renderTags={(value: readonly string[], getTagProps) =>
-					value.map((option: string, index: number) => (
-						<Chip
-							variant="filled"
-							label={option}
-							{...getTagProps({ index })}
-							sx={{
-								bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
-								color: 'primary.main',
-								'&:hover': {
-									bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
-								}
-							}}
-						/>
-					))
+					value.map((option: string, index: number) => {
+						const { key, ...tagProps } = getTagProps({ index });
+						return (
+							<Chip
+								key={key}
+								variant="filled"
+								label={option}
+								{...tagProps}
+								sx={{
+									bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+									color: 'primary.main',
+									'&:hover': {
+										bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
+									}
+								}}
+							/>
+						);
+					})
 				}
 				renderInput={(params) => (
 					<TextField
