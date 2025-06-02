@@ -24,10 +24,20 @@ export interface Package {
 	// Supabase rating fields
 	average_rating?: number;
 	ratings_count?: number;
+	// User-specific rating data (populated when user is authenticated)
+	user_rating?: number | null;
+	user_rating_id?: string | null;
 	name?: string;
 	version?: string;
 	repository?: string;
 	last_updated?: string; // ISO timestamp of when the package was last updated
+}
+
+// Enhanced package query result that includes user rating map
+export interface PackageQueryResult {
+	packages: Package[];
+	totalCount: number;
+	userRatings?: Map<string, { rating: number; rating_id: string }>;
 }
 
 // Interface for individual user ratings (Supabase schema)
