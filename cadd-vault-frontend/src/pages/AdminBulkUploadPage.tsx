@@ -48,7 +48,12 @@ interface CsvRowInput {
 	publication_url?: string;
 	repo_url?: string;
 	webserver_url?: string;
+	link_url?: string;
 	description?: string;
+	license?: string;
+	tags?: string;
+	folder1?: string;
+	category1?: string;
 	status?: string;
 	[key: string]: any;
 }
@@ -59,7 +64,12 @@ interface CsvRowData {
 	publication_url: string;
 	repo_url: string;
 	webserver_url: string;
+	link_url: string;
 	description: string;
+	license: string;
+	tags: string[];
+	folder1: string;
+	category1: string;
 	status: string;
 	originalCsvRowIndex: number;
 	tempId: string;
@@ -203,7 +213,20 @@ const AdminBulkUploadPage: React.FC = () => {
 						publication_url: String(row.publication_url || '').trim(),
 						repo_url: String(row.repo_url || '').trim(),
 						webserver_url: String(row.webserver_url || '').trim(),
+						link_url: String(row.link_url || '').trim(),
 						description: String(row.description || '').trim(),
+						license: String(row.license || '').trim(),
+						tags: row.tags ? (() => {
+							try {
+								const parsed = JSON.parse(row.tags);
+								return Array.isArray(parsed) ? parsed.filter(tag => typeof tag === 'string' && tag.trim().length > 0) : [];
+							} catch (e) {
+								console.warn(`Invalid JSON format for tags in row ${index + 1}: ${row.tags}. Expected format: ["tag1", "tag2", "tag3"]`);
+								return [];
+							}
+						})() : [],
+						folder1: String(row.folder1 || '').trim(),
+						category1: String(row.category1 || '').trim(),
 						status: String(row.status).trim(),
 						originalCsvRowIndex: index,
 						tempId: uuidv4(),
@@ -276,11 +299,11 @@ const AdminBulkUploadPage: React.FC = () => {
 				publication_url: item.csvData.publication_url || undefined,
 				repo_url: item.csvData.repo_url || undefined,
 				webserver_url: item.csvData.webserver_url || undefined,
-				link_url: undefined,
-				license: undefined,
-				tags: undefined,
-				folder1: undefined,
-				category1: undefined,
+				link_url: item.csvData.link_url || undefined,
+				license: item.csvData.license || undefined,
+				tags: item.csvData.tags.length > 0 ? item.csvData.tags : undefined,
+				folder1: item.csvData.folder1 || undefined,
+				category1: item.csvData.category1 || undefined,
 				suggestion_reason: 'Bulk CSV Upload',
 				status: item.csvData.status as Suggestion['status'],
 				admin_notes: item.clashDetails ? `Potential Clash: ${item.clashDetails.field} with ${item.clashDetails.sourceTable} (ID: ${item.clashDetails.conflictingEntryId || 'N/A'}, Name: ${item.clashDetails.conflictingEntryName || 'N/A'})` : undefined,
@@ -440,11 +463,13 @@ const AdminBulkUploadPage: React.FC = () => {
 					Upload CSV File
 				</Typography>
 				<Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-					Required headers: <code>timestamp, package_name, publication_url, repo_url, webserver_url, description, status</code>.
+					Required headers: <code>timestamp, package_name, status</code>. Optional headers: <code>publication_url, repo_url, webserver_url, link_url, description, license, tags, folder1, category1</code>.
 				</Typography>
 				<ul style={{ fontSize: '0.875rem', color: theme.palette.text.secondary, paddingLeft: '20px', marginBottom: theme.spacing(2) }}>
 					<li>Ensure <code>timestamp</code> is ISO 8601 (e.g., <code>YYYY-MM-DDTHH:mm:ss.sssZ</code>).</li>
 					<li><code>package_name</code> and <code>status</code> are mandatory for each row.</li>
+					<li><code>tags</code> should be a JSON array format (e.g., <code>["molecular dynamics", "simulation", "analysis"]</code>).</li>
+					<li>All other fields are optional and will be set to empty if not provided.</li>
 				</ul>
 				<Button
 					component="label"
@@ -500,6 +525,9 @@ const AdminBulkUploadPage: React.FC = () => {
 									</TableCell>
 									<TableCell sx={{ fontWeight: 'bold' }}>Row</TableCell>
 									<TableCell sx={{ fontWeight: 'bold' }}>Package Name</TableCell>
+									<TableCell sx={{ fontWeight: 'bold' }}>Tags</TableCell>
+									<TableCell sx={{ fontWeight: 'bold' }}>Category/Folder</TableCell>
+									<TableCell sx={{ fontWeight: 'bold' }}>License</TableCell>
 									<TableCell sx={{ fontWeight: 'bold' }}>Clash Details</TableCell>
 									<TableCell sx={{ fontWeight: 'bold' }}>Status (CSV)</TableCell>
 									<TableCell sx={{ fontWeight: 'bold' }}>Import Status</TableCell>
@@ -529,6 +557,41 @@ const AdminBulkUploadPage: React.FC = () => {
 										</TableCell>
 										<TableCell>{item.csvData.originalCsvRowIndex + 1}</TableCell>
 										<TableCell sx={{ fontWeight: 500 }}>{item.csvData.package_name}</TableCell>
+										<TableCell>
+											{item.csvData.tags.length > 0 ? (
+												<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+													{item.csvData.tags.slice(0, 3).map((tag, index) => (
+														<Chip key={index} label={tag} size="small" variant="outlined" />
+													))}
+													{item.csvData.tags.length > 3 && (
+														<Chip label={`+${item.csvData.tags.length - 3} more`} size="small" variant="outlined" />
+													)}
+												</Box>
+											) : (
+												<Typography variant="body2" color="text.secondary">-</Typography>
+											)}
+										</TableCell>
+										<TableCell>
+											{item.csvData.category1 || item.csvData.folder1 ? (
+												<Box>
+													{item.csvData.category1 && (
+														<Chip label={`Cat: ${item.csvData.category1}`} size="small" variant="outlined" sx={{ mb: 0.5 }} />
+													)}
+													{item.csvData.folder1 && (
+														<Chip label={`Folder: ${item.csvData.folder1}`} size="small" variant="outlined" />
+													)}
+												</Box>
+											) : (
+												<Typography variant="body2" color="text.secondary">-</Typography>
+											)}
+										</TableCell>
+										<TableCell>
+											{item.csvData.license ? (
+												<Chip label={item.csvData.license} size="small" variant="outlined" />
+											) : (
+												<Typography variant="body2" color="text.secondary">-</Typography>
+											)}
+										</TableCell>
 										<TableCell>
 											{item.clashDetails ? (
 												<Chip
