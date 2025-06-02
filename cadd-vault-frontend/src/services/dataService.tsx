@@ -182,9 +182,12 @@ export class DataService {
 			}
 
 			if (selectedTags.length > 0) {
-				// Use overlaps operator to check if any selected tag exists in the tags array
-				// This creates an OR condition between tags
-				query = query.overlaps('tags', selectedTags);
+				// For JSONB arrays, we need to check if the array contains any of the selected tags
+				// Using multiple OR conditions with the contains operator
+				const orConditions = selectedTags
+					.map(tag => `tags.cs.["${tag.replace(/"/g, '\\"')}"]`)
+					.join(',');
+				query = query.or(orConditions);
 			}
 
 			if (minStars !== null && minStars > 0) {
