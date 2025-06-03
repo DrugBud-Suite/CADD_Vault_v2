@@ -15,6 +15,10 @@ import EditSuggestionModal from '../components/EditSuggestionModal'; // Import t
 const MySuggestionsPage: React.FC = () => {
 	const navigate = useNavigate();
 	const { currentUser, loading: authLoading, isAdmin } = useAuth(); // Get isAdmin
+	
+	// Stable user ID to prevent unnecessary re-renders due to object reference changes
+	const userId = currentUser?.id || null;
+	
 	const [suggestions, setSuggestions] = useState<PackageSuggestion[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
@@ -24,14 +28,14 @@ const MySuggestionsPage: React.FC = () => {
 	const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
 	const fetchSuggestions = useCallback(async () => {
-		if (!currentUser) return;
+		if (!userId) return;
 		setLoading(true);
 		setError(null);
 		try {
 			const { data, error: fetchError } = await supabase
 				.from('package_suggestions')
 				.select('*')
-				.eq('suggested_by_user_id', currentUser.id)
+				.eq('suggested_by_user_id', userId)
 				.order('created_at', { ascending: false });
 
 			if (fetchError) throw fetchError;
@@ -43,19 +47,19 @@ const MySuggestionsPage: React.FC = () => {
 		} finally {
 			setLoading(false);
 		}
-	}, [currentUser]);
+	}, [userId]);
 
 	useEffect(() => {
 		if (!authLoading && !currentUser) {
 			navigate('/login');
-		} else if (currentUser) {
+		} else if (userId) {
 			fetchSuggestions();
 		}
-	}, [currentUser, authLoading, navigate, fetchSuggestions]);
+	}, [userId, authLoading, navigate, fetchSuggestions]);
 
 	const handleDeleteSuggestion = async (suggestionId: string) => {
 		if (!window.confirm("Are you sure you want to delete this pending suggestion? This action cannot be undone.")) return;
-		if (!currentUser) return;
+		if (!userId) return;
 
 		try {
 			const { error: deleteError } = await supabase
@@ -63,7 +67,7 @@ const MySuggestionsPage: React.FC = () => {
 				.delete()
 				.eq('id', suggestionId)
 				.eq('status', 'pending')
-				.eq('suggested_by_user_id', currentUser.id);
+				.eq('suggested_by_user_id', userId);
 
 			if (deleteError) throw deleteError;
 			setSuggestions(prev => prev.filter((s) => s.id !== suggestionId));
@@ -74,7 +78,7 @@ const MySuggestionsPage: React.FC = () => {
 	};
 
 	const handleOpenEditModal = (suggestion: PackageSuggestion) => {
-		if ((suggestion.status === 'pending' && suggestion.suggested_by_user_id === currentUser?.id) || isAdmin) {
+		if ((suggestion.status === 'pending' && suggestion.suggested_by_user_id === userId) || isAdmin) {
 			setEditingSuggestion(suggestion);
 			setIsEditModalOpen(true);
 		} else {
@@ -160,7 +164,7 @@ const MySuggestionsPage: React.FC = () => {
 									</TableCell>
 									<TableCell align="right">
 										{/* Edit button: User can edit their own PENDING suggestions. Admin can edit any. */}
-										{((suggestion.status === 'pending' && suggestion.suggested_by_user_id === currentUser.id) || isAdmin) && (
+										{((suggestion.status === 'pending' && suggestion.suggested_by_user_id === userId) || isAdmin) && (
 											<Tooltip title="Edit Suggestion">
 												<IconButton
 													size="small"
@@ -172,7 +176,7 @@ const MySuggestionsPage: React.FC = () => {
 											</Tooltip>
 										)}
 										{/* Delete button: User can delete their own PENDING suggestions */}
-										{suggestion.status === 'pending' && suggestion.suggested_by_user_id === currentUser.id && (
+										{suggestion.status === 'pending' && suggestion.suggested_by_user_id === userId && (
 											<Tooltip title="Delete Suggestion">
 												<IconButton size="small" onClick={() => handleDeleteSuggestion(suggestion.id)} sx={{ ml: 1, color: 'error.main' }}>
 													<DeleteIcon />

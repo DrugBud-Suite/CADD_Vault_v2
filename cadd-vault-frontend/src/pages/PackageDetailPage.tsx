@@ -93,6 +93,9 @@ const PackageDetailPage: React.FC = () => {
 	const navigate = useNavigate();
 	const { isAdmin, currentUser } = useAuth();
 	const packageId = encodedPackageId ? decodeURIComponent(encodedPackageId) : undefined;
+	
+	// Stable user ID to prevent unnecessary re-renders due to object reference changes
+	const userId = currentUser?.id || null;
 
 	// State
 	const [packageData, setPackageData] = useState<Package | null>(null);
@@ -199,7 +202,7 @@ const PackageDetailPage: React.FC = () => {
 					let packageData = data[0] as Package;
 
 					// If user is authenticated, fetch their rating for this package
-					if (currentUser) {
+					if (userId) {
 						try {
 							const userRating = await RatingService.getUserRating(packageId);
 							if (userRating) {
@@ -254,7 +257,7 @@ const PackageDetailPage: React.FC = () => {
 		return () => {
 			unsubscribe();
 		};
-	}, [packageId, currentUser]);
+	}, [packageId, userId]);
 
 	// Loading state
 	if (loading) {

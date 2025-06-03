@@ -19,6 +19,9 @@ const PackageList = lazy(() => import('../components/PackageList'));
 const HomePage: React.FC = () => {
 	// --- Authentication context ---
 	const { currentUser } = useAuth();
+	
+	// Stable user ID to prevent unnecessary re-renders due to object reference changes
+	const userId = currentUser?.id || null;
 
 	// --- Zustand Store Selectors using useShallow ---
 	const {
@@ -226,8 +229,8 @@ const HomePage: React.FC = () => {
 					sortDirection,
 					page: currentPage,
 					pageSize: itemsPerPage,
-					includeUserRatings: !!currentUser,
-					currentUserId: currentUser?.id || null
+					includeUserRatings: !!userId,
+					currentUserId: userId
 				});
 
 				setDisplayedPackagesInComponent(result.packages);
@@ -271,7 +274,7 @@ const HomePage: React.FC = () => {
 	}, [
 		metadataLoaded, currentPage, searchTerm, selectedTags, minStars, hasGithub, hasWebserver,
 		hasPublication, minCitations, minRating, folder1, category1, selectedLicenses,
-		sortBy, sortDirection, currentUser,
+		sortBy, sortDirection, userId,
 		setDisplayedPackages, setTotalFilteredCount
 	]);
 
