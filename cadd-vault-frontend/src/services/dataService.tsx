@@ -35,6 +35,54 @@ export interface PackageQueryParams {
 
 export class DataService {
 	/**
+	 * Utility function to apply tag filters with different logic types
+	 * @param query - The Supabase query builder
+	 * @param tags - Array of tags to filter by
+	 * @param logic - 'OR' for any tag match (main app), 'AND' for all tags match (admin), 'SINGLE' for exact single tag match
+	 */
+	static applyTagFilters(query: any, tags: string[], logic: 'OR' | 'AND' | 'SINGLE' = 'OR') {
+		if (tags.length === 0) return query;
+
+		switch (logic) {
+			case 'OR':
+				// Used by main app - packages with ANY of the selected tags
+				return query.filter('tags', 'cs', JSON.stringify(tags));
+
+			case 'AND':
+				// Used by admin bulk operations - packages with ALL selected tags
+				tags.forEach(tag => {
+					query = query.contains('tags', [tag]);
+				});
+				return query;
+
+			case 'SINGLE':
+				// Used for single tag searches - packages containing exactly this tag
+				return query.contains('tags', [tags[0]]);
+
+			default:
+				return query;
+		}
+	}
+
+	/**
+	 * Utility function to fetch packages with a specific tag (used in admin operations)
+	 */
+	static async fetchPackagesWithTag(tag: string): Promise<Package[]> {
+		try {
+			const { data, error } = await supabase
+				.from('packages')
+				.select('*')
+				.contains('tags', [tag.trim()]);
+
+			if (error) throw error;
+			return data || [];
+		} catch (error) {
+			console.error('Error fetching packages with tag:', error);
+			throw error;
+		}
+	}
+
+	/**
 	 * Fetch filter metadata efficiently without loading all package data
 	 */
 	static async fetchFilterMetadata(): Promise<FilterMetadata> {
@@ -181,11 +229,8 @@ export class DataService {
 				query = query.or(`package_name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
 			}
 
-			if (selectedTags.length > 0) {
-				// Alternative: Use a custom function or RPC call
-				// For now, let's try a different approach
-				query = query.filter('tags', 'cs', JSON.stringify(selectedTags));
-			}
+			// Apply tag filters (OR logic for main app)
+			query = this.applyTagFilters(query, selectedTags, 'OR');
 
 			if (minStars !== null && minStars > 0) {
 				query = query.gte('github_stars', minStars);

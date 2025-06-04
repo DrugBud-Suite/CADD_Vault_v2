@@ -3,6 +3,7 @@ import React, { useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabase';
 import { Package } from '../types';
+import { DataService } from '../services/dataService';
 import {
 	Container,
 	Typography,
@@ -179,13 +180,8 @@ const AdminBulkOperationsPage: React.FC = () => {
 				query = query.eq('category1', form.filterOptions.category);
 			}
 
-			// Apply tag filters
-			if (form.filterOptions.tags.length > 0) {
-				// This will check if the jsonb array column contains ALL the selected tags
-				form.filterOptions.tags.forEach(tag => {
-					query = query.contains('tags', [tag]);
-				});
-			}
+			// Apply tag filters (AND logic for admin operations)
+			query = DataService.applyTagFilters(query, form.filterOptions.tags, 'AND');
 
 			// Execute the query
 			const { data, error } = await query;
@@ -216,18 +212,13 @@ const AdminBulkOperationsPage: React.FC = () => {
 		setTagUpdateError(null);
 
 		try {
-			// Get all packages with the old tag
-			const { data, error } = await supabase
-				.from('packages')
-				.select('*')
-				.contains('tags', [tagManagementForm.oldTag.trim()]);
+			// Get all packages with the old tag using DataService utility
+			const data = await DataService.fetchPackagesWithTag(tagManagementForm.oldTag.trim());
 
-			if (error) throw error;
+			setTagPreviewPackages(data);
+			setAffectedPackagesCount(data.length);
 
-			setTagPreviewPackages(data || []);
-			setAffectedPackagesCount(data?.length || 0);
-
-			if (!data || data.length === 0) {
+			if (data.length === 0) {
 				setTagUpdateError(`No packages found with tag "${tagManagementForm.oldTag.trim()}".`);
 			}
 		} catch (err: any) {
@@ -394,14 +385,8 @@ const AdminBulkOperationsPage: React.FC = () => {
 			if (showTagPreview && tagPreviewPackages.length > 0) {
 				packagesWithOldTag = tagPreviewPackages;
 			} else {
-				// Get all packages with the old tag
-				const { data, error: fetchError } = await supabase
-					.from('packages')
-					.select('*')
-					.contains('tags', [tagManagementForm.oldTag.trim()]);
-
-				if (fetchError) throw fetchError;
-				packagesWithOldTag = data || [];
+				// Get all packages with the old tag using DataService utility
+				packagesWithOldTag = await DataService.fetchPackagesWithTag(tagManagementForm.oldTag.trim());
 			}
 
 			if (packagesWithOldTag.length === 0) {
