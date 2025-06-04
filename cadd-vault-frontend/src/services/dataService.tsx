@@ -182,10 +182,9 @@ export class DataService {
 			}
 
 			if (selectedTags.length > 0) {
-				// For JSONB arrays, we need to check each tag individually and combine with OR
-				// Since Supabase doesn't have a direct "contains any" for arrays, we use OR logic
+				// For JSONB arrays, build OR conditions properly
 				const tagConditions = selectedTags
-					.map(tag => `tags.cs.[${JSON.stringify(tag)}]`)
+					.map(tag => `tags.cs.["${tag}"]`)
 					.join(',');
 				query = query.or(tagConditions);
 			}
