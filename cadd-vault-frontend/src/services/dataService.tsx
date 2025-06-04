@@ -185,7 +185,7 @@ export class DataService {
 				// For JSONB arrays, we need to check if the array contains any of the selected tags
 				// Using multiple OR conditions with the contains operator
 				const orConditions = selectedTags
-					.map(tag => `tags.cs.["${tag.replace(/"/g, '\\"')}"]`)
+					.map(tag => `tags.cs.{"${tag.replace(/"/g, '\\"')}"}`)  // Use {} instead of []
 					.join(',');
 				query = query.or(orConditions);
 			}
