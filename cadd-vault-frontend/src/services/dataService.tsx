@@ -182,12 +182,12 @@ export class DataService {
 			}
 
 			if (selectedTags.length > 0) {
-				// For JSONB arrays, we need to check if the array contains any of the selected tags
-				// Using multiple OR conditions with the contains operator
-				const orConditions = selectedTags
-					.map(tag => `tags.cs.{"${tag.replace(/"/g, '\\"')}"}`)  // Use {} instead of []
+				// For JSONB arrays, we need to check each tag individually and combine with OR
+				// Since Supabase doesn't have a direct "contains any" for arrays, we use OR logic
+				const tagConditions = selectedTags
+					.map(tag => `tags.cs.[${JSON.stringify(tag)}]`)
 					.join(',');
-				query = query.or(orConditions);
+				query = query.or(tagConditions);
 			}
 
 			if (minStars !== null && minStars > 0) {
