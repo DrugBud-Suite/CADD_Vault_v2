@@ -182,11 +182,9 @@ export class DataService {
 			}
 
 			if (selectedTags.length > 0) {
-				// For JSONB arrays, build OR conditions properly
-				const tagConditions = selectedTags
-					.map(tag => `tags.cs.["${tag}"]`)
-					.join(',');
-				query = query.or(tagConditions);
+				// Alternative: Use a custom function or RPC call
+				// For now, let's try a different approach
+				query = query.filter('tags', 'cs', JSON.stringify(selectedTags));
 			}
 
 			if (minStars !== null && minStars > 0) {
