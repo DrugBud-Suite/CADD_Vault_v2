@@ -46,3 +46,6 @@ __pycache__/simple_package_test.cpython-310-pytest-8.3.5.pyc
 __pycache__/test_package_fetch.cpython-310-pytest-8.3.5.pyc
 cadd-vault-backend-scripts/tests/__pycache__/test_database_connection.cpython-310-pytest-8.3.5.pyc
 CLAUDE.md
+supabase-backup/auth_and_storage_schema.sql
+supabase-backup/data.sql
+supabase-backup/roles.sql

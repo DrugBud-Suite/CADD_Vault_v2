@@ -279,7 +279,10 @@ const AdminBulkUploadPage: React.FC = () => {
 			return;
 		}
 
-		const itemsToImport = parsedCsvItems.filter(item => item.markedForImport && item.importStatus === 'pending');
+		const itemsToImport = parsedCsvItems.filter(
+			item => item.markedForImport && item.importStatus === 'pending'
+		);
+
 		if (itemsToImport.length === 0) {
 			toast.error('No items selected or pending for import.');
 			return;
@@ -288,61 +291,70 @@ const AdminBulkUploadPage: React.FC = () => {
 		setIsProcessing(true);
 		let successCount = 0;
 		let errorCount = 0;
-		const newSuggestionsCreated: Suggestion[] = [];
-
-		const updatedItems = [...parsedCsvItems];
 
 		for (const item of itemsToImport) {
-			const suggestionToInsert: Omit<Suggestion, 'id' | 'user_email' | 'reviewed_at' | 'reviewed_by_user_id'> & { suggested_by_user_id: string } = {
+		try {
+			// Insert suggestion (triggers will handle normalization)
+			const suggestionToInsert = {
 				package_name: item.csvData.package_name,
-				description: item.csvData.description || undefined,
-				publication_url: item.csvData.publication_url || undefined,
-				repo_url: item.csvData.repo_url || undefined,
-				webserver_url: item.csvData.webserver_url || undefined,
-				link_url: item.csvData.link_url || undefined,
-				license: item.csvData.license || undefined,
-				tags: item.csvData.tags.length > 0 ? item.csvData.tags : undefined,
-				folder1: item.csvData.folder1 || undefined,
-				category1: item.csvData.category1 || undefined,
+				description: item.csvData.description || null,
+				publication_url: item.csvData.publication_url || null,
+				repo_url: item.csvData.repo_url || null,
+				webserver_url: item.csvData.webserver_url || null,
+				link_url: item.csvData.link_url || null,
+				license: item.csvData.license || null,
+				tags: item.csvData.tags.length > 0 ? item.csvData.tags : null,
+				folder1: item.csvData.folder1 || null,
+				category1: item.csvData.category1 || null,
 				suggestion_reason: 'Bulk CSV Upload',
-				status: item.csvData.status as Suggestion['status'],
-				admin_notes: item.clashDetails ? `Potential Clash: ${item.clashDetails.field} with ${item.clashDetails.sourceTable} (ID: ${item.clashDetails.conflictingEntryId || 'N/A'}, Name: ${item.clashDetails.conflictingEntryName || 'N/A'})` : undefined,
+				status: item.csvData.status as 'pending' | 'approved' | 'rejected' | 'added',
+				admin_notes: item.clashDetails ?
+					`Potential Clash: ${item.clashDetails.field} with ${item.clashDetails.sourceTable}` : null,
 				created_at: new Date(item.csvData.timestamp).toISOString(),
-				suggested_by_user_id: currentUser.id,
+				suggested_by_user_id: currentUser.id
 			};
 
-			const itemIndex = updatedItems.findIndex(ui => ui.csvData.tempId === item.csvData.tempId);
+			const { data, error } = await supabase
+				.from('package_suggestions')
+				.insert(suggestionToInsert)
+				.select()
+				.single();
 
-			try {
-				const { data, error } = await supabase
-					.from('package_suggestions') // Changed from 'suggestions'
-					.insert(suggestionToInsert)
-					.select()
-					.single();
+			if (error) throw error;
 
-				if (error) throw error;
+			// Update item status
+			const itemIndex = parsedCsvItems.findIndex(
+				ui => ui.csvData.tempId === item.csvData.tempId
+			);
+			if (itemIndex !== -1) {
+				parsedCsvItems[itemIndex] = {
+					...parsedCsvItems[itemIndex],
+					importStatus: 'imported',
+					databaseId: data.id
+				};
+			}
 
-				if (data && itemIndex !== -1) {
-					updatedItems[itemIndex] = { ...updatedItems[itemIndex], importStatus: 'imported', databaseId: data.id };
-					newSuggestionsCreated.push(data as Suggestion); // Add to list for state update
-					successCount++;
-				} else {
-					if (itemIndex !== -1) updatedItems[itemIndex] = { ...updatedItems[itemIndex], importStatus: 'error', errorMessage: 'Import ok but no data returned.' };
-					errorCount++;
-				}
-			} catch (error: any) {
-				console.error('Error inserting suggestion:', error);
-				if (itemIndex !== -1) updatedItems[itemIndex] = { ...updatedItems[itemIndex], importStatus: 'error', errorMessage: error.message || 'Unknown error.' };
-				errorCount++;
+			successCount++;
+		} catch (error: any) {
+			console.error('Error inserting suggestion:', error);
+			errorCount++;
+
+			const itemIndex = parsedCsvItems.findIndex(
+				ui => ui.csvData.tempId === item.csvData.tempId
+			);
+			if (itemIndex !== -1) {
+				parsedCsvItems[itemIndex] = {
+					...parsedCsvItems[itemIndex],
+					importStatus: 'error',
+					errorMessage: error.message || 'Unknown error'
+				};
 			}
 		}
+	}
 
-		setParsedCsvItems(updatedItems);
-		// Update the main list of suggestions with newly created ones for accurate clash detection
-		if (newSuggestionsCreated.length > 0) {
-			setAllExistingSuggestions(prev => [...prev, ...newSuggestionsCreated]);
-		}
+		setParsedCsvItems([...parsedCsvItems]);
 		setIsProcessing(false);
+
 		toast.success(`${successCount} suggestions imported successfully.`);
 		if (errorCount > 0) {
 			toast.error(`${errorCount} suggestions failed to import.`);

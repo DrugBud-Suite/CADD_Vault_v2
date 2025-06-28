@@ -13,6 +13,11 @@ import {
 	Grid,
 	Autocomplete,
 	Chip,
+	FormControl,
+	InputLabel,
+	Select,
+	MenuItem,
+	SelectChangeEvent,
 } from '@mui/material';
 
 const EditPackagePage: React.FC = () => {
@@ -26,39 +31,54 @@ const EditPackagePage: React.FC = () => {
 	const [error, setError] = useState<string | null>(null);
 	const [existingTags, setExistingTags] = useState<string[]>([]);
 	const [tagsLoading, setTagsLoading] = useState<boolean>(false);
+	
+	// Folder and category state
+	const [availableFolders, setAvailableFolders] = useState<string[]>([]);
+	const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
 	// Fetch existing package data
 	const fetchPackageData = useCallback(async () => {
-		if (!packageId || !isAdmin) return; // Only fetch if admin and ID exists
-		setLoading(true); // Use loading state for fetch as well initially
+		if (!packageId || !isAdmin) return;
+
+		setLoading(true);
 		setError(null);
+
 		try {
+			// Fetch package with all relationships
 			const { data, error: fetchError } = await supabase
 				.from('packages')
-				.select('*')
-				.eq('id', packageId) // Assuming 'id' is the primary key in Supabase
-				.single(); // Expecting a single row
+				.select(`
+                *,
+                package_tags!left(
+                    tags!inner(name)
+                ),
+                package_folder_categories!left(
+                    folder_categories!inner(
+                        folders!inner(name),
+                        categories!inner(name)
+                    )
+                )
+            `)
+				.eq('id', packageId)
+				.single();
 
-			if (fetchError) {
-				throw fetchError;
-			}
+			if (fetchError) throw fetchError;
 
 			if (data) {
-				// Supabase returns data directly.
-				// Handle potential mismatch between 'repo_link' and 'repository' fields if necessary.
-				const processedData = {
+				// Transform the data with null safety
+				const packageData = {
 					...data,
-					// Use repo_link if present, otherwise fallback to repository from Supabase data
-					repo_link: data.repo_link || (data as any).repository || '', // Cast to any if 'repository' is not in Package type
+					tags: data.package_tags?.map((pt: any) => pt.tags?.name).filter(Boolean) || [],
+					folder1: data.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
+					category1: data.package_folder_categories?.[0]?.folder_categories?.categories?.name || ''
 				};
-				setFormData(processedData as Partial<Package>); // Cast to Partial<Package>
+
+				setFormData(packageData);
 				setInitialDataLoaded(true);
-			} else {
-				setError('Package not found.');
 			}
 		} catch (err: any) {
-			console.error("Error fetching package for edit:", err.message);
-			setError(`Failed to load package data for editing: ${err.message}`);
+			console.error("Error fetching package:", err);
+			setError(`Failed to load package data: ${err.message}`);
 		} finally {
 			setLoading(false);
 		}
@@ -83,25 +103,16 @@ const EditPackagePage: React.FC = () => {
 			if (!isAdmin) return;
 			setTagsLoading(true);
 			try {
-				const { data, error: fetchError } = await supabase
-					.from('packages')
-					.select('tags'); // Select only the 'tags' column
+				const { data, error } = await supabase
+					.from('tags')
+					.select('name')
+					.order('name');
 
-				if (fetchError) {
-					throw fetchError;
-				}
+				if (error) throw error;
 
-				const allTags = new Set<string>();
-				data.forEach((row) => {
-					if (row.tags && Array.isArray(row.tags)) {
-						row.tags.forEach(tag => allTags.add(tag));
-					}
-				});
-				setExistingTags(Array.from(allTags).sort()); // Sort alphabetically
-
+				setExistingTags(data?.map(t => t.name) || []);
 			} catch (error: any) {
-				console.error("Error fetching existing tags:", error.message);
-				// Optionally set an error state for tags specifically if needed
+				console.error("Error fetching tags:", error);
 			} finally {
 				setTagsLoading(false);
 			}
@@ -111,6 +122,43 @@ const EditPackagePage: React.FC = () => {
 			fetchTags();
 		}
 	}, [isAdmin]);
+
+	// Effect to fetch folders and categories
+	useEffect(() => {
+		const fetchFoldersAndCategories = async () => {
+			if (!isAdmin) return;
+			try {
+				// Get folders
+				const { data: foldersData, error: foldersError } = await supabase
+					.from('folders')
+					.select('name')
+					.order('name');
+
+				if (foldersError) throw foldersError;
+				setAvailableFolders(foldersData?.map(f => f.name) || []);
+
+				// Get categories for the current folder
+				if (formData.folder1) {
+					const { data: categoriesData, error: categoriesError } = await supabase
+						.from('folder_categories')
+						.select(`
+							categories!inner(name),
+							folders!inner(name)
+						`)
+						.eq('folders.name', formData.folder1);
+
+					if (categoriesError) throw categoriesError;
+					setAvailableCategories(categoriesData?.map((fc: any) => fc.categories.name) || []);
+				}
+			} catch (error: any) {
+				console.error("Error fetching folders/categories:", error);
+			}
+		};
+
+		if (isAdmin) {
+			fetchFoldersAndCategories();
+		}
+	}, [isAdmin, formData.folder1]);
 
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -128,51 +176,74 @@ const EditPackagePage: React.FC = () => {
 		}));
 	};
 
+	const handleSelectChange = (event: SelectChangeEvent<string>) => {
+		const { name, value } = event.target;
+		setFormData((prev) => ({
+			...prev,
+			[name]: value,
+		}));
+		if (name === 'folder1') {
+			// Reset category when folder changes
+			setFormData(prev => ({ ...prev, category1: '' }));
+			setAvailableCategories([]);
+		}
+	};
+
 	const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		setError(null);
 
-		if (!packageId) {
-			setError('Package ID is missing.');
-			return;
-		}
-		if (!formData.package_name) {
-			setError('Package Name (package_name) is required.');
+		if (!packageId || !formData.package_name) {
+			setError('Package ID and name are required.');
 			return;
 		}
 
 		setLoading(true);
 
 		try {
-			// Prepare data for Supabase update.
-			// Supabase handles timestamps automatically with 'updated_at' column.
-			// GitHub owner/repo parsing should be handled by a Supabase function/trigger if needed.
-			// Prepare data for Supabase update.
-			// Supabase handles timestamps automatically with 'updated_at' column.
-			// GitHub owner/repo parsing should be handled by a Supabase function/trigger if needed.
-			const updateData: Partial<Package> = {
-				...formData,
-				// Remove fields that should not be updated directly or are handled by backend
-				// These fields are likely managed by backend processes or set on creation.
-				// Ensure 'id' is not included in the update payload.
-				id: undefined,
-				last_updated: new Date().toISOString(), // Add current timestamp
-			};
-
+			// Update basic package info
 			const { error: updateError } = await supabase
 				.from('packages')
-				.update(updateData)
-				.eq('id', packageId); // Update the row with the matching ID
+				.update({
+					package_name: formData.package_name,
+					description: formData.description || null,
+					publication: formData.publication || null,
+					webserver: formData.webserver || null,
+					repo_link: formData.repo_link || null,
+					link: formData.link || null,
+					license: formData.license || null,
+					last_updated: new Date().toISOString(),
+					// Update old columns for rollback capability
+					tags: formData.tags || [],
+					folder1: formData.folder1 || null,
+					category1: formData.category1 || null
+				})
+				.eq('id', packageId);
 
-			if (updateError) {
-				throw updateError;
-			}
+			if (updateError) throw updateError;
 
-			console.log('Package updated successfully');
-			navigate(`/package/${encodeURIComponent(packageId)}`); // Navigate back to the detail page
+			// Update tags in normalized structure
+			const { error: tagsError } = await supabase
+				.rpc('update_package_tags', {
+					package_uuid: packageId,
+					new_tags: formData.tags || []
+				});
 
+			if (tagsError) console.error('Error updating tags:', tagsError);
+
+			// Update folder/category in normalized structure
+			const { error: fcError } = await supabase
+				.rpc('update_package_folder_category', {
+					package_uuid: packageId,
+					folder_name: formData.folder1 || '',
+					category_name: formData.category1 || ''
+				});
+
+			if (fcError) console.error('Error updating folder/category:', fcError);
+
+			navigate(`/package/${encodeURIComponent(packageId)}`);
 		} catch (err: any) {
-			console.error('Error updating package: ', err.message);
+			console.error('Error updating package:', err);
 			setError(`Failed to update package: ${err.message}`);
 		} finally {
 			setLoading(false);
@@ -295,6 +366,51 @@ const EditPackagePage: React.FC = () => {
 							fullWidth
 							variant="outlined"
 						/>
+					</Grid>
+					<Grid item xs={12} sm={6}>
+						<FormControl fullWidth variant="outlined">
+							<InputLabel id="folder1-label">Folder</InputLabel>
+							<Select
+								labelId="folder1-label"
+								id="folder1"
+								name="folder1"
+								value={formData.folder1 || ''}
+								onChange={handleSelectChange}
+								label="Folder"
+							>
+								<MenuItem value="">
+									<em>None</em>
+								</MenuItem>
+								{availableFolders.map((folder) => (
+									<MenuItem key={folder} value={folder}>
+										{folder}
+									</MenuItem>
+								))}
+							</Select>
+						</FormControl>
+					</Grid>
+					<Grid item xs={12} sm={6}>
+						<FormControl fullWidth variant="outlined">
+							<InputLabel id="category1-label">Category</InputLabel>
+							<Select
+								labelId="category1-label"
+								id="category1"
+								name="category1"
+								value={formData.category1 || ''}
+								onChange={handleSelectChange}
+								label="Category"
+								disabled={!formData.folder1}
+							>
+								<MenuItem value="">
+									<em>None</em>
+								</MenuItem>
+								{availableCategories.map((category) => (
+									<MenuItem key={category} value={category}>
+										{category}
+									</MenuItem>
+								))}
+							</Select>
+						</FormControl>
 					</Grid>
 					<Grid item xs={12}>
 						<Autocomplete

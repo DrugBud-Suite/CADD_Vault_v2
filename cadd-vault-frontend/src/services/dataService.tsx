@@ -1,15 +1,21 @@
 // src/services/dataService.ts
 import { supabase } from '../supabase';
-import { Package, PackageQueryResult } from '../types';
+import { Package, PackageWithRelations } from '../types';
 
 export interface FilterMetadata {
 	allAvailableTags: string[];
 	allAvailableLicenses: string[];
 	allAvailableFolders: string[];
 	allAvailableCategories: Record<string, string[]>;
-	datasetMaxStars: number | null;
-	datasetMaxCitations: number | null;
+    datasetMaxStars: number;
+    datasetMaxCitations: number;
 	totalPackageCount: number;
+}
+
+export interface PackageQueryResult {
+    packages: Package[];
+    totalCount: number;
+    userRatings?: Map<string, { rating: number; rating_id: string }>;
 }
 
 export interface PackageQueryParams {
@@ -27,171 +33,15 @@ export interface PackageQueryParams {
 	sortBy?: string | null;
 	sortDirection?: 'asc' | 'desc';
 	page?: number;
-	pageSize?: number;
-	// New parameter to include user ratings
+    pageSize?: number;
 	includeUserRatings?: boolean;
 	currentUserId?: string | null;
 }
 
 export class DataService {
-	/**
-	 * Utility function to apply tag filters with different logic types
-	 * @param query - The Supabase query builder
-	 * @param tags - Array of tags to filter by
-	 * @param logic - 'OR' for any tag match (main app), 'AND' for all tags match (admin), 'SINGLE' for exact single tag match
-	 */
-	static applyTagFilters(query: any, tags: string[], logic: 'OR' | 'AND' | 'SINGLE' = 'OR') {
-		if (tags.length === 0) return query;
-
-		switch (logic) {
-			case 'OR':
-				// Used by main app - packages with ANY of the selected tags
-				return query.filter('tags', 'cs', JSON.stringify(tags));
-
-			case 'AND':
-				// Used by admin bulk operations - packages with ALL selected tags
-				tags.forEach(tag => {
-					query = query.contains('tags', [tag]);
-				});
-				return query;
-
-			case 'SINGLE':
-				// Used for single tag searches - packages containing exactly this tag
-				return query.contains('tags', [tags[0]]);
-
-			default:
-				return query;
-		}
-	}
-
-	/**
-	 * Utility function to fetch packages with a specific tag (used in admin operations)
-	 */
-	static async fetchPackagesWithTag(tag: string): Promise<Package[]> {
-		try {
-			const { data, error } = await supabase
-				.from('packages')
-				.select('*')
-				.contains('tags', [tag.trim()]);
-
-			if (error) throw error;
-			return data || [];
-		} catch (error) {
-			console.error('Error fetching packages with tag:', error);
-			throw error;
-		}
-	}
-
-	/**
-	 * Fetch filter metadata efficiently without loading all package data
-	 */
-	static async fetchFilterMetadata(): Promise<FilterMetadata> {
-		console.log("📊 Fetching filter metadata...");
-		const startTime = performance.now();
-
-		try {
-			console.log("📊 Starting parallel metadata queries...");
-
-			// Fetch unique tags
-			const tagsPromise = this.fetchUniqueTags()
-				.then(result => {
-					console.log(`✅ Tags fetched: ${result.length} unique tags`);
-					return result;
-				})
-				.catch(error => {
-					console.error("❌ Error fetching tags:", error);
-					throw error;
-				});
-
-			// Fetch unique licenses
-			const licensesPromise = this.fetchUniqueLicenses()
-				.then(result => {
-					console.log(`✅ Licenses fetched: ${result.length} unique licenses`);
-					return result;
-				})
-				.catch(error => {
-					console.error("❌ Error fetching licenses:", error);
-					throw error;
-				});
-
-			// Fetch folders and categories
-			const folderCategoriesPromise = this.fetchFoldersAndCategories()
-				.then(result => {
-					console.log(`✅ Folders/Categories fetched: ${result.folders.length} folders`);
-					return result;
-				})
-				.catch(error => {
-					console.error("❌ Error fetching folders/categories:", error);
-					throw error;
-				});
-
-			// Fetch max values and count
-			const statsPromise = this.fetchDatasetStats()
-				.then(result => {
-					console.log(`✅ Stats fetched: ${result.totalCount} total packages`);
-					return result;
-				})
-				.catch(error => {
-					console.error("❌ Error fetching stats:", error);
-					throw error;
-				});
-
-			// Execute all queries in parallel
-			const [tags, licenses, folderCategories, stats] = await Promise.all([
-				tagsPromise,
-				licensesPromise,
-				folderCategoriesPromise,
-				statsPromise
-			]);
-
-			const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-			console.log(`📊 Metadata fetch completed in ${totalTime}s`);
-
-			return {
-				allAvailableTags: tags,
-				allAvailableLicenses: licenses,
-				allAvailableFolders: folderCategories.folders,
-				allAvailableCategories: folderCategories.categories,
-				datasetMaxStars: stats.maxStars,
-				datasetMaxCitations: stats.maxCitations,
-				totalPackageCount: stats.totalCount
-			};
-		} catch (error) {
-			console.error("❌ Error fetching filter metadata:", error);
-			throw error;
-		}
-	}
-
-	/**
-	 * Refresh metadata and update the filter store
-	 * This should be called after folder/category creation or when accessing admin pages
-	 */
-	static async refreshFilterMetadata(): Promise<void> {
-		console.log("🔄 Refreshing filter metadata...");
-		try {
-			const metadata = await this.fetchFilterMetadata();
-
-			// Update the filter store with fresh metadata
-			const { useFilterStore } = await import('../store/filterStore');
-			useFilterStore.setState({
-				allAvailableTags: metadata.allAvailableTags,
-				allAvailableLicenses: metadata.allAvailableLicenses,
-				allAvailableFolders: metadata.allAvailableFolders,
-				allAvailableCategories: metadata.allAvailableCategories,
-				datasetMaxStars: metadata.datasetMaxStars,
-				datasetMaxCitations: metadata.datasetMaxCitations,
-			});
-
-			console.log("✅ Filter metadata refreshed successfully");
-		} catch (error) {
-			console.error("❌ Error refreshing filter metadata:", error);
-			throw error;
-		}
-	}
-
-	/**
-	 * Fetch packages with filters and pagination
-	 */
+    /**
+     * Fetch packages with normalized relationships
+     */
 	static async fetchPackages(params: PackageQueryParams): Promise<PackageQueryResult> {
 		const {
 			searchTerm,
@@ -202,66 +52,147 @@ export class DataService {
 			hasPublication,
 			minCitations = null,
 			minRating = null,
-			folder1,
-			category1,
+            folder1 = null,
+            category1 = null,
 			selectedLicenses = [],
 			sortBy = 'package_name',
 			sortDirection = 'asc',
 			page = 1,
-			pageSize = 24,
+            pageSize = 50,
 			includeUserRatings = false,
 			currentUserId = null
 		} = params;
 
-		const startTime = performance.now();
-		const rangeFrom = (page - 1) * pageSize;
-		const rangeTo = rangeFrom + pageSize - 1;
-
-		console.log(`🔎 Fetching packages (page ${page})...`);
-
 		try {
+            // Build the base query with all relationships
 			let query = supabase
 				.from('packages')
-				.select('*', { count: 'exact' });
+                .select(`
+                    *,
+                    package_tags!left(
+                        tag_id,
+                        tags!inner(id, name)
+                    ),
+                    package_folder_categories!left(
+                        folder_category_id,
+                        folder_categories!inner(
+                            id,
+                            folder_id,
+                            category_id,
+                            folders!inner(id, name),
+                            categories!inner(id, name)
+                        )
+                    )
+                `, { count: 'exact' });
 
-			// Apply filters
+            // Apply search filter
 			if (searchTerm) {
 				query = query.or(`package_name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
 			}
 
-			// Apply tag filters (OR logic for main app)
-			query = this.applyTagFilters(query, selectedTags, 'OR');
+            // Apply tag filters
+            if (selectedTags.length > 0) {
+                // Get tag IDs first
+                const { data: tagData } = await supabase
+                    .from('tags')
+                    .select('id, name')
+                    .in('name', selectedTags);
 
-			if (minStars !== null && minStars > 0) {
+                if (tagData && tagData.length > 0) {
+                    const tagIds = tagData.map(t => t.id);
+
+                    // Get packages that have ALL selected tags
+                    for (const tagId of tagIds) {
+                        // Get package IDs that have this tag
+                        const { data: packageIds } = await supabase
+                            .from('package_tags')
+                            .select('package_id')
+                            .eq('tag_id', tagId);
+
+                        if (packageIds && packageIds.length > 0) {
+                            const pkgIds = packageIds.map(p => p.package_id);
+                            query = query.in('id', pkgIds);
+                        } else {
+                            // If any tag has no packages, return empty result
+                            query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+                        }
+                    }
+                }
+            }
+
+            // Apply folder/category filters
+            if (folder1 || category1) {
+                let folderCategoryQuery = supabase
+                    .from('folder_categories')
+                    .select('id');
+
+                if (folder1) {
+                    const { data: folderData } = await supabase
+                        .from('folders')
+                        .select('id')
+                        .eq('name', folder1)
+                        .single();
+
+                    if (folderData) {
+                        folderCategoryQuery = folderCategoryQuery.eq('folder_id', folderData.id);
+                    }
+                }
+
+                if (category1) {
+                    const { data: categoryData } = await supabase
+                        .from('categories')
+                        .select('id')
+                        .eq('name', category1)
+                        .single();
+
+                    if (categoryData) {
+                        folderCategoryQuery = folderCategoryQuery.eq('category_id', categoryData.id);
+                    }
+                }
+
+                const { data: fcData } = await folderCategoryQuery;
+                if (fcData && fcData.length > 0) {
+                    const fcIds = fcData.map(fc => fc.id);
+                    
+                    // Get package IDs that have these folder/category combinations
+                    const { data: packageIds } = await supabase
+                        .from('package_folder_categories')
+                        .select('package_id')
+                        .in('folder_category_id', fcIds);
+                    
+                    if (packageIds && packageIds.length > 0) {
+                        const pkgIds = packageIds.map(p => p.package_id);
+                        query = query.in('id', pkgIds);
+                    } else {
+                        // If no packages match the folder/category filter, return empty result
+                        query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+                    }
+                }
+            }
+
+            // Apply other filters
+            if (minStars !== null) {
 				query = query.gte('github_stars', minStars);
 			}
 
-			if (hasGithub) {
+            if (hasGithub === true) {
 				query = query.not('repo_link', 'is', null);
 			}
 
-			if (hasWebserver) {
+            if (hasWebserver === true) {
 				query = query.not('webserver', 'is', null);
 			}
 
-			if (hasPublication) {
+            if (hasPublication === true) {
 				query = query.not('publication', 'is', null);
 			}
 
-			if (minCitations !== null && minCitations > 0) {
+            if (minCitations !== null) {
 				query = query.gte('citations', minCitations);
 			}
 
-			if (minRating !== null && minRating > 0) {
+            if (minRating !== null) {
 				query = query.gte('average_rating', minRating);
-			}
-
-			if (folder1) {
-				query = query.eq('folder1', folder1);
-			}
-
-			if (category1) {
-				query = query.eq('category1', category1);
 			}
 
 			if (selectedLicenses.length > 0) {
@@ -270,170 +201,210 @@ export class DataService {
 
 			// Apply sorting
 			if (sortBy) {
-				query = query.order(sortBy, { ascending: sortDirection === 'asc', nullsFirst: false });
+                query = query.order(sortBy, { ascending: sortDirection === 'asc' });
 			}
 
 			// Apply pagination
-			query = query.range(rangeFrom, rangeTo);
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+            query = query.range(from, to);
 
+            // Execute query
 			const { data, error, count } = await query;
 
-			if (error) {
-				throw error;
+            if (error) throw error;
+
+            // Transform the data to match Package interface
+            const packages: Package[] = (data || []).map((pkg: PackageWithRelations) => ({
+                ...pkg,
+                tags: pkg.package_tags?.map(pt => pt.tags?.name).filter(Boolean) as string[] || [],
+                folder1: pkg.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
+                category1: pkg.package_folder_categories?.[0]?.folder_categories?.categories?.name || '',
+            }));
+
+            // Include user ratings if requested
+            let userRatings: Map<string, { rating: number; rating_id: string }> | undefined;
+            if (includeUserRatings && currentUserId) {
+                const packageIds = packages.map(p => p.id);
+                const { data: ratingsData } = await supabase
+                    .from('ratings')
+                    .select('package_id, rating, id')
+                    .eq('user_id', currentUserId)
+                    .in('package_id', packageIds);
+
+                if (ratingsData) {
+                    userRatings = new Map(
+                        ratingsData.map(r => [r.package_id, { rating: r.rating, rating_id: r.id }])
+                    );
+                }
 			}
-
-			let packages = (data as Package[]) || [];
-
-			// Fetch user ratings if requested and user is authenticated
-			if (includeUserRatings && currentUserId && packages.length > 0) {
-				console.log(`🔖 Fetching user ratings for ${packages.length} packages...`);
-
-				const packageIds = packages.map(pkg => pkg.id);
-				const userRatings = await this.fetchUserRatingsForPackages(packageIds, currentUserId);
-
-				// Merge user rating data into packages
-				packages = packages.map(pkg => ({
-					...pkg,
-					user_rating: userRatings.get(pkg.id)?.rating || null,
-					user_rating_id: userRatings.get(pkg.id)?.rating_id || null
-				}));
-			}
-
-			const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-			console.log(`🔎 Package fetch completed in ${totalTime}s. Total matches: ${count}, returned: ${packages.length}`);
 
 			return {
 				packages,
-				totalCount: count || 0
+                totalCount: count || 0,
+                userRatings
 			};
 		} catch (error) {
-			console.error("❌ Error fetching packages:", error);
+            console.error('Error fetching packages:', error);
 			throw error;
 		}
 	}
 
-	/**
-	 * Fetch user ratings for multiple packages efficiently
-	 */
-	private static async fetchUserRatingsForPackages(
-		packageIds: string[],
-		userId: string
-	): Promise<Map<string, { rating: number; rating_id: string }>> {
+    /**
+     * Fetch unique tags from normalized table
+     */
+    static async fetchUniqueTags(): Promise<string[]> {
+        console.log("  📌 Fetching unique tags...");
+        const startTime = performance.now();
+
 		try {
 			const { data, error } = await supabase
-				.from('ratings')
-				.select('package_id, rating, id')
-				.eq('user_id', userId)
-				.in('package_id', packageIds);
+                .from('tags')
+                .select('name')
+                .order('name');
 
 			if (error) throw error;
 
-			const ratingsMap = new Map<string, { rating: number; rating_id: string }>();
-
-			if (data) {
-				data.forEach(rating => {
-					ratingsMap.set(rating.package_id, {
-						rating: rating.rating,
-						rating_id: rating.id
-					});
-				});
-			}
-
-			return ratingsMap;
+            console.log(`  📌 Tags query completed in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
+            return data?.map(tag => tag.name) || [];
 		} catch (error) {
-			console.error('Error fetching user ratings for packages:', error);
-			// Return empty map on error - don't fail the entire request
-			return new Map();
+            console.error("  ❌ Failed to fetch tags:", error);
+            throw error;
 		}
 	}
 
-	/**
-	 * Fetch user rating for a single package
-	 */
-	static async fetchUserRatingForPackage(
-		packageId: string,
-		userId: string
-	): Promise<{ rating: number; rating_id: string } | null> {
+    /**
+     * Fetch folders and categories from normalized tables
+     */
+    static async fetchFoldersAndCategories(): Promise<{
+        folders: string[];
+        categories: Record<string, string[]>;
+    }> {
+        console.log("  📁 Fetching folders and categories...");
+        const startTime = performance.now();
+
 		try {
 			const { data, error } = await supabase
-				.from('ratings')
-				.select('rating, id')
-				.eq('user_id', userId)
-				.eq('package_id', packageId)
-				.single();
+                .from('folder_categories')
+                .select(`
+                    folders!inner(name),
+                    categories!inner(name)
+                `)
+                .order('folders(name), categories(name)');
 
-			if (error) {
-				if (error.code === 'PGRST116') {
-					// No rating found
-					return null;
-				}
-				throw error;
-			}
+            if (error) throw error;
 
-			return {
-				rating: data.rating,
-				rating_id: data.id
-			};
+            const folderCategoryMap: Record<string, string[]> = {};
+            data?.forEach(item => {
+                const folderName = (item.folders as any)?.name;
+                const categoryName = (item.categories as any)?.name;
+                if (folderName && categoryName) {
+                    if (!folderCategoryMap[folderName]) {
+                        folderCategoryMap[folderName] = [];
+                    }
+                    if (!folderCategoryMap[folderName].includes(categoryName)) {
+                        folderCategoryMap[folderName].push(categoryName);
+                    }
+                }
+            });
+
+            // Sort categories within each folder
+            Object.keys(folderCategoryMap).forEach(folder => {
+                folderCategoryMap[folder].sort();
+            });
+
+            const folders = Object.keys(folderCategoryMap).sort();
+
+            console.log(`  📁 Folders/Categories fetched in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
+
+            return { folders, categories: folderCategoryMap };
 		} catch (error) {
-			console.error('Error fetching user rating for package:', error);
-			return null;
+            console.error("  ❌ Failed to fetch folders/categories:", error);
+            throw error;
 		}
 	}
 
-	/**
-	 * Private helper methods
-	 */	private static async fetchUniqueTags(): Promise<string[]> {
-		console.log("  📌 Fetching unique tags...");
-		const startTime = performance.now();
-
+    /**
+     * Fetch packages with a specific tag using normalized structure
+     */
+    static async fetchPackagesWithTag(tagName: string): Promise<Package[]> {
 		try {
-			const tagSet = new Set<string>();
-			let from = 0;
-			const batchSize = 1000;
-			let hasMore = true;
-			let totalRows = 0;
+            // Get tag ID
+            const { data: tagData, error: tagError } = await supabase
+                .from('tags')
+                .select('id')
+                .eq('name', tagName.trim())
+                .single();
 
-			while (hasMore) {
-				const { data, error } = await supabase
-					.from('packages')
-					.select('tags')
-					.not('tags', 'is', null)
-					.range(from, from + batchSize - 1);
+            if (tagError || !tagData) return [];
 
-				if (error) {
-					console.error("  ❌ Tags query error:", error);
-					throw error;
-				}
+            // Fetch packages with this tag
+            const { data, error } = await supabase
+                .from('packages')
+                .select(`
+                    *,
+                    package_tags!inner(tag_id),
+                    package_tags!left(
+                        tags!inner(id, name)
+                    ),
+                    package_folder_categories!left(
+                        folder_categories!inner(
+                            folders!inner(name),
+                            categories!inner(name)
+                        )
+                    )
+                `)
+                .eq('package_tags.tag_id', tagData.id);
 
-				if (!data || data.length === 0) {
-					hasMore = false;
-					break;
-				}
+            if (error) throw error;
 
-				data.forEach(row => {
-					if (row.tags && Array.isArray(row.tags)) {
-						row.tags.forEach((tag: string) => {
-							if (tag && tag.trim()) {
-								tagSet.add(tag.trim());
-							}
-						});
-					}
-				});
+            // Transform to Package interface
+            return (data || []).map((pkg: any) => ({
+                ...pkg,
+                tags: pkg.package_tags?.map((pt: any) => pt.tags?.name).filter(Boolean) || [],
+                folder1: pkg.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
+                category1: pkg.package_folder_categories?.[0]?.folder_categories?.categories?.name || '',
+            }));
+        } catch (error) {
+            console.error('Error fetching packages with tag:', error);
+            throw error;
+        }
+    }
 
-				totalRows += data.length;
-				hasMore = data.length === batchSize;
-				from += batchSize;
-			}
+    static async fetchFilterMetadata(): Promise<FilterMetadata> {
+        console.log("📊 Fetching filter metadata...");
+        const startTime = performance.now();
 
-			console.log(`  📌 Tags query completed, processed ${totalRows} total rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
+        try {
+            console.log("📊 Starting parallel metadata queries...");
 
-			return Array.from(tagSet).sort();
-		} catch (error) {
-			console.error("  ❌ Failed to fetch tags:", error);
-			throw error;
-		}
-	 }
-	private static async fetchUniqueLicenses(): Promise<string[]> {
+            // Execute all queries in parallel
+            const [tags, licenses, folderCategories, stats] = await Promise.all([
+                this.fetchUniqueTags(),
+                this.fetchUniqueLicenses(),
+                this.fetchFoldersAndCategories(),
+                this.fetchDatasetStats()
+            ]);
+
+            const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            console.log(`📊 Metadata fetch completed in ${totalTime}s`);
+
+            return {
+                allAvailableTags: tags,
+                allAvailableLicenses: licenses,
+                allAvailableFolders: folderCategories.folders,
+                allAvailableCategories: folderCategories.categories,
+                datasetMaxStars: stats.maxStars || 0,
+                datasetMaxCitations: stats.maxCitations || 0,
+                totalPackageCount: stats.totalCount
+            };
+        } catch (error) {
+            console.error("❌ Error fetching filter metadata:", error);
+            throw error;
+        }
+    }
+
+    static async fetchUniqueLicenses(): Promise<string[]> {
 		console.log("  📜 Fetching unique licenses...");
 		const startTime = performance.now();
 
@@ -479,71 +450,9 @@ export class DataService {
 			console.error("  ❌ Failed to fetch licenses:", error);
 			throw error;
 		}
-	}
-	private static async fetchFoldersAndCategories(): Promise<{
-		folders: string[];
-		categories: Record<string, string[]>;
-	}> {
-		console.log("  📁 Fetching folders and categories...");
-		const startTime = performance.now();
+    }
 
-		try {
-			const folderCategoryMap: Record<string, Set<string>> = {};
-			let from = 0;
-			const batchSize = 1000;
-			let hasMore = true;
-			let totalRows = 0;
-
-			while (hasMore) {
-				const { data, error } = await supabase
-					.from('packages')
-					.select('folder1, category1')
-					.not('folder1', 'is', null)
-					.range(from, from + batchSize - 1);
-
-				if (error) {
-					console.error("  ❌ Folders/categories query error:", error);
-					throw error;
-				}
-
-				if (!data || data.length === 0) {
-					hasMore = false;
-					break;
-				}
-
-				data.forEach(row => {
-					if (row.folder1) {
-						if (!folderCategoryMap[row.folder1]) {
-							folderCategoryMap[row.folder1] = new Set();
-						}
-						if (row.category1) {
-							folderCategoryMap[row.folder1].add(row.category1);
-						}
-					}
-				});
-
-				totalRows += data.length;
-				hasMore = data.length === batchSize;
-				from += batchSize;
-			}
-
-			console.log(`  📁 Folders/categories query completed, processed ${totalRows} total rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
-
-			const folders = Object.keys(folderCategoryMap).sort();
-			const categories: Record<string, string[]> = {};
-
-			for (const folder in folderCategoryMap) {
-				categories[folder] = Array.from(folderCategoryMap[folder]).sort();
-			}
-
-			return { folders, categories };
-		} catch (error) {
-			console.error("  ❌ Failed to fetch folders/categories:", error);
-			throw error;
-		}
-	}
-
-	private static async fetchDatasetStats(): Promise<{
+    static async fetchDatasetStats(): Promise<{
 		maxStars: number | null;
 		maxCitations: number | null;
 		totalCount: number;
@@ -603,4 +512,53 @@ export class DataService {
 			throw error;
 		}
 	}
+    static applyTagFilters(query: any, tags: string[], logic: 'OR' | 'AND' | 'SINGLE' = 'OR') {
+        if (tags.length === 0) return query;
+
+        switch (logic) {
+            case 'OR':
+                // Used by main app - packages with ANY of the selected tags
+                return query.filter('tags', 'cs', JSON.stringify(tags));
+
+            case 'AND':
+                // Used by admin bulk operations - packages with ALL selected tags
+                tags.forEach(tag => {
+                    query = query.contains('tags', [tag]);
+                });
+                return query;
+
+            case 'SINGLE':
+                // Used for single tag searches - packages containing exactly this tag
+                return query.contains('tags', [tags[0]]);
+
+            default:
+                return query;
+        }
+    }
+
+    /**
+     * Refresh metadata and update the filter store
+     */
+    static async refreshFilterMetadata(): Promise<void> {
+        console.log("🔄 Refreshing filter metadata...");
+        try {
+            const metadata = await this.fetchFilterMetadata();
+
+            // Update the filter store with fresh metadata
+            const { useFilterStore } = await import('../store/filterStore');
+            useFilterStore.setState({
+                allAvailableTags: metadata.allAvailableTags,
+                allAvailableLicenses: metadata.allAvailableLicenses,
+                allAvailableFolders: metadata.allAvailableFolders,
+                allAvailableCategories: metadata.allAvailableCategories,
+                datasetMaxStars: metadata.datasetMaxStars,
+                datasetMaxCitations: metadata.datasetMaxCitations,
+            });
+
+            console.log("✅ Filter metadata refreshed successfully");
+        } catch (error) {
+            console.error("❌ Error refreshing filter metadata:", error);
+            throw error;
+        }
+    }
 }

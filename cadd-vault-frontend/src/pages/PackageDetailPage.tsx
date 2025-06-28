@@ -7,7 +7,7 @@ import { supabase } from '../supabase';
 import { Package } from '../types';
 import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete, FolderOutlined, CategoryOutlined } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
-import { RatingEventEmitter, RatingService, type RatingUpdateEvent } from '../services/ratingService';
+import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import RatingInput from '../components/RatingInput';
 import { useAuth } from '../context/AuthContext';
 
@@ -179,67 +179,66 @@ const PackageDetailPage: React.FC = () => {
 
 	useEffect(() => {
 		const fetchPackage = async () => {
-			if (!packageId) {
-				setError('Package ID is missing.');
-				setLoading(false);
-				return;
-			}
+			if (!packageId || !mountedRef.current) return;
+
 			setLoading(true);
 			setError(null);
+
 			try {
-				// Get basic package data
-				const { data, error: dbError } = await supabase
+				// Fetch package with all relationships
+				const { data: packageData, error: packageError } = await supabase
 					.from('packages')
-					.select('*')
+					.select(`
+						*,
+						package_tags!left(
+							tags!inner(name)
+						),
+						package_folder_categories!left(
+							folder_categories!inner(
+								folders!inner(name),
+								categories!inner(name)
+							)
+						)
+					`)
 					.eq('id', packageId)
-					.limit(1);
+					.single();
 
-				if (dbError) {
-					throw dbError;
-				}
+				if (packageError) throw packageError;
 
-				if (data && data.length > 0) {
-					let packageData = data[0] as Package;
+				if (packageData) {
+					// Transform the data
+					const transformedPackage = {
+						...packageData,
+						tags: packageData.package_tags?.map((pt: any) => pt.tags?.name) || [],
+						folder1: packageData.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
+						category1: packageData.package_folder_categories?.[0]?.folder_categories?.categories?.name || ''
+					};
 
-					// If user is authenticated, fetch their rating for this package
+					// Get user rating if authenticated
 					if (userId) {
-						try {
-							const userRating = await RatingService.getUserRating(packageId);
-							if (userRating) {
-								packageData = {
-									...packageData,
-									user_rating: userRating.rating,
-									user_rating_id: userRating.rating_id
-								};
-							}
-						} catch (userRatingError) {
-							console.error('Error fetching user rating:', userRatingError);
-							// Don't fail the entire request if user rating fetch fails
+						const { data: ratingData } = await supabase
+							.rpc('get_user_rating', { package_uuid: packageId });
+
+						if (ratingData && ratingData.length > 0) {
+							transformedPackage.user_rating = ratingData[0].rating;
+							transformedPackage.user_rating_id = ratingData[0].rating_id;
 						}
 					}
 
-					if (mountedRef.current) {
-						setPackageData(packageData);
-					}
-				} else {
-					if (mountedRef.current) {
-						setError('Package not found.');
-					}
+					setPackageData(transformedPackage);
 				}
 			} catch (err: any) {
 				console.error("Error fetching package:", err);
-				if (mountedRef.current) {
-					setError(`Failed to fetch package data: ${err?.message || 'Unknown error'}`);
-				}
+				setError(`Failed to fetch package data: ${err.message}`);
 			} finally {
-				if (mountedRef.current) {
-					setLoading(false);
-				}
+				setLoading(false);
 			}
 		};
 
 		fetchPackage();
+	}, [packageId, userId]);
 
+	useEffect(() => {
 		// Listen for rating updates
 		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
 			// Only update if this is the current package
@@ -257,7 +256,7 @@ const PackageDetailPage: React.FC = () => {
 		return () => {
 			unsubscribe();
 		};
-	}, [packageId, userId]);
+	}, [packageId]);
 
 	// Loading state
 	if (loading) {

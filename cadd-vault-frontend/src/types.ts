@@ -71,3 +71,44 @@ export interface PackageSuggestion {
 	// For display purposes on admin page, might join user email
 	suggester_email?: string; // Not a DB column, but useful for display
 }
+
+// Add these new interfaces
+export interface Tag {
+    id: string;
+    name: string;
+    created_at: string;
+}
+
+export interface Folder {
+    id: string;
+    name: string;
+    created_at: string;
+}
+
+export interface Category {
+    id: string;
+    name: string;
+    created_at: string;
+}
+
+export interface FolderCategory {
+    id: string;
+    folder_id: string;
+    category_id: string;
+    folder?: Folder;
+    category?: Category;
+}
+
+// Update Package interface to include normalized data when fetched
+export interface PackageWithRelations extends Package {
+    package_tags?: { tag_id: string; tags?: Tag }[];
+    package_folder_categories?: { 
+        folder_category_id: string; 
+        folder_categories?: {
+            folder_id: string;
+            category_id: string;
+            folders?: Folder;
+            categories?: Category;
+        }
+    }[];
+}

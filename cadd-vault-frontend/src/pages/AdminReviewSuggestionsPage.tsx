@@ -509,56 +509,20 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 		setError(null);
 		setSuccessMessage(null);
 
-		const newPackageId = crypto.randomUUID(); // Generate a new UUID for the package
-
-		const packageToInsert: Omit<PackageType, 'average_rating' | 'ratings_count' | 'ratings_sum' | 'github_stars' | 'last_commit' | 'last_commit_ago' | 'citations' | 'journal' | 'jif' | 'primary_language' | 'github_owner' | 'github_repo' | 'page_icon'> & { id: string } = {
-			id: newPackageId, // Assign the generated UUID
-			package_name: suggestion.package_name,
-			description: suggestion.description || undefined,
-			publication: suggestion.publication_url || undefined,
-			webserver: suggestion.webserver_url || undefined,
-			repo_link: suggestion.repo_url || undefined,
-			link: suggestion.link_url || undefined,
-			license: suggestion.license || undefined,
-			tags: suggestion.tags || undefined,
-			folder1: suggestion.folder1 || undefined,
-			category1: suggestion.category1 || undefined,
-			// These fields will be populated by backend scripts or have defaults in DB
-		};
-
 		try {
-			const { data: insertedPackage, error: insertError } = await supabase
-				.from('packages')
-				.insert(packageToInsert)
-				.select()
-				.single();
+			// Use the database function that handles normalization
+			const { error } = await supabase
+				.rpc('approve_suggestion_with_normalized_data', {
+					suggestion_id: suggestion.id,
+					approved_by: currentUser.id
+				});
 
-			if (insertError) {
-				console.error("Error inserting into packages table:", insertError);
-				throw insertError;
-			}
+			if (error) throw error;
 
-			if (insertedPackage) {
-				const { error: updateSuggestionError } = await supabase
-					.from('package_suggestions')
-					.update({
-						status: 'added',
-						reviewed_at: new Date().toISOString(),
-						reviewed_by_admin_id: currentUser.id,
-						admin_notes: suggestion.admin_notes ? `${suggestion.admin_notes}; Added to DB.` : 'Added to DB.'
-					})
-					.eq('id', suggestion.id);
-
-				if (updateSuggestionError) {
-					console.error("Error updating suggestion status to 'added':", updateSuggestionError);
-					setError(`Package added, but failed to update suggestion status: ${updateSuggestionError.message}`);
-				} else {
-					setSuccessMessage(`Package "${suggestion.package_name}" added to database and suggestion marked as 'Added'.`);
-				}
-			}
+			setSuccessMessage("Package added successfully and suggestion marked as added.");
 			fetchSuggestions(filterStatus);
 		} catch (err: any) {
-			setError(`Failed to add package directly: ${err.message}`);
+			setError(`Failed to add package: ${err.message}`);
 		} finally {
 			setActionLoading(null);
 		}
@@ -746,58 +710,22 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 			let errorCount = 0;
 			const errors: string[] = [];
 
-			// Process each suggestion individually
+			// Process each suggestion individually using the RPC function
 			for (const suggestion of selectedSuggestionsList) {
 				try {
-					const newPackageId = crypto.randomUUID(); // Generate a new UUID for the package
+					// Use the database function that handles normalization
+					const { error } = await supabase
+						.rpc('approve_suggestion_with_normalized_data', {
+							suggestion_id: suggestion.id,
+							approved_by: currentUser?.id
+						});
 
-					const packageToInsert: Omit<PackageType, 'average_rating' | 'ratings_count' | 'ratings_sum' | 'github_stars' | 'last_commit' | 'last_commit_ago' | 'citations' | 'journal' | 'jif' | 'primary_language' | 'github_owner' | 'github_repo' | 'page_icon'> & { id: string } = {
-						id: newPackageId,
-						package_name: suggestion.package_name,
-						description: suggestion.description || undefined,
-						publication: suggestion.publication_url || undefined,
-						webserver: suggestion.webserver_url || undefined,
-						repo_link: suggestion.repo_url || undefined,
-						link: suggestion.link_url || undefined,
-						license: suggestion.license || undefined,
-						tags: suggestion.tags || undefined,
-						folder1: suggestion.folder1 || undefined,
-						category1: suggestion.category1 || undefined,
-					};
-
-					// Insert package into database
-					const { data: insertedPackage, error: insertError } = await supabase
-						.from('packages')
-						.insert(packageToInsert)
-						.select()
-						.single();
-
-					if (insertError) {
-						console.error(`Error inserting package for suggestion ${suggestion.package_name}:`, insertError);
-						errors.push(`Failed to add "${suggestion.package_name}": ${insertError.message}`);
+					if (error) {
+						console.error(`Error processing suggestion ${suggestion.package_name}:`, error);
+						errors.push(`Failed to add "${suggestion.package_name}": ${error.message}`);
 						errorCount++;
-						continue;
-					}
-
-					if (insertedPackage) {
-						// Update suggestion status to 'added'
-						const { error: updateSuggestionError } = await supabase
-							.from('package_suggestions')
-							.update({
-								status: 'added',
-								reviewed_at: new Date().toISOString(),
-								reviewed_by_admin_id: currentUser?.id,
-								admin_notes: suggestion.admin_notes ? `${suggestion.admin_notes}; Added to DB via batch operation.` : 'Added to DB via batch operation.'
-							})
-							.eq('id', suggestion.id);
-
-						if (updateSuggestionError) {
-							console.error(`Error updating suggestion status for ${suggestion.package_name}:`, updateSuggestionError);
-							errors.push(`Package "${suggestion.package_name}" added but failed to update suggestion status: ${updateSuggestionError.message}`);
-							errorCount++;
-						} else {
-							successCount++;
-						}
+					} else {
+						successCount++;
 					}
 				} catch (err: any) {
 					console.error(`Error processing suggestion ${suggestion.package_name}:`, err);

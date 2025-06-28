@@ -20,6 +20,7 @@ interface EditSuggestionModalProps {
 	onClose: () => void;
 	suggestion: PackageSuggestion | null;
 	onSaveSuccess: () => void;
+	onSaveAndApproveSuccess?: () => void;
 	isAdmin: boolean;
 }
 
@@ -28,6 +29,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 	onClose,
 	suggestion,
 	onSaveSuccess,
+	onSaveAndApproveSuccess,
 	isAdmin
 }) => {
 	const [formData, setFormData] = useState<Partial<PackageSuggestion>>({});
@@ -204,135 +206,62 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		}
 	};
 	const handleSaveAndApprove = async () => {
-		if (!suggestion || !currentUser || !isAdmin) {
-			setError("Action not allowed or user not identified.");
+		if (!suggestion || !currentUser || !isAdmin || !formData.package_name?.trim()) {
+			setError("Invalid operation.");
 			return;
 		}
-		if (!formData.package_name?.trim()) {
-			setError("Package name is required.");
-			return;
-		}
+
 		setLoading(true);
 		setError(null);
 		setSuccessMessage(null);
 
-		// Create timeout promise to prevent hanging
-		const timeoutPromise = new Promise((_, reject) => {
-			setTimeout(() => reject(new Error('Operation timed out after 60 seconds')), 60000);
-		});
-
 		try {
-			// Wrap the entire operation in a timeout
-			await Promise.race([
-				(async () => {
-					// First, save the suggestion details
-					const suggestionUpdates: Partial<Omit<PackageSuggestion, 'id' | 'created_at' | 'status' | 'suggested_by_user_id' | 'reviewed_at' | 'reviewed_by_admin_id' | 'suggester_email'>> = {
-						package_name: formData.package_name,
-						description: formData.description || undefined,
-						publication_url: formData.publication_url || undefined,
-						webserver_url: formData.webserver_url || undefined,
-						repo_url: formData.repo_url || undefined,
-						link_url: formData.link_url || undefined,
-						license: formData.license || undefined,
-						tags: formData.tags && formData.tags.length > 0 ? formData.tags : undefined,
-						folder1: formData.folder1 || undefined,
-						category1: formData.category1 || undefined,
-						suggestion_reason: formData.suggestion_reason || undefined,
-						admin_notes: formData.admin_notes || undefined,
-					};
+			// First update the suggestion
+			const suggestionUpdates = {
+				package_name: formData.package_name,
+				description: formData.description || null,
+				publication_url: formData.publication_url || null,
+				webserver_url: formData.webserver_url || null,
+				repo_url: formData.repo_url || null,
+				link_url: formData.link_url || null,
+				license: formData.license || null,
+				tags: formData.tags && formData.tags.length > 0 ? formData.tags : null,
+				folder1: formData.folder1 || null,
+				category1: formData.category1 || null,
+				suggestion_reason: formData.suggestion_reason || null,
+				admin_notes: formData.admin_notes || null
+			};
 
-					console.log("Saving suggestion updates:", suggestionUpdates);
+			const { error: saveError } = await supabase
+				.from('package_suggestions')
+				.update(suggestionUpdates)
+				.eq('id', suggestion.id);
 
-					const { error: saveError } = await supabase
-						.from('package_suggestions')
-						.update(suggestionUpdates)
-						.eq('id', suggestion.id);
+			if (saveError) throw saveError;
 
-					if (saveError) {
-						console.error("Error saving suggestion details:", saveError);
-						throw new Error(`Failed to save suggestion details: ${saveError.message}`);
-					}
+			// Then approve using the database function
+			const { error: approveError } = await supabase
+				.rpc('approve_suggestion_with_normalized_data', {
+					suggestion_id: suggestion.id,
+					approved_by: currentUser.id
+				});
 
-					console.log("Suggestion details saved successfully");
+			if (approveError) throw approveError;
 
-					// Then, approve the suggestion
-					const approvalData = {
-						status: 'approved',
-						reviewed_at: new Date().toISOString(),
-						reviewed_by_admin_id: currentUser.id,
-					};
-
-					console.log("Approving suggestion:", approvalData);
-
-					const { error: approveError } = await supabase
-						.from('package_suggestions')
-						.update(approvalData)
-						.eq('id', suggestion.id);
-
-					if (approveError) {
-						console.error("Error approving suggestion:", approveError);
-						throw new Error(`Suggestion saved, but failed to approve: ${approveError.message}`);
-					}
-
-					console.log("Suggestion approved successfully");
-
-					// Finally, create the package in the 'packages' table
-					// Create a simplified object that matches the database schema exactly
-					const newPackageId = crypto.randomUUID(); // Generate a new UUID for the package
-
-					const newPackageDataForTable = {
-						id: newPackageId,
-						package_name: formData.package_name!,
-						description: formData.description || null,
-						publication: formData.publication_url || null,
-						webserver: formData.webserver_url || null,
-						repo_link: formData.repo_url || null,
-						link: formData.link_url || null,
-						license: formData.license || null,
-						tags: formData.tags && formData.tags.length > 0 ? formData.tags : null,
-						folder1: formData.folder1 || null,
-						category1: formData.category1 || null,
-						last_updated: new Date().toISOString(),
-						// Set default values for fields that should have defaults
-						average_rating: 0,
-						ratings_count: 0
-					};
-
-					console.log("Creating package with data:", newPackageDataForTable);
-
-					const { error: createPackageError, data: createdPackage } = await supabase
-						.from('packages')
-						.insert([newPackageDataForTable])
-						.select()
-						.single();
-
-					if (createPackageError) {
-						console.error("Error creating package from suggestion:", createPackageError);
-						console.error("Package data that failed:", newPackageDataForTable);
-						// Potentially roll back suggestion approval or mark it for retry
-						throw new Error(`Suggestion approved, but failed to create package: ${createPackageError.message}`);
-					}
-
-					console.log("Package created successfully:", createdPackage);
-
-					setSuccessMessage("Suggestion saved, approved, and package created successfully!");
-					onSaveSuccess(); // Callback to refresh parent component's data
-				})(),
-				timeoutPromise
-			]);
-
-		} catch (err: any) {
-			console.error("Error in handleSaveAndApprove:", err);
-			if (err.message.includes('timed out')) {
-				setError("Operation timed out. Please check your network connection and try again. If the issue persists, the suggestion may have been partially processed - please check the suggestions list.");
+			setSuccessMessage("Suggestion approved and package created successfully!");
+			if (onSaveAndApproveSuccess) {
+				onSaveAndApproveSuccess();
 			} else {
-				setError(err.message || "An unexpected error occurred during the save and approve process.");
+				onSaveSuccess(); // Use the existing callback
 			}
+			onClose();
+		} catch (err: any) {
+			console.error("Error in save and approve:", err);
+			setError(`Failed to save and approve: ${err.message}`);
 		} finally {
 			setLoading(false);
 		}
 	};
-
 	const handleCreateFolder = async () => {
 		if (!isAdmin) {
 			setError("You must be an admin to create new folders.");
@@ -349,77 +278,44 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		setSuccessMessage(null);
 
 		try {
-			// Check if folder already exists
-			if (allAvailableFolders.includes(newFolderName.trim())) {
-				setError(`Folder "${newFolderName.trim()}" already exists.`);
-				setFolderCreationLoading(false);
-				return;
-			}
-
-			// Get existing folders to check if folder already exists in any package
-			const { data: existingData, error: existingError } = await supabase
-				.from('packages')
-				.select('folder1')
-				.eq('folder1', newFolderName.trim())
-				.limit(1);
-
-			if (existingError) throw existingError;
-
-			if (existingData && existingData.length > 0) {
-				setError(`Folder "${newFolderName.trim()}" already exists in the database.`);
-				setFolderCreationLoading(false);
-				return;
-			}
-
-			// Create a placeholder package with the new folder to establish it in the database
-			const placeholderId = crypto.randomUUID(); // Generate a new UUID for the placeholder
+			// Create folder in normalized table
 			const { error: insertError } = await supabase
-				.from('packages')
-				.insert({
-					id: placeholderId, // Required primary key
-					package_name: `__folder_placeholder_${Date.now()}`,
-					folder1: newFolderName.trim(),
-					description: `This is a placeholder entry to establish the folder "${newFolderName.trim()}". This entry can be safely deleted once other packages use this folder.`,
-					last_updated: new Date().toISOString(), // Current timestamp
-					// Add required fields with default values
-					tags: [],
-					license: 'Placeholder'
-				});
+				.from('folders')
+				.insert({ name: newFolderName.trim() })
+				.select()
+				.single();
 
-			if (insertError) throw insertError;
+			if (insertError) {
+				if (insertError.code === '23505') {
+				setError(`Folder "${newFolderName.trim()}" already exists.`);
+				} else {
+					throw insertError;
+				}
+				return;
+			}
 
-			// Update the folders list in the filter store
+			// Update local state
 			const updatedFolders = [...allAvailableFolders, newFolderName.trim()].sort();
-			const updatedCategories = {
+			useFilterStore.setState({
+				allAvailableFolders: updatedFolders,
+				allAvailableCategories: {
 				...allAvailableCategoriesMap,
 				[newFolderName.trim()]: []
-			};
+				}
+			});
 
-			// Reset the form
+			setFormData(prev => ({
+				...prev,
+				folder1: newFolderName.trim(),
+				category1: ''
+			}));
+
 			setNewFolderName('');
 			setIsAddingFolder(false);
-			setSuccessMessage(`Folder "${newFolderName.trim()}" has been created successfully.`);
+			setSuccessMessage(`Folder "${newFolderName.trim()}" created successfully.`);
 
-			const newFolderTrimmed = newFolderName.trim();
-
-			// Use requestAnimationFrame to avoid forced reflow
-			requestAnimationFrame(() => {
-				// Update the store with the new folder
-				useFilterStore.setState({
-					allAvailableFolders: updatedFolders,
-					allAvailableCategories: updatedCategories
-				});
-
-				// Set the newly created folder as the selected folder
-				setFormData(prev => ({ ...prev, folder1: newFolderTrimmed, category1: '' }));
-				setCurrentCategories([]); // Reset categories for the new folder
-			});
-
-			// Refresh metadata to ensure consistency (async, doesn't block UI)
-			useFilterStore.getState().refreshMetadata().catch(refreshError => {
-				console.warn("⚠️ Failed to refresh metadata after folder creation:", refreshError);
-				// Don't fail the entire operation if metadata refresh fails
-			});
+			// Refresh metadata
+			await useFilterStore.getState().refreshMetadata();
 
 		} catch (err: any) {
 			console.error("Error creating folder:", err);
@@ -429,19 +325,10 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		}
 	};
 
+	// Update handleCreateCategory to use normalized structure
 	const handleCreateCategory = async () => {
-		if (!isAdmin) {
-			setError("You must be an admin to create new categories.");
-			return;
-		}
-
-		if (!formData.folder1) {
-			setError("Please select a folder first.");
-			return;
-		}
-
-		if (!newCategoryName.trim()) {
-			setError("Please enter a category name.");
+		if (!isAdmin || !formData.folder1 || !newCategoryName.trim()) {
+			setError("Please select a folder and enter a category name.");
 			return;
 		}
 
@@ -450,83 +337,41 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		setSuccessMessage(null);
 
 		try {
-			// Check if category already exists in selected folder
-			if (allAvailableCategoriesMap[formData.folder1]?.includes(newCategoryName.trim())) {
-				setError(`Category "${newCategoryName.trim()}" already exists in this folder.`);
-				setCategoryCreationLoading(false);
-				return;
-			}
-
-			// Get existing categories to check if category already exists in the selected folder
-			const { data: existingData, error: existingError } = await supabase
-				.from('packages')
-				.select('category1')
-				.eq('folder1', formData.folder1)
-				.eq('category1', newCategoryName.trim())
-				.limit(1);
-
-			if (existingError) throw existingError;
-
-			if (existingData && existingData.length > 0) {
-				setError(`Category "${newCategoryName.trim()}" already exists in this folder.`);
-				setCategoryCreationLoading(false);
-				return;
-			}
-
-			// Create a placeholder package with this folder and category to establish it in the database
-			const placeholderId = crypto.randomUUID(); // Generate a new UUID for the placeholder
-			const { error: insertError } = await supabase
-				.from('packages')
-				.insert({
-					id: placeholderId, // Required primary key
-					package_name: `__category_placeholder_${Date.now()}`,
-					folder1: formData.folder1,
-					category1: newCategoryName.trim(),
-					description: `This is a placeholder entry to establish the category "${newCategoryName.trim()}" in folder "${formData.folder1}". This entry can be safely deleted once other packages use this category.`,
-					last_updated: new Date().toISOString(), // Current timestamp
-					// Add potential missing required fields with default values
-					tags: [], 
-					license: 'Placeholder'
+			// Use database function to ensure relationship
+			const { error } = await supabase
+				.rpc('ensure_folder_category_exists', {
+					folder_name: formData.folder1,
+					category_name: newCategoryName.trim()
 				});
 
-			if (insertError) throw insertError;
+			if (error) throw error;
 
-			// Update the categories list in the filter store
+			// Update local state
+			const currentCats = allAvailableCategoriesMap[formData.folder1] || [];
+			if (!currentCats.includes(newCategoryName.trim())) {
 			const updatedCategories = {
 				...allAvailableCategoriesMap,
-				[formData.folder1]: [
-					...(allAvailableCategoriesMap[formData.folder1] || []),
-					newCategoryName.trim()
-				].sort()
+				[formData.folder1]: [...currentCats, newCategoryName.trim()].sort()
 			};
 
-			// Reset the form
-			setNewCategoryName('');
-			setIsAddingCategory(false);
-			setSuccessMessage(`Category "${newCategoryName.trim()}" has been created successfully in folder "${formData.folder1}".`);
-
-			const newCategoryTrimmed = newCategoryName.trim();
-			const selectedFolder = formData.folder1;
-
-			// Use requestAnimationFrame to avoid forced reflow
-			requestAnimationFrame(() => {
-				// Update the store with the new category
 				useFilterStore.setState({
 					allAvailableCategories: updatedCategories
 				});
 
-				// Set the newly created category as the selected category
-				setFormData(prev => ({ ...prev, category1: newCategoryTrimmed }));
-				if (selectedFolder && updatedCategories[selectedFolder]) {
-					setCurrentCategories(updatedCategories[selectedFolder]);
-				}
-			});
+				setCurrentCategories(updatedCategories[formData.folder1]);
+			}
 
-			// Refresh metadata to ensure consistency (async, doesn't block UI)
-			useFilterStore.getState().refreshMetadata().catch(refreshError => {
-				console.warn("⚠️ Failed to refresh metadata after category creation:", refreshError);
-				// Don't fail the entire operation if metadata refresh fails
-			});
+			setFormData(prev => ({
+				...prev,
+				category1: newCategoryName.trim()
+			}));
+
+			setNewCategoryName('');
+			setIsAddingCategory(false);
+			setSuccessMessage(`Category "${newCategoryName.trim()}" created successfully.`);
+
+			// Refresh metadata
+			await useFilterStore.getState().refreshMetadata();
 
 		} catch (err: any) {
 			console.error("Error creating category:", err);

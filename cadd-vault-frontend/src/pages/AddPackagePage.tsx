@@ -124,59 +124,65 @@ const AddPackagePage: React.FC = () => {
 		setError(null);
 
 		if (!formData.package_name) {
-			setError('Package Name (package_name) is required.');
+			setError('Package Name is required.');
 			return;
 		}
 
 		setLoading(true);
 
 		try {
-			// Generate UUID for the new package
 			const packageId = uuidv4();
-			
-			const newPackageData: Partial<Package> = {
-				id: packageId,
-				package_name: formData.package_name || '',
-				description: formData.description || '',
-				publication: formData.publication || '',
-				webserver: formData.webserver || '',
-				repo_link: formData.repo_link || '',
-				link: formData.link || '',
-				license: formData.license || '',
-				tags: formData.tags || [],
-				folder1: formData.folder1 || '',
-				category1: formData.category1 || '',
-				last_updated: new Date().toISOString(), // Add current timestamp
-			};
 
-			const { data, error: insertError } = await supabase
+			// First, create the package
+			const { error: insertError } = await supabase
 				.from('packages')
-				.insert([newPackageData])
-				.select();
+				.insert({
+				id: packageId,
+				package_name: formData.package_name,
+				description: formData.description || null,
+				publication: formData.publication || null,
+				webserver: formData.webserver || null,
+				repo_link: formData.repo_link || null,
+				link: formData.link || null,
+				license: formData.license || null,
+				last_updated: new Date().toISOString(),
+				// Keep old columns null or with values for rollback
+				tags: formData.tags || [],
+				folder1: formData.folder1 || null,
+				category1: formData.category1 || null
+			})
+			.select()
+			.single();
 
-			if (insertError) {
-				throw insertError;
+			if (insertError) throw insertError;
+
+			// Update tags using the database function
+			if (formData.tags && formData.tags.length > 0) {
+				const { error: tagsError } = await supabase
+					.rpc('update_package_tags', {
+						package_uuid: packageId,
+						new_tags: formData.tags
+					});
+
+				if (tagsError) console.error('Error updating tags:', tagsError);
 			}
 
-			const newPackage = data?.[0];
+			// Update folder/category using the database function
+			if (formData.folder1 && formData.category1) {
+				const { error: fcError } = await supabase
+					.rpc('update_package_folder_category', {
+						package_uuid: packageId,
+						folder_name: formData.folder1,
+						category_name: formData.category1
+					});
 
-			if (newPackage) {
-				console.log('Package added successfully:', newPackage);
-				// Optionally, update the filterStore's originalPackages and derived metadata here
-				// or rely on a full refresh/re-fetch if the user navigates back to HomePage.
-				// For simplicity, we'll navigate and let HomePage handle its data.
-				useFilterStore.getState().setOriginalPackagesAndDeriveMetadata(
-					[...useFilterStore.getState().originalPackages, newPackage]
-				);
-				navigate(`/package/${encodeURIComponent(newPackage.id)}`);
-			} else {
-				setError('Failed to retrieve the newly added package data.');
-				console.error('Insert successful but no data returned.');
+				if (fcError) console.error('Error updating folder/category:', fcError);
 			}
 
-		} catch (err) {
-			console.error('Error adding package: ', err);
-			setError(`Failed to add package: ${err instanceof Error ? err.message : String(err)}`);
+			navigate(`/package/${encodeURIComponent(packageId)}`);
+		} catch (err: any) {
+			console.error('Error adding package:', err);
+			setError(`Failed to add package: ${err.message}`);
 		} finally {
 			setLoading(false);
 		}

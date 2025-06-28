@@ -53,9 +53,9 @@ interface BulkOperationForm {
 		category: string | null;
 		tags: string[];
 	};
-	updateOptions: {
-		folder: string | null;
-		category: string | null;
+	bulkOperations: {  // Change from updateOptions to bulkOperations
+		setFolder: string | null;
+		setCategory: string | null;
 		addTags: string[];
 		removeTags: string[];
 	};
@@ -66,7 +66,11 @@ interface OperationResult {
 	status: 'success' | 'error' | 'warning';
 	message: string;
 	details?: string;
-	affectedPackages: number;
+	affectedPackages?: number;
+	totalProcessed?: number;
+	successCount?: number;
+	errorCount?: number;
+	errors?: string[];
 }
 
 // Interface for the folder/category creation form
@@ -97,9 +101,9 @@ const AdminBulkOperationsPage: React.FC = () => {
 			category: null,
 			tags: []
 		},
-		updateOptions: {
-			folder: null,
-			category: null,
+		bulkOperations: {  // Change from updateOptions
+			setFolder: null,
+			setCategory: null,
 			addTags: [],
 			removeTags: []
 		}
@@ -279,11 +283,10 @@ const AdminBulkOperationsPage: React.FC = () => {
 		const newFolder = event.target.value === "null" ? null : event.target.value;
 		setForm(prev => ({
 			...prev,
-			updateOptions: {
-				...prev.updateOptions,
-				folder: newFolder,
-				// Optionally reset category when folder changes
-				category: null
+			bulkOperations: {  // Change from updateOptions
+				...prev.bulkOperations,
+				setFolder: newFolder,
+				setCategory: null
 			}
 		}));
 	};
@@ -292,9 +295,9 @@ const AdminBulkOperationsPage: React.FC = () => {
 		const newCategory = event.target.value === "null" ? null : event.target.value;
 		setForm(prev => ({
 			...prev,
-			updateOptions: {
-				...prev.updateOptions,
-				category: newCategory
+			bulkOperations: {  // Change from updateOptions
+				...prev.bulkOperations,
+				setCategory: newCategory
 			}
 		}));
 	};
@@ -302,8 +305,8 @@ const AdminBulkOperationsPage: React.FC = () => {
 	const handleAddTagsChange = (_event: React.SyntheticEvent, newValue: string[]) => {
 		setForm(prev => ({
 			...prev,
-			updateOptions: {
-				...prev.updateOptions,
+			bulkOperations: {  // Change from updateOptions
+				...prev.bulkOperations,
 				addTags: newValue
 			}
 		}));
@@ -312,8 +315,8 @@ const AdminBulkOperationsPage: React.FC = () => {
 	const handleRemoveTagsChange = (_event: React.SyntheticEvent, newValue: string[]) => {
 		setForm(prev => ({
 			...prev,
-			updateOptions: {
-				...prev.updateOptions,
+			bulkOperations: {  // Change from updateOptions
+				...prev.bulkOperations,
 				removeTags: newValue
 			}
 		}));
@@ -475,7 +478,7 @@ const AdminBulkOperationsPage: React.FC = () => {
 	// Handle creation of new folder
 	const handleCreateFolder = async () => {
 		if (!isAdmin) {
-			setFolderCreationError("You must be an admin to perform this operation.");
+			setFolderCreationError("You must be an admin to create folders.");
 			return;
 		}
 
@@ -489,64 +492,31 @@ const AdminBulkOperationsPage: React.FC = () => {
 		setFolderCreationSuccess(null);
 
 		try {
-			// Check if folder already exists
-			if (allAvailableFolders.includes(folderCategoryForm.newFolder.trim())) {
-				setFolderCreationError(`Folder "${folderCategoryForm.newFolder.trim()}" already exists.`);
-				setIsFolderCreating(false);
-				return;
-			}
-
-			// Get existing folders to check if folder already exists in any package
-			const { data: existingData, error: existingError } = await supabase
-				.from('packages')
-				.select('folder1')
-				.eq('folder1', folderCategoryForm.newFolder.trim())
-				.limit(1);
-
-			if (existingError) throw existingError;
-
-			if (existingData && existingData.length > 0) {
-				setFolderCreationError(`Folder "${folderCategoryForm.newFolder.trim()}" already exists in the database.`);
-				setIsFolderCreating(false);
-				return;
-			}
-
-			// Create at least one package with this folder to establish it in the database
+			// Create new folder in normalized table
 			const { error: insertError } = await supabase
-				.from('packages')
-				.insert({
-					package_name: `__folder_placeholder_${Date.now()}`,
-					folder1: folderCategoryForm.newFolder.trim(),
-					description: `This is a placeholder entry to establish the folder "${folderCategoryForm.newFolder.trim()}". This entry can be safely deleted once other packages use this folder.`,
-					last_updated: new Date().toISOString() // Add current timestamp
-				});
+				.from('folders')
+				.insert({ name: folderCategoryForm.newFolder.trim() })
+				.select()
+				.single();
 
-			if (insertError) throw insertError;
+			if (insertError) {
+				if (insertError.code === '23505') { // Unique constraint violation
+				setFolderCreationError(`Folder "${folderCategoryForm.newFolder.trim()}" already exists.`);
+				} else {
+					throw insertError;
+				}
+				return;
+			}
 
-			// Update the folders list in the filter store
-			const updatedFolders = [...allAvailableFolders, folderCategoryForm.newFolder.trim()].sort();
-			const updatedCategories = {
-				...allAvailableCategories,
-				[folderCategoryForm.newFolder.trim()]: []
-			};
+			setFolderCreationSuccess(`Folder "${folderCategoryForm.newFolder.trim()}" created successfully!`);
+			setFolderCategoryForm({ ...folderCategoryForm, newFolder: '' });
 
-			// Reset the form
-			setFolderCategoryForm(prev => ({
-				...prev,
-				newFolder: ''
-			}));
-			setFolderCreationSuccess(`Folder "${folderCategoryForm.newFolder.trim()}" has been created successfully.`);
+			// Refresh metadata
+			await DataService.refreshFilterMetadata();
 
-			// Manually update the store with the new folder
-			// Note: This avoids having to refresh the entire page to see the new folder
-			useFilterStore.setState({
-				allAvailableFolders: updatedFolders,
-				allAvailableCategories: updatedCategories
-			});
-
-		} catch (err: any) {
-			console.error("Error creating folder:", err);
-			setFolderCreationError(`Failed to create folder: ${err.message}`);
+		} catch (error: any) {
+			console.error("Error creating folder:", error);
+			setFolderCreationError(`Failed to create folder: ${error.message}`);
 		} finally {
 			setIsFolderCreating(false);
 		}
@@ -555,7 +525,7 @@ const AdminBulkOperationsPage: React.FC = () => {
 	// Handle creation of new category
 	const handleCreateCategory = async () => {
 		if (!isAdmin) {
-			setCategoryCreationError("You must be an admin to perform this operation.");
+			setCategoryCreationError("You must be an admin to create categories.");
 			return;
 		}
 
@@ -574,66 +544,24 @@ const AdminBulkOperationsPage: React.FC = () => {
 		setCategoryCreationSuccess(null);
 
 		try {
-			// Check if category already exists in selected folder
-			if (allAvailableCategories[folderCategoryForm.selectedFolder]?.includes(folderCategoryForm.newCategory.trim())) {
-				setCategoryCreationError(`Category "${folderCategoryForm.newCategory.trim()}" already exists in this folder.`);
-				setIsCategoryCreating(false);
-				return;
-			}
-
-			// Get existing categories to check if category already exists in the selected folder
-			const { data: existingData, error: existingError } = await supabase
-				.from('packages')
-				.select('category1')
-				.eq('folder1', folderCategoryForm.selectedFolder)
-				.eq('category1', folderCategoryForm.newCategory.trim())
-				.limit(1);
-
-			if (existingError) throw existingError;
-
-			if (existingData && existingData.length > 0) {
-				setCategoryCreationError(`Category "${folderCategoryForm.newCategory.trim()}" already exists in this folder.`);
-				setIsCategoryCreating(false);
-				return;
-			}
-
-			// Create at least one package with this folder and category to establish it in the database
-			const { error: insertError } = await supabase
-				.from('packages')
-				.insert({
-					package_name: `__category_placeholder_${Date.now()}`,
-					folder1: folderCategoryForm.selectedFolder,
-					category1: folderCategoryForm.newCategory.trim(),
-					description: `This is a placeholder entry to establish the category "${folderCategoryForm.newCategory.trim()}" in folder "${folderCategoryForm.selectedFolder}". This entry can be safely deleted once other packages use this category.`,
-					last_updated: new Date().toISOString() // Add current timestamp
+			// Use the database function to ensure folder-category relationship
+			const { error } = await supabase
+				.rpc('ensure_folder_category_exists', {
+					folder_name: folderCategoryForm.selectedFolder,
+					category_name: folderCategoryForm.newCategory.trim()
 				});
 
-			if (insertError) throw insertError;
+			if (error) throw error;
 
-			// Update the categories list in the filter store
-			const updatedCategories = {
-				...allAvailableCategories,
-				[folderCategoryForm.selectedFolder]: [
-					...(allAvailableCategories[folderCategoryForm.selectedFolder] || []),
-					folderCategoryForm.newCategory.trim()
-				].sort()
-			};
+			setCategoryCreationSuccess(`Category "${folderCategoryForm.newCategory.trim()}" created successfully!`);
+			setFolderCategoryForm({ ...folderCategoryForm, newCategory: '' });
 
-			// Reset the form
-			setFolderCategoryForm(prev => ({
-				...prev,
-				newCategory: ''
-			}));
-			setCategoryCreationSuccess(`Category "${folderCategoryForm.newCategory.trim()}" has been created successfully in folder "${folderCategoryForm.selectedFolder}".`);
+			// Refresh metadata
+			await DataService.refreshFilterMetadata();
 
-			// Manually update the store with the new category
-			useFilterStore.setState({
-				allAvailableCategories: updatedCategories
-			});
-
-		} catch (err: any) {
-			console.error("Error creating category:", err);
-			setCategoryCreationError(`Failed to create category: ${err.message}`);
+		} catch (error: any) {
+			console.error("Error creating category:", error);
+			setCategoryCreationError(`Failed to create category: ${error.message}`);
 		} finally {
 			setIsCategoryCreating(false);
 		}
@@ -653,10 +581,10 @@ const AdminBulkOperationsPage: React.FC = () => {
 
 		// Validate that there's at least one update option specified
 		const hasUpdateOptions = (
-			form.updateOptions.folder !== null ||
-			form.updateOptions.category !== null ||
-			form.updateOptions.addTags.length > 0 ||
-			form.updateOptions.removeTags.length > 0
+			form.bulkOperations.setFolder !== null ||
+			form.bulkOperations.setCategory !== null ||
+			form.bulkOperations.addTags.length > 0 ||
+			form.bulkOperations.removeTags.length > 0
 		);
 
 		if (!hasUpdateOptions) {
@@ -691,25 +619,25 @@ const AdminBulkOperationsPage: React.FC = () => {
 					const updateData: Partial<Package> = {};
 
 					// Update folder
-					if (form.updateOptions.folder !== null) {
-						updateData.folder1 = form.updateOptions.folder;
+					if (form.bulkOperations.setFolder !== null) {
+						updateData.folder1 = form.bulkOperations.setFolder;
 					}
 
 					// Update category
-					if (form.updateOptions.category !== null) {
-						updateData.category1 = form.updateOptions.category;
+					if (form.bulkOperations.setCategory !== null) {
+						updateData.category1 = form.bulkOperations.setCategory;
 					}
 
 					// Handle tags (add/remove)
-					if (form.updateOptions.addTags.length > 0 || form.updateOptions.removeTags.length > 0) {
+					if (form.bulkOperations.addTags.length > 0 || form.bulkOperations.removeTags.length > 0) {
 						// Get current tags or initialize empty array
 						const currentTags: string[] = currentPackage.tags || [];
 
 						// Add new tags (avoiding duplicates)
-						const tagsToAdd = form.updateOptions.addTags.filter(tag => !currentTags.includes(tag));
+						const tagsToAdd = form.bulkOperations.addTags.filter(tag => !currentTags.includes(tag));
 
 						// Remove specified tags
-						const tagsAfterRemoval = currentTags.filter(tag => !form.updateOptions.removeTags.includes(tag));
+						const tagsAfterRemoval = currentTags.filter(tag => !form.bulkOperations.removeTags.includes(tag));
 
 						// Final tags list
 						updateData.tags = [...tagsAfterRemoval, ...tagsToAdd];
@@ -945,7 +873,7 @@ const AdminBulkOperationsPage: React.FC = () => {
 											<FormControl fullWidth>
 												<InputLabel>Change Folder To</InputLabel>
 												<Select
-													value={form.updateOptions.folder || "null"}
+													value={form.bulkOperations.setFolder || "null"}
 													onChange={handleUpdateFolderChange}
 													label="Change Folder To"
 												>
@@ -961,7 +889,7 @@ const AdminBulkOperationsPage: React.FC = () => {
 											<FormControl fullWidth>
 												<InputLabel>Change Category To</InputLabel>
 												<Select
-													value={form.updateOptions.category || "null"}
+													value={form.bulkOperations.setCategory || "null"}
 													onChange={handleUpdateCategoryChange}
 													label="Change Category To"
 												>
@@ -981,8 +909,8 @@ const AdminBulkOperationsPage: React.FC = () => {
 											<Autocomplete
 												multiple
 												id="add-tags"
-												options={allAvailableTags.filter(tag => !form.updateOptions.addTags.includes(tag))}
-												value={form.updateOptions.addTags}
+												options={allAvailableTags.filter(tag => !form.bulkOperations.addTags.includes(tag))}
+												value={form.bulkOperations.addTags}
 												onChange={handleAddTagsChange}
 												renderInput={(params) => (
 													<TextField
@@ -1012,8 +940,8 @@ const AdminBulkOperationsPage: React.FC = () => {
 											<Autocomplete
 												multiple
 												id="remove-tags"
-												options={allAvailableTags.filter(tag => !form.updateOptions.removeTags.includes(tag))}
-												value={form.updateOptions.removeTags}
+												options={allAvailableTags.filter(tag => !form.bulkOperations.removeTags.includes(tag))}
+												value={form.bulkOperations.removeTags}
 												onChange={handleRemoveTagsChange}
 												renderInput={(params) => (
 													<TextField
@@ -1078,9 +1006,9 @@ const AdminBulkOperationsPage: React.FC = () => {
 											category: null,
 											tags: []
 										},
-										updateOptions: {
-											folder: null,
-											category: null,
+										bulkOperations: {
+											setFolder: null,
+											setCategory: null,
 											addTags: [],
 											removeTags: []
 										}
