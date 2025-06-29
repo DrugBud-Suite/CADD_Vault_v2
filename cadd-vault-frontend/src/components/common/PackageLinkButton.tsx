@@ -45,26 +45,50 @@ const buttonStyle = {
 	}
 };
 
-interface PackageLinkButtonProps {
+export interface PackageLinkButtonProps {
 	href: string;
 	icon: React.ReactNode;
 	label: string;
 	tooltipTitle?: string;
+	variant?: 'outlined' | 'contained' | 'text';
+	size?: 'small' | 'medium' | 'large';
+	fullWidth?: boolean;
+	className?: string;
+	onClick?: (e: React.MouseEvent) => void;
 }
 
-const PackageLinkButton: React.FC<PackageLinkButtonProps> = ({ href, icon, label, tooltipTitle }) => {
+const PackageLinkButton: React.FC<PackageLinkButtonProps> = ({ 
+	href, 
+	icon, 
+	label, 
+	tooltipTitle,
+	variant = 'outlined',
+	size = 'small',
+	fullWidth = false,
+	className,
+	onClick
+}) => {
 	if (!href) return null;
+
+	const handleClick = (e: React.MouseEvent) => {
+		if (onClick) {
+			onClick(e);
+		}
+	};
 
 	const button = (
 		<Button
 			href={href}
 			target="_blank"
 			rel="noopener noreferrer"
-			variant="outlined"
-			size="small"
+			variant={variant}
+			size={size}
+			fullWidth={fullWidth}
 			startIcon={icon}
 			sx={buttonStyle}
+			className={className}
 			aria-label={`${label} Link`}
+			onClick={handleClick}
 		>
 			{label}
 		</Button>
