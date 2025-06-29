@@ -1,6 +1,7 @@
 // src/services/dataService.ts
 import { supabase } from '../supabase';
 import { Package, PackageWithRelations } from '../types';
+import { createQuery } from '../utils/query';
 
 export interface FilterMetadata {
 	allAvailableTags: string[];
@@ -10,6 +11,17 @@ export interface FilterMetadata {
     datasetMaxStars: number;
     datasetMaxCitations: number;
 	totalPackageCount: number;
+}
+
+export interface DatasetStatistics {
+    maxStars: number | null;
+    maxCitations: number | null;
+    totalCount: number;
+}
+
+export interface FolderCategoryData {
+    folders: string[];
+    categories: Record<string, string[]>;
 }
 
 export interface PackageQueryResult {
@@ -39,6 +51,38 @@ export interface PackageQueryParams {
 }
 
 export class DataService {
+    // Simple in-memory cache for metadata
+    private static metadataCache: Map<string, { data: any; timestamp: number }> = new Map();
+    private static readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+    /**
+     * Get cached data if available and not expired
+     */
+    private static getCachedData<T>(key: string): T | null {
+        const cached = this.metadataCache.get(key);
+        if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+            return cached.data as T;
+        }
+        return null;
+    }
+
+    /**
+     * Set cached data with current timestamp
+     */
+    private static setCachedData(key: string, data: any): void {
+        this.metadataCache.set(key, { data, timestamp: Date.now() });
+    }
+
+    /**
+     * Clear cache for specific key or all cache
+     */
+    static clearCache(key?: string): void {
+        if (key) {
+            this.metadataCache.delete(key);
+        } else {
+            this.metadataCache.clear();
+        }
+    }
     /**
      * Fetch packages with normalized relationships
      */
@@ -251,22 +295,36 @@ export class DataService {
 	}
 
     /**
-     * Fetch unique tags from normalized table
+     * Fetch unique tags from normalized table with caching
      */
     static async fetchUniqueTags(): Promise<string[]> {
+        const cacheKey = 'unique_tags';
+        
+        // Check cache first
+        const cached = this.getCachedData<string[]>(cacheKey);
+        if (cached) {
+            console.log("  📌 Tags loaded from cache");
+            return cached;
+        }
+
         console.log("  📌 Fetching unique tags...");
         const startTime = performance.now();
 
 		try {
-			const { data, error } = await supabase
-                .from('tags')
+			const result = await createQuery<{name: string}>('tags')
                 .select('name')
-                .order('name');
+                .orderBy('name')
+                .execute();
 
-			if (error) throw error;
+			if (result.error) throw result.error;
+
+            const tags = result.data?.map(tag => tag.name) || [];
+            
+            // Cache the result
+            this.setCachedData(cacheKey, tags);
 
             console.log(`  📌 Tags query completed in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
-            return data?.map(tag => tag.name) || [];
+            return tags;
 		} catch (error) {
             console.error("  ❌ Failed to fetch tags:", error);
             throw error;
@@ -276,10 +334,7 @@ export class DataService {
     /**
      * Fetch folders and categories from normalized tables
      */
-    static async fetchFoldersAndCategories(): Promise<{
-        folders: string[];
-        categories: Record<string, string[]>;
-    }> {
+    static async fetchFoldersAndCategories(): Promise<FolderCategoryData> {
         console.log("  📁 Fetching folders and categories...");
         const startTime = performance.now();
 
@@ -405,114 +460,114 @@ export class DataService {
     }
 
     static async fetchUniqueLicenses(): Promise<string[]> {
+        const cacheKey = 'unique_licenses';
+        
+        // Check cache first
+        const cached = this.getCachedData<string[]>(cacheKey);
+        if (cached) {
+            console.log("  📜 Licenses loaded from cache");
+            return cached;
+        }
+
 		console.log("  📜 Fetching unique licenses...");
 		const startTime = performance.now();
 
 		try {
-			const licenseSet = new Set<string>();
-			let from = 0;
-			const batchSize = 1000;
-			let hasMore = true;
-			let totalRows = 0;
+			const result = await createQuery<{license: string}>('packages')
+				.select('license')
+				.filter('license', 'not', 'is.null')
+				.execute();
 
-			while (hasMore) {
-				const { data, error } = await supabase
-					.from('packages')
-					.select('license')
-					.not('license', 'is', null)
-					.range(from, from + batchSize - 1);
-
-				if (error) {
-					console.error("  ❌ Licenses query error:", error);
-					throw error;
-				}
-
-				if (!data || data.length === 0) {
-					hasMore = false;
-					break;
-				}
-
-				data.forEach(row => {
-					if (row.license && row.license.trim()) {
-						licenseSet.add(row.license.trim());
-					}
-				});
-
-				totalRows += data.length;
-				hasMore = data.length === batchSize;
-				from += batchSize;
+			if (result.error) {
+				console.error("  ❌ Licenses query error:", result.error);
+				throw result.error;
 			}
 
-			console.log(`  📜 Licenses query completed, processed ${totalRows} total rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
+			const licenseSet = new Set<string>();
+			
+			result.data?.forEach(row => {
+				if (row.license && row.license.trim()) {
+					licenseSet.add(row.license.trim());
+				}
+			});
 
-			return Array.from(licenseSet).sort();
+            const licenses = Array.from(licenseSet).sort();
+            
+            // Cache the result
+            this.setCachedData(cacheKey, licenses);
+
+			console.log(`  📜 Licenses query completed, processed ${result.data?.length || 0} rows in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
+
+			return licenses;
 		} catch (error) {
 			console.error("  ❌ Failed to fetch licenses:", error);
 			throw error;
 		}
     }
 
-    static async fetchDatasetStats(): Promise<{
-		maxStars: number | null;
-		maxCitations: number | null;
-		totalCount: number;
-	}> {
+    static async fetchDatasetStats(): Promise<DatasetStatistics> {
 		console.log("  📊 Fetching dataset statistics...");
 		const startTime = performance.now();
 
 		try {
-			// Get max stars
-			console.log("    ⭐ Fetching max stars...");
-			const { data: starsData, error: starsError } = await supabase
-				.from('packages')
-				.select('github_stars')
-				.not('github_stars', 'is', null)
-				.order('github_stars', { ascending: false })
-				.limit(1);
+			// Execute queries in parallel using query builder
+			console.log("    ⭐📚🔢 Fetching all stats in parallel...");
+			
+			const [starsResult, citationsResult, countResult] = await Promise.all([
+				// Max stars
+				createQuery<{github_stars: number}>('packages')
+					.select('github_stars')
+					.filter('github_stars', 'not', 'is.null')
+					.orderBy('github_stars', 'desc')
+					.paginate(0, 1)
+					.execute(),
+				
+				// Max citations  
+				createQuery<{citations: number}>('packages')
+					.select('citations')
+					.filter('citations', 'not', 'is.null')
+					.orderBy('citations', 'desc')
+					.paginate(0, 1)
+					.execute(),
+				
+				// Total count
+				createQuery<{}>('packages')
+					.select('id')
+					.execute()
+			]);
 
-			if (starsError) {
-				console.error("    ❌ Max stars query error:", starsError);
-				throw starsError;
+			if (starsResult.error) {
+				console.error("    ❌ Max stars query error:", starsResult.error);
+				throw starsResult.error;
 			}
 
-			// Get max citations
-			console.log("    📚 Fetching max citations...");
-			const { data: citationsData, error: citationsError } = await supabase
-				.from('packages')
-				.select('citations')
-				.not('citations', 'is', null)
-				.order('citations', { ascending: false })
-				.limit(1);
-
-			if (citationsError) {
-				console.error("    ❌ Max citations query error:", citationsError);
-				throw citationsError;
+			if (citationsResult.error) {
+				console.error("    ❌ Max citations query error:", citationsResult.error);
+				throw citationsResult.error;
 			}
 
-			// Get total count
-			console.log("    🔢 Fetching total count...");
-			const { count, error: countError } = await supabase
-				.from('packages')
-				.select('*', { count: 'exact', head: true });
-
-			if (countError) {
-				console.error("    ❌ Count query error:", countError);
-				throw countError;
+			if (countResult.error) {
+				console.error("    ❌ Count query error:", countResult.error);
+				throw countResult.error;
 			}
 
 			console.log(`  📊 Stats queries completed in ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
 
 			return {
-				maxStars: starsData?.[0]?.github_stars || null,
-				maxCitations: citationsData?.[0]?.citations || null,
-				totalCount: count || 0
+				maxStars: starsResult.data?.[0]?.github_stars || null,
+				maxCitations: citationsResult.data?.[0]?.citations || null,
+				totalCount: countResult.count || 0
 			};
 		} catch (error) {
 			console.error("  ❌ Failed to fetch dataset stats:", error);
 			throw error;
 		}
 	}
-    static applyTagFilters(query: any, tags: string[], logic: 'OR' | 'AND' | 'SINGLE' = 'OR') {
+    /**
+     * Apply tag filters to a Supabase query (legacy method for backward compatibility)
+     * @deprecated Use SupabaseQueryBuilder for new implementations
+     */
+    static applyTagFilters(query: any, tags: string[], logic: 'OR' | 'AND' | 'SINGLE' = 'OR'): any {
         if (tags.length === 0) return query;
 
         switch (logic) {
