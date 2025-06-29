@@ -25,15 +25,12 @@ import LinkIcon from '@mui/icons-material/Link'; // For other links
 import WarningIcon from '@mui/icons-material/Warning'; // For duplicate warnings
 import ErrorIcon from '@mui/icons-material/Error'; // For exact duplicates
 import EditSuggestionModal from '../components/EditSuggestionModal';
+import { findDuplicates, DuplicateInfo } from '../utils/duplicate-detection';
+import { urlValidators } from '../utils/validation';
 
 const isValidUrl = (urlString: string | undefined | null): boolean => {
 	if (!urlString) return false;
-	try {
-		const url = new URL(urlString);
-		return url.protocol === "http:" || url.protocol === "https:";
-	} catch (e) {
-		return false;
-	}
+	return urlValidators.isValidUrl().test(urlString);
 };
 
 const URLIcon: React.FC<{
@@ -212,109 +209,7 @@ const PackageTooltipContent: React.FC<{ suggestion: PackageSuggestion }> = ({ su
 	);
 };
 
-// Interface for duplicate detection
-interface DuplicateInfo {
-	type: 'exact_duplicate' | 'similar_suggestion' | 'similar_package';
-	conflictingItem: string;
-	conflictingId?: string;
-	source: 'suggestions' | 'packages';
-}
-
-// Utility functions for duplicate detection
-const normalizeString = (str: string): string => {
-	return str.toLowerCase()
-		.replace(/[^\w\s]/g, '') // Remove punctuation
-		.replace(/\s+/g, ' ') // Normalize whitespace
-		.trim();
-};
-
-const calculateSimilarity = (str1: string, str2: string): number => {
-	const norm1 = normalizeString(str1);
-	const norm2 = normalizeString(str2);
-
-	if (norm1 === norm2) return 1.0;
-
-	// Simple word-based similarity
-	const words1 = norm1.split(' ');
-	const words2 = norm2.split(' ');
-	const allWords = new Set([...words1, ...words2]);
-	const commonWords = words1.filter(word => words2.includes(word));
-
-	return commonWords.length / allWords.size;
-};
-
-const findDuplicates = (
-	suggestion: PackageSuggestion,
-	allSuggestions: PackageSuggestion[],
-	existingPackages: PackageType[]
-): DuplicateInfo[] => {
-	const duplicates: DuplicateInfo[] = [];
-	const suggestionName = suggestion.package_name;
-
-	// Check for exact duplicates in suggestions
-	const exactDuplicatesSuggestions = allSuggestions.filter(s =>
-		s.id !== suggestion.id &&
-		normalizeString(s.package_name) === normalizeString(suggestionName)
-	);
-
-	exactDuplicatesSuggestions.forEach(duplicate => {
-		duplicates.push({
-			type: 'exact_duplicate',
-			conflictingItem: duplicate.package_name,
-			conflictingId: duplicate.id,
-			source: 'suggestions'
-		});
-	});
-
-	// Check for exact duplicates in packages
-	const exactDuplicatesPackages = existingPackages.filter(pkg =>
-		normalizeString(pkg.package_name) === normalizeString(suggestionName)
-	);
-
-	exactDuplicatesPackages.forEach(duplicate => {
-		duplicates.push({
-			type: 'exact_duplicate',
-			conflictingItem: duplicate.package_name,
-			conflictingId: duplicate.id,
-			source: 'packages'
-		});
-	});
-
-	// Check for similar suggestions (similarity > 0.8 but not exact)
-	if (duplicates.length === 0) { // Only check for similarities if no exact duplicates
-		const similarSuggestions = allSuggestions.filter(s => {
-			if (s.id === suggestion.id) return false;
-			const similarity = calculateSimilarity(s.package_name, suggestionName);
-			return similarity > 0.8 && similarity < 1.0;
-		});
-
-		similarSuggestions.forEach(similar => {
-			duplicates.push({
-				type: 'similar_suggestion',
-				conflictingItem: similar.package_name,
-				conflictingId: similar.id,
-				source: 'suggestions'
-			});
-		});
-
-		// Check for similar packages (similarity > 0.8 but not exact)
-		const similarPackages = existingPackages.filter(pkg => {
-			const similarity = calculateSimilarity(pkg.package_name, suggestionName);
-			return similarity > 0.8 && similarity < 1.0;
-		});
-
-		similarPackages.forEach(similar => {
-			duplicates.push({
-				type: 'similar_package',
-				conflictingItem: similar.package_name,
-				conflictingId: similar.id,
-				source: 'packages'
-			});
-		});
-	}
-
-	return duplicates;
-};
+// Using imported duplicate detection utilities
 
 const DuplicateWarningComponent: React.FC<{ duplicates: DuplicateInfo[] }> = ({ duplicates }) => {
 	if (duplicates.length === 0) return null;

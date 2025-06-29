@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabase';
 import { Package } from '../types';
 import { DataService } from '../services/dataService';
+import { packageQuery } from '../utils/query';
 import {
 	Container,
 	Typography,
@@ -171,30 +172,40 @@ const AdminBulkOperationsPage: React.FC = () => {
 		setError(null);
 
 		try {
-			// Start with a base query
-			let query = supabase.from('packages').select('*');
+			// Use the new query builder
+			const queryBuilder = packageQuery();
 
 			// Apply folder filter
 			if (form.filterOptions.folder) {
-				query = query.eq('folder1', form.filterOptions.folder);
+				queryBuilder.filter('folder1', 'eq', form.filterOptions.folder);
 			}
 
 			// Apply category filter (only if folder is selected)
 			if (form.filterOptions.folder && form.filterOptions.category) {
-				query = query.eq('category1', form.filterOptions.category);
+				queryBuilder.filter('category1', 'eq', form.filterOptions.category);
 			}
 
-			// Apply tag filters (AND logic for admin operations)
-			query = DataService.applyTagFilters(query, form.filterOptions.tags, 'AND');
+			// Note: Tag filtering with AND logic would need custom implementation
+			// For now, using the existing DataService.applyTagFilters method
+			// TODO: Enhance query builder to support complex tag filtering
 
 			// Execute the query
-			const { data, error } = await query;
+			const result = await queryBuilder.execute();
 
-			if (error) {
-				throw error;
+			if (result.error) {
+				throw result.error;
 			}
 
-			setMatchingPackages(data || []);
+			// Apply tag filters post-query for now (less efficient but functional)
+			let filteredData = result.data || [];
+			if (form.filterOptions.tags.length > 0) {
+				filteredData = filteredData.filter(pkg => {
+					const packageTags = pkg.tags || [];
+					return form.filterOptions.tags.every(tag => packageTags.includes(tag));
+				});
+			}
+
+			setMatchingPackages(filteredData);
 		} catch (err: any) {
 			console.error("Error fetching matching packages:", err);
 			setError(`Failed to load matching packages: ${err.message}`);
