@@ -49,3 +49,4 @@ CLAUDE.md
 supabase-backup/auth_and_storage_schema.sql
 supabase-backup/data.sql
 supabase-backup/roles.sql
+Refactoring_Guide.md
