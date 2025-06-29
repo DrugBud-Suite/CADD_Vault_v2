@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { PackageSuggestion } from '../types';
 import {
-	Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
-	CircularProgress, Alert, Grid, Autocomplete, Chip, Select, MenuItem, FormControl, InputLabel,
+	Button, TextField,
+	CircularProgress, Grid, Autocomplete, Chip, Select, MenuItem, FormControl, InputLabel,
 	Box,
 	alpha,
 	IconButton,
@@ -12,6 +12,8 @@ import {
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import AddIcon from '@mui/icons-material/Add';
 import { SelectChangeEvent } from '@mui/material/Select';
+import { BaseModal } from './common/BaseModal';
+import { useValidation, urlValidators, genericValidators } from '../utils/validation';
 import { useFilterStore } from '../store/filterStore';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,6 +46,32 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 	const [categoryCreationLoading, setCategoryCreationLoading] = useState(false);
 
 	const { currentUser } = useAuth();
+
+	// Validation schema using new validation utilities
+	const validationSchema = {
+		package_name: {
+			required: true,
+			rules: [genericValidators.minLength(1, 'Package name')]
+		},
+		publication_url: {
+			required: false,
+			rules: [urlValidators.isValidUrl()]
+		},
+		webserver_url: {
+			required: false,
+			rules: [urlValidators.isValidUrl()]
+		},
+		repo_url: {
+			required: false,
+			rules: [urlValidators.isValidUrl()]
+		},
+		link_url: {
+			required: false,
+			rules: [urlValidators.isValidUrl()]
+		}
+	};
+
+	const { errors, validate, validateField, clearErrors } = useValidation(validationSchema);
 
 	const allAvailableTags = useFilterStore(state => state.allAvailableTags);
 	const allAvailableFolders = useFilterStore(state => state.allAvailableFolders);
@@ -104,7 +132,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		setIsAddingCategory(false);
 		setNewFolderName('');
 		setNewCategoryName('');
-	}, [suggestion, isAdmin, open, allAvailableCategoriesMap, allAvailableTags]);
+		clearErrors(); // Clear validation errors when modal opens
+	}, [suggestion, isAdmin, open, allAvailableCategoriesMap, allAvailableTags, clearErrors]);
 
 	useEffect(() => {
 		if (formData.folder1 && allAvailableCategoriesMap[formData.folder1]) {
@@ -122,6 +151,12 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
 		const { name, value } = event.target;
 		setFormData(prev => ({ ...prev, [name as string]: value }));
+		
+		// Validate field if it has validation rules
+		if (validationSchema[name as keyof typeof validationSchema]) {
+			validateField(name, value);
+		}
+		
 		if (name === 'folder1') {
 			setFormData(prev => ({ ...prev, category1: '' })); // Reset category when folder changes
 		}
@@ -159,10 +194,13 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			setError("No suggestion selected for editing.");
 			return;
 		}
-		if (!formData.package_name?.trim()) {
-			setError("Package name is required.");
+		
+		// Validate form using new validation utilities
+		if (!validate(formData)) {
+			setError("Please correct the validation errors before submitting.");
 			return;
 		}
+		
 		setLoading(true);
 		setError(null);
 		setSuccessMessage(null);
@@ -385,19 +423,43 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 	if (!suggestion) return null;
 
 	return (
-		<Dialog open={open} onClose={onClose} maxWidth="md" fullWidth scroll="paper">
-			<DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', pb: 2, mb: 0 }}>
-				<Box component="span" fontWeight="fontWeightMedium">
-					Edit Suggestion:
-				</Box>
-				<Box component="span" fontWeight="fontWeightRegular" sx={{ ml: 0.5 }}>
-					{suggestion.package_name}
-				</Box>
-			</DialogTitle>
+		<BaseModal
+			open={open}
+			onClose={onClose}
+			title="Edit Suggestion"
+			subtitle={suggestion.package_name}
+			loading={loading}
+			error={error}
+			success={successMessage}
+			maxWidth="md"
+			actions={
+				<>
+					<Button onClick={onClose} color="inherit" variant="outlined">
+						Cancel
+					</Button>
+					<Button 
+						onClick={handleSubmit} 
+						variant="contained" 
+						color="primary" 
+						disabled={loading || (suggestion?.status !== 'pending' && !isAdmin) || Object.keys(errors).length > 0}
+					>
+						Save Changes
+					</Button>
+					{isAdmin && suggestion?.status === 'pending' && (
+						<Button
+							variant="contained"
+							color="success"
+							onClick={handleSaveAndApprove}
+							disabled={loading || Object.keys(errors).length > 0}
+							sx={{ ml: 1 }}
+						>
+							Save & Approve & Add to DB
+						</Button>
+					)}
+				</>
+			}
+		>
 			<form onSubmit={handleSubmit}>
-				<DialogContent dividers sx={{ p: 3, "&.MuiDialogContent-root": { paddingTop: 2 } }}>
-					{error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-					{successMessage && <Alert severity="success" sx={{ mb: 2 }}>{successMessage}</Alert>}
 					<Grid container spacing={2.5}>
 						<Grid item xs={12} sm={6}>
 							<TextField
@@ -409,6 +471,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								required
 								variant="outlined"
 								size="small"
+								error={!!errors.package_name}
+								helperText={errors.package_name}
 							/>
 						</Grid>
 						<Grid item xs={12} sm={6}>
@@ -444,6 +508,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								fullWidth
 								variant="outlined"
 								size="small"
+								error={!!errors.publication_url}
+								helperText={errors.publication_url}
 								InputProps={{
 									endAdornment: formData.publication_url && (
 										<IconButton
@@ -467,6 +533,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								fullWidth
 								variant="outlined"
 								size="small"
+								error={!!errors.webserver_url}
+								helperText={errors.webserver_url}
 								InputProps={{
 									endAdornment: formData.webserver_url && (
 										<IconButton
@@ -490,6 +558,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								fullWidth
 								variant="outlined"
 								size="small"
+								error={!!errors.repo_url}
+								helperText={errors.repo_url}
 								InputProps={{
 									endAdornment: formData.repo_url && (
 										<IconButton
@@ -513,6 +583,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								fullWidth
 								variant="outlined"
 								size="small"
+								error={!!errors.link_url}
+								helperText={errors.link_url}
 								InputProps={{
 									endAdornment: formData.link_url && (
 										<IconButton
@@ -702,26 +774,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 							</Grid>
 						)}
 					</Grid>
-				</DialogContent>
-				<DialogActions sx={{ p: '16px 24px', borderTop: 1, borderColor: 'divider', mt: 0 }}>
-					<Button onClick={onClose} color="inherit" variant="outlined" sx={{ mr: 1 }}>Cancel</Button>
-					<Button type="submit" variant="contained" color="primary" disabled={loading || (suggestion?.status !== 'pending' && !isAdmin)}>
-						{loading ? <CircularProgress size={24} color="inherit" /> : "Save Changes"}
-					</Button>
-					{isAdmin && suggestion?.status === 'pending' && ( // Only show if suggestion is still pending
-						<Button
-							variant="contained"
-							color="success"
-							onClick={handleSaveAndApprove}
-							disabled={loading}
-							sx={{ ml: 1 }}
-						>
-							{loading ? <CircularProgress size={24} color="inherit" /> : "Save & Approve & Add to DB"}
-						</Button>
-					)}
-				</DialogActions>
 			</form>
-		</Dialog>
+		</BaseModal>
 	);
 };
 

@@ -1,61 +1,53 @@
 import React, { useState } from 'react';
-import { Modal, Typography, TextField, Button, Alert, Paper } from '@mui/material'; // Removed Box, kept Paper
+import { TextField, Button } from '@mui/material';
+import { BaseModal } from './common/BaseModal';
 import { useAuth } from '../context/AuthContext';
 import { SignUpWithPasswordCredentials } from '@supabase/supabase-js';
-import CaptchaWidget from './CaptchaWidget'; // Import the new component
+import { useValidation, passwordValidators, emailValidators } from '../utils/validation';
+import CaptchaWidget from './CaptchaWidget';
 
 interface SignupModalProps {
 	open: boolean;
 	onClose: () => void;
 }
 
-const style = {
-	position: 'absolute' as 'absolute',
-	top: '50%',
-	left: '50%',
-	transform: 'translate(-50%, -50%)',
-	width: 400,
-	bgcolor: 'background.paper', // Use theme background
-	// border: '2px solid #000', // Removed border
-	borderRadius: '12px', // Added border radius
-	boxShadow: 24,
-	p: 4, // Keep padding
-	display: 'flex',
-	flexDirection: 'column',
-	gap: 3, // Increased gap for better spacing
-};
-
 const SignupModal: React.FC<SignupModalProps> = ({ open, onClose }) => {
-	const [email, setEmail] = useState('');
-	const [password, setPassword] = useState('');
-	const [passwordValidations, setPasswordValidations] = useState({
-		minLength: false,
-		hasLowercase: false,
-		hasUppercase: false,
-		hasDigit: false,
-		hasSymbol: false,
-	});
+	const [formData, setFormData] = useState({ email: '', password: '' });
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
-	const [captchaToken, setCaptchaToken] = useState<string | null>(null); // State for captcha token
+	const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 	const { signUpWithEmail } = useAuth();
 
-	const validatePassword = (pwd: string) => {
-		setPasswordValidations({
-			minLength: pwd.length >= 8,
-			hasLowercase: /[a-z]/.test(pwd),
-			hasUppercase: /[A-Z]/.test(pwd),
-			hasDigit: /[0-9]/.test(pwd),
-			hasSymbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/.test(pwd),
-		});
+	// Validation schema using new validation utilities
+	const validationSchema = {
+		email: {
+			required: true,
+			rules: [emailValidators.isValidEmail()]
+		},
+		password: {
+			required: true,
+			rules: [
+				passwordValidators.minLength(8),
+				passwordValidators.hasLowercase(),
+				passwordValidators.hasUppercase(),
+				passwordValidators.hasDigit(),
+				passwordValidators.hasSpecialChar()
+			]
+		}
 	};
 
-	// No need for useEffect to handle Turnstile lifecycle here,
-	// as it's managed by the CaptchaWidget component.
+	const { errors, validate, validateField } = useValidation(validationSchema);
 
-	const handleSignup = async () => {
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
 		setError(null);
 		setLoading(true);
+
+		// Validate form using new validation utilities
+		if (!validate(formData)) {
+			setLoading(false);
+			return;
+		}
 
 		if (!captchaToken) {
 			setError("Please complete the CAPTCHA challenge.");
@@ -64,79 +56,71 @@ const SignupModal: React.FC<SignupModalProps> = ({ open, onClose }) => {
 		}
 
 		const credentials: SignUpWithPasswordCredentials = {
-			email,
-			password,
-			options: { captchaToken } // Always include captchaToken
+			email: formData.email,
+			password: formData.password,
+			options: { captchaToken }
 		};
 
-		const { error } = await signUpWithEmail(credentials);
+		const { error: signUpError } = await signUpWithEmail(credentials);
 		setLoading(false);
 
-		if (error) {
-			setError(error.message);
+		if (signUpError) {
+			setError(signUpError.message);
 		} else {
-			// Handle successful signup, e.g., show a success message or close modal
 			onClose();
 		}
 	};
 
 	return (
-		<Modal
+		<BaseModal
 			open={open}
 			onClose={onClose}
-			aria-labelledby="signup-modal-title"
-			aria-describedby="signup-modal-description"
-		>
-			<Paper sx={style}>
-				<Typography id="signup-modal-title" variant="h5" component="h2" sx={{ textAlign: 'center', fontWeight: 'bold', mb: 1 }}> {/* Centered and styled title */}
+			title="Sign Up"
+			subtitle="Create your account to start rating and suggesting packages."
+			loading={loading}
+			error={error}
+			maxWidth="xs"
+			actions={
+				<Button
+					variant="contained"
+					onClick={handleSubmit}
+					disabled={loading || !captchaToken || Object.keys(errors).length > 0}
+				>
 					Sign Up
-				</Typography>
-				{error && <Alert severity="error" sx={{ width: '100%' }}>{error}</Alert>} {/* Ensure alert takes full width */}
-				<form onSubmit={(e) => { e.preventDefault(); handleSignup(); }} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}> {/* Added gap to form elements */}
-					<TextField
-						label="Email"
-						variant="outlined"
-						fullWidth
-						value={email}
-						onChange={(e) => setEmail(e.target.value)}
-						autoComplete="email"
-					/>
-					<TextField
-						label="Password"
-						variant="outlined"
-						type="password"
-						fullWidth
-						value={password}
-						onChange={(e) => {
-							setPassword(e.target.value);
-							validatePassword(e.target.value);
-						}}
-						error={Object.values(passwordValidations).some(isValid => !isValid) && password !== ''}
-						helperText={
-							password !== '' && (
-								<>
-									{!passwordValidations.minLength && <Typography variant="caption" display="block" color="error">Minimum 8 characters</Typography>}
-									{!passwordValidations.hasLowercase && <Typography variant="caption" display="block" color="error">At least one lowercase letter</Typography>}
-									{!passwordValidations.hasUppercase && <Typography variant="caption" display="block" color="error">At least one uppercase letter</Typography>}
-									{!passwordValidations.hasDigit && <Typography variant="caption" display="block" color="error">At least one digit</Typography>}
-									{!passwordValidations.hasSymbol && <Typography variant="caption" display="block" color="error">At least one symbol</Typography>}
-								</>
-							)
-						}
-						autoComplete="new-password"
-					/>
-					<CaptchaWidget onVerify={setCaptchaToken} /> {/* Use the new CaptchaWidget */}
-					<Button
-						variant="contained"
-						type="submit" // Set type to submit
-						disabled={loading || Object.values(passwordValidations).some(isValid => !isValid) || password === '' || !captchaToken} // Disable if loading, password invalid, or no captcha token
-						sx={{ py: 1.5, fontWeight: 'bold' }} // Made button taller and text bold
-					>
-						{loading ? 'Signing Up...' : 'Sign Up'}
-					</Button>
-				</form>
-			</Paper>
-		</Modal>
+				</Button>
+			}
+		>
+			<form onSubmit={handleSubmit}>
+				<TextField
+					label="Email"
+					fullWidth
+					margin="normal"
+					value={formData.email}
+					onChange={(e) => {
+						setFormData({ ...formData, email: e.target.value });
+						validateField('email', e.target.value);
+					}}
+					error={!!errors.email}
+					helperText={errors.email}
+					autoComplete="email"
+				/>
+				<TextField
+					label="Password"
+					type="password"
+					fullWidth
+					margin="normal"
+					value={formData.password}
+					onChange={(e) => {
+						setFormData({ ...formData, password: e.target.value });
+						validateField('password', e.target.value);
+					}}
+					error={!!errors.password}
+					helperText={errors.password || 'Password must contain: 8+ characters, uppercase, lowercase, digit, and special character'}
+					autoComplete="new-password"
+				/>
+				<CaptchaWidget onVerify={setCaptchaToken} />
+			</form>
+		</BaseModal>
 	);
 };
 
