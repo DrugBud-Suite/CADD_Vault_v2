@@ -1,4 +1,4 @@
-import { Package } from '../types';
+import { PackageWithNormalizedData } from '../types';
 
 interface FilterCriteria {
 	searchTerm: string;
@@ -8,14 +8,14 @@ interface FilterCriteria {
 	hasWebserver: boolean | null;
 	hasPublication: boolean | null;
 	minCitations: number | null;
-	folder1: string | null; // New
-	category1: string | null; // New
+	folder: string | null;
+	category: string | null;
 }
 
 export function filterPackages(
-	packages: Package[],
+	packages: PackageWithNormalizedData[],
 	criteria: FilterCriteria
-): Package[] {
+): PackageWithNormalizedData[] {
 	const {
 		searchTerm,
 		selectedTags,
@@ -24,8 +24,8 @@ export function filterPackages(
 		hasWebserver,
 		hasPublication,
 		minCitations,
-		folder1, // New
-		category1 // New
+		folder,
+		category
 	} = criteria;
 
 	// If no filters are active, return all packages
@@ -36,8 +36,8 @@ export function filterPackages(
 		hasWebserver === null &&
 		hasPublication === null &&
 		minCitations === null &&
-		folder1 === null && // New
-		category1 === null // New
+		folder === null &&
+		category === null
 	) {
 		return packages;
 	}
@@ -95,13 +95,13 @@ export function filterPackages(
 			return false;
 		}
 
-		// Folder1 filter
-		if (folder1 !== null && pkg.folder1 !== folder1) {
+		// Folder filter
+		if (folder !== null && pkg.folder !== folder) {
 			return false;
 		}
 
-		// Category1 filter (only apply if folder1 is also selected)
-		if (folder1 !== null && category1 !== null && pkg.category1 !== category1) {
+		// Category filter (only apply if folder is also selected)
+		if (folder !== null && category !== null && pkg.category !== category) {
 			return false;
 		}
 

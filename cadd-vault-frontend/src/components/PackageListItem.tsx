@@ -13,21 +13,21 @@ import {
 	Theme
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { Package } from '../types';
+import { PackageWithNormalizedData } from '../types';
 import { useFilterStore } from '../store/filterStore';
 import RatingInput from './RatingInput';
 import PackageActions from './common/PackageActions';
 import PackageMetrics from './common/PackageMetrics';
 
 interface PackageListItemProps {
-	pkg: Package;
+	pkg: PackageWithNormalizedData;
 }
 
 const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 	const addTag = useFilterStore((state) => state.addTag);
 
 	// Local state for rating data
-	const [localPkg, setLocalPkg] = useState<Package>(pkg);
+	const [localPkg, setLocalPkg] = useState<PackageWithNormalizedData>(pkg);
 	const mountedRef = useRef(true);
 
 	// Update local package data when props change

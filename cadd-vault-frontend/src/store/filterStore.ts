@@ -1,7 +1,7 @@
 // src/store/filterStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Package } from '../types'; // Assuming Package is correctly defined
+import { PackageWithNormalizedData } from '../types';
 import { debounce } from 'lodash-es';
 
 type ViewMode = 'card' | 'list';
@@ -16,20 +16,20 @@ export interface FilterState { // Exporting for use in components
     hasPublication: boolean;
     minCitations: number | null;
     minRating: number | null; // New rating filter
-    folder1: string | null;
-    category1: string | null;
+    folder: string | null;
+    category: string | null;
     selectedLicenses: string[];
     sortBy: string | null;
     sortDirection: 'asc' | 'desc';
 
     // Data related to the main package list (potentially paginated/filtered server-side)
     // These are set by HomePage after fetching data based on current filters
-    displayedPackages: Package[];
+    displayedPackages: PackageWithNormalizedData[];
     totalFilteredCount: number; // Total packages matching current filters (from server)
     currentPage: number;
 
     // Data derived from the entire dataset (for filter options, etc.)
-    originalPackages: Package[]; // Holds all packages, set once on initial load
+    originalPackages: PackageWithNormalizedData[]; // Holds all packages, set once on initial load
     allAvailableTags: string[];    // Derived from originalPackages
     allAvailableLicenses: string[];// Derived from originalPackages
     allAvailableFolders: string[]; // Derived from originalPackages
@@ -52,18 +52,18 @@ export interface FilterState { // Exporting for use in components
     setHasPublication: (has: boolean) => void;
     setMinCitations: (citations: number | null) => void;
     setMinRating: (rating: number | null) => void; // New rating filter action
-    setFolder1: (folder: string | null) => void;
-    setCategory1: (category: string | null) => void;
+    setFolder: (folder: string | null) => void;
+    setCategory: (category: string | null) => void;
     setSelectedLicenses: (licenses: string[]) => void;
     setSort: (field: string | null, direction?: 'asc' | 'desc') => void;
 
     // Actions for HomePage to update based on server response
-    setDisplayedPackages: (packages: Package[]) => void;
+    setDisplayedPackages: (packages: PackageWithNormalizedData[]) => void;
     setTotalFilteredCount: (count: number) => void;
     setCurrentPage: (page: number) => void;
 
     // Action to set the initial full dataset and derive all related metadata
-    setOriginalPackagesAndDeriveMetadata: (packages: Package[]) => void;
+    setOriginalPackagesAndDeriveMetadata: (packages: PackageWithNormalizedData[]) => void;
 
     // Action to refresh metadata from server
     refreshMetadata: () => Promise<void>;
@@ -78,8 +78,8 @@ export interface FilterState { // Exporting for use in components
 const initialStateValues: Omit<FilterState,
     // Omit actions
     'setSearchTerm' | 'setSelectedTags' | 'addTag' | 'setMinStars' | 'setHasGithub' |
-    'setHasWebserver' | 'setHasPublication' | 'setMinCitations' | 'setMinRating' | 'setFolder1' |
-    'setCategory1' | 'setSelectedLicenses' | 'setSort' | 'setDisplayedPackages' |
+    'setHasWebserver' | 'setHasPublication' | 'setMinCitations' | 'setMinRating' | 'setFolder' |
+    'setCategory' | 'setSelectedLicenses' | 'setSort' | 'setDisplayedPackages' |
     'setTotalFilteredCount' | 'setCurrentPage' | 'setOriginalPackagesAndDeriveMetadata' |
     'refreshMetadata' | 'resetFilters' | 'setViewMode' | 'toggleFilterSidebar' | 'toggleNavSidebar' |
     // Omit fields that will be derived or fetched
@@ -95,8 +95,8 @@ const initialStateValues: Omit<FilterState,
     hasPublication: false,
     minCitations: null,
     minRating: null, // New rating filter initial value
-    folder1: null,
-    category1: null,
+    folder: null,
+    category: null,
     selectedLicenses: [],
     sortBy: 'package_name',
     sortDirection: 'asc',
@@ -135,8 +135,8 @@ export const useFilterStore = create<FilterState>()(
             setHasPublication: (hasPublication) => set({ hasPublication, currentPage: 1 }),
             setMinCitations: (minCitations) => set({ minCitations: minCitations !== null && !isNaN(minCitations) && minCitations >= 0 ? Number(minCitations) : null, currentPage: 1 }),
             setMinRating: (minRating) => set({ minRating: minRating !== null && !isNaN(minRating) && minRating >= 0 && minRating <= 5 ? Number(minRating) : null, currentPage: 1 }), // New rating filter action
-            setFolder1: (folder1) => set({ folder1, category1: null, currentPage: 1 }),
-            setCategory1: (category1) => set({ category1, currentPage: 1 }),
+            setFolder: (folder) => set({ folder, category: null, currentPage: 1 }),
+            setCategory: (category) => set({ category, currentPage: 1 }),
             setSelectedLicenses: (selectedLicenses) => set({ selectedLicenses, currentPage: 1 }),
             setSort: (field, direction) => {
                 const currentSortBy = get().sortBy;
@@ -157,7 +157,7 @@ export const useFilterStore = create<FilterState>()(
             setTotalFilteredCount: (totalFilteredCount) => set({ totalFilteredCount }),
             setCurrentPage: (currentPage) => set({ currentPage }),
 
-			setOriginalPackagesAndDeriveMetadata: (packages: Package[]) => {
+			setOriginalPackagesAndDeriveMetadata: (packages: PackageWithNormalizedData[]) => {
 				// This function is now deprecated but kept for compatibility
 				// Metadata is now loaded separately via DataService
 				set({ originalPackages: packages });
@@ -184,8 +184,8 @@ export const useFilterStore = create<FilterState>()(
                 hasPublication: initialStateValues.hasPublication,
                 minCitations: initialStateValues.minCitations,
                 minRating: initialStateValues.minRating, // Reset rating filter
-                folder1: initialStateValues.folder1,
-                category1: initialStateValues.category1,
+                folder: initialStateValues.folder,
+                category: initialStateValues.category,
                 selectedLicenses: initialStateValues.selectedLicenses,
                 // sortBy and sortDirection are also part of initialStateValues
                 sortBy: initialStateValues.sortBy,
@@ -220,8 +220,8 @@ export const useFilterStore = create<FilterState>()(
                 hasPublication: state.hasPublication,
                 minCitations: state.minCitations,
                 minRating: state.minRating, // Include rating filter in persistence
-                folder1: state.folder1,
-                category1: state.category1,
+                folder: state.folder,
+                category: state.category,
                 selectedLicenses: state.selectedLicenses,
                 sortBy: state.sortBy,
                 sortDirection: state.sortDirection,

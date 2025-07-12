@@ -5,10 +5,6 @@ export interface Package {
 	webserver?: string;
 	link?: string; // General purpose link
 	repo_link?: string; // Specific link to code repository
-	folder1?: string;
-	category1?: string;
-	subcategory1?: string;
-	subsubcategory1?: string;
 	description?: string;
 	github_stars?: number;
 	last_commit?: Date | null;
@@ -18,7 +14,6 @@ export interface Package {
 	journal?: string;
 	jif?: number;
 	page_icon?: string;
-	tags?: string[];
 	github_owner?: string;
 	github_repo?: string;
 	// Supabase rating fields
@@ -59,9 +54,6 @@ export interface PackageSuggestion {
 	repo_url?: string;
 	link_url?: string; // General link
 	license?: string;
-	tags?: string[];
-	folder1?: string;
-	category1?: string;
 	suggestion_reason?: string;
 	status: 'pending' | 'approved' | 'rejected' | 'added';
 	admin_notes?: string;
@@ -99,10 +91,36 @@ export interface FolderCategory {
     category?: Category;
 }
 
-// Update Package interface to include normalized data when fetched
+// New interfaces for components that need normalized data
+export interface PackageWithNormalizedData extends Package {
+    tags: string[];       // Array of tag names from normalized tables
+    folder: string;       // Folder name from normalized tables  
+    category: string;     // Category name from normalized tables
+}
+
+export interface PackageSuggestionWithNormalizedData extends PackageSuggestion {
+    tags: string[];       // Array of tag names from normalized tables
+    folder: string;       // Folder name from normalized tables
+    category: string;     // Category name from normalized tables
+}
+
+// Raw database query result structure (for API layer only)
 export interface PackageWithRelations extends Package {
     package_tags?: { tag_id: string; tags?: Tag }[];
     package_folder_categories?: { 
+        folder_category_id: string; 
+        folder_categories?: {
+            folder_id: string;
+            category_id: string;
+            folders?: Folder;
+            categories?: Category;
+        }
+    }[];
+}
+
+export interface PackageSuggestionWithRelations extends PackageSuggestion {
+    package_suggestion_tags?: { tag_id: string; tags?: Tag }[];
+    package_suggestion_folder_categories?: { 
         folder_category_id: string; 
         folder_categories?: {
             folder_id: string;

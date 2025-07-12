@@ -1,6 +1,6 @@
 // src/services/dataService.ts
 import { supabase } from '../supabase';
-import { Package, PackageWithRelations } from '../types';
+import { PackageWithNormalizedData, PackageWithRelations } from '../types';
 import { createQuery } from '../utils/query';
 
 export interface FilterMetadata {
@@ -25,7 +25,7 @@ export interface FolderCategoryData {
 }
 
 export interface PackageQueryResult {
-    packages: Package[];
+    packages: PackageWithNormalizedData[];
     totalCount: number;
     userRatings?: Map<string, { rating: number; rating_id: string }>;
 }
@@ -39,8 +39,8 @@ export interface PackageQueryParams {
 	hasPublication?: boolean;
 	minCitations?: number | null;
 	minRating?: number | null;
-	folder1?: string | null;
-	category1?: string | null;
+	folder?: string | null;
+	category?: string | null;
 	selectedLicenses?: string[];
 	sortBy?: string | null;
 	sortDirection?: 'asc' | 'desc';
@@ -96,8 +96,8 @@ export class DataService {
 			hasPublication,
 			minCitations = null,
 			minRating = null,
-            folder1 = null,
-            category1 = null,
+            folder = null,
+            category = null,
 			selectedLicenses = [],
 			sortBy = 'package_name',
 			sortDirection = 'asc',
@@ -165,16 +165,16 @@ export class DataService {
             }
 
             // Apply folder/category filters
-            if (folder1 || category1) {
+            if (folder || category) {
                 let folderCategoryQuery = supabase
                     .from('folder_categories')
                     .select('id');
 
-                if (folder1) {
+                if (folder) {
                     const { data: folderData } = await supabase
                         .from('folders')
                         .select('id')
-                        .eq('name', folder1)
+                        .eq('name', folder)
                         .single();
 
                     if (folderData) {
@@ -182,11 +182,11 @@ export class DataService {
                     }
                 }
 
-                if (category1) {
+                if (category) {
                     const { data: categoryData } = await supabase
                         .from('categories')
                         .select('id')
-                        .eq('name', category1)
+                        .eq('name', category)
                         .single();
 
                     if (categoryData) {
@@ -258,13 +258,23 @@ export class DataService {
 
             if (error) throw error;
 
-            // Transform the data to match Package interface
-            const packages: Package[] = (data || []).map((pkg: PackageWithRelations) => ({
-                ...pkg,
-                tags: pkg.package_tags?.map(pt => pt.tags?.name).filter(Boolean) as string[] || [],
-                folder1: pkg.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
-                category1: pkg.package_folder_categories?.[0]?.folder_categories?.categories?.name || '',
-            }));
+            // Transform the data to match PackageWithNormalizedData interface
+            const packages: PackageWithNormalizedData[] = (data || []).map((pkg: PackageWithRelations) => {
+                // Extract normalized data
+                const tags = pkg.package_tags?.map(pt => pt.tags?.name).filter(Boolean) as string[] || [];
+                const folder = pkg.package_folder_categories?.[0]?.folder_categories?.folders?.name || '';
+                const category = pkg.package_folder_categories?.[0]?.folder_categories?.categories?.name || '';
+
+                // Create clean package object without relation data
+                const { package_tags, package_folder_categories, ...cleanPkg } = pkg;
+                
+                return {
+                    ...cleanPkg,
+                    tags,
+                    folder,
+                    category
+                };
+            });
 
             // Include user ratings if requested
             let userRatings: Map<string, { rating: number; rating_id: string }> | undefined;
@@ -382,7 +392,7 @@ export class DataService {
     /**
      * Fetch packages with a specific tag using normalized structure
      */
-    static async fetchPackagesWithTag(tagName: string): Promise<Package[]> {
+    static async fetchPackagesWithTag(tagName: string): Promise<PackageWithNormalizedData[]> {
 		try {
             // Get tag ID
             const { data: tagData, error: tagError } = await supabase
@@ -413,13 +423,21 @@ export class DataService {
 
             if (error) throw error;
 
-            // Transform to Package interface
-            return (data || []).map((pkg: any) => ({
-                ...pkg,
-                tags: pkg.package_tags?.map((pt: any) => pt.tags?.name).filter(Boolean) || [],
-                folder1: pkg.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
-                category1: pkg.package_folder_categories?.[0]?.folder_categories?.categories?.name || '',
-            }));
+            // Transform to PackageWithNormalizedData interface
+            return (data || []).map((pkg: any) => {
+                const tags = pkg.package_tags?.map((pt: any) => pt.tags?.name).filter(Boolean) || [];
+                const folder = pkg.package_folder_categories?.[0]?.folder_categories?.folders?.name || '';
+                const category = pkg.package_folder_categories?.[0]?.folder_categories?.categories?.name || '';
+                
+                const { package_tags, package_folder_categories, ...cleanPkg } = pkg;
+                
+                return {
+                    ...cleanPkg,
+                    tags,
+                    folder,
+                    category
+                };
+            });
         } catch (error) {
             console.error('Error fetching packages with tag:', error);
             throw error;

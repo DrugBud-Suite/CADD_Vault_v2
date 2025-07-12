@@ -2,11 +2,11 @@
 import React from 'react';
 import { Stack } from '@mui/material';
 import { Code as CodeIcon, Article, Language, Link as LinkIconMui } from '@mui/icons-material';
-import { Package } from '../../types'; // Adjust path as needed
+import { PackageWithNormalizedData } from '../../types'; // Adjust path as needed
 import PackageLinkButton from './PackageLinkButton';
 
 interface PackageActionsProps {
-    pkg: Package;
+    pkg: PackageWithNormalizedData;
     direction?: "row" | "column"; // Optional: to allow different layouts if needed
     spacing?: number;
 }

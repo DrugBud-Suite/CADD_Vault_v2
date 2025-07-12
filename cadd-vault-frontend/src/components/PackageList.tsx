@@ -1,10 +1,10 @@
 import React from 'react';
 import { Box, Typography, List as MuiList } from '@mui/material';
 import PackageListItem from './PackageListItem';
-import { Package } from '../types';
+import { PackageWithNormalizedData } from '../types';
 
 interface PackageListProps {
-	packages: Package[];
+	packages: PackageWithNormalizedData[];
 }
 
 const PackageListComponent = ({ packages }: PackageListProps) => {

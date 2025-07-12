@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase'; // Import Supabase client
 import { useAuth } from '../context/AuthContext';
-import { Package } from '../types';
+import { PackageWithNormalizedData } from '../types';
 import {
 	Box,
 	Typography,
@@ -25,7 +25,7 @@ const EditPackagePage: React.FC = () => {
 	const packageId = encodedPackageId ? decodeURIComponent(encodedPackageId) : undefined;
 	const navigate = useNavigate();
 	const { isAdmin, loading: authLoading } = useAuth();
-	const [formData, setFormData] = useState<Partial<Package>>({});
+	const [formData, setFormData] = useState<Partial<PackageWithNormalizedData>>({});
 	const [initialDataLoaded, setInitialDataLoaded] = useState<boolean>(false);
 	const [loading, setLoading] = useState<boolean>(false); // For submit action
 	const [error, setError] = useState<string | null>(null);
@@ -69,8 +69,8 @@ const EditPackagePage: React.FC = () => {
 				const packageData = {
 					...data,
 					tags: data.package_tags?.map((pt: any) => pt.tags?.name).filter(Boolean) || [],
-					folder1: data.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
-					category1: data.package_folder_categories?.[0]?.folder_categories?.categories?.name || ''
+					folder: data.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
+					category: data.package_folder_categories?.[0]?.folder_categories?.categories?.name || ''
 				};
 
 				setFormData(packageData);
@@ -138,14 +138,14 @@ const EditPackagePage: React.FC = () => {
 				setAvailableFolders(foldersData?.map(f => f.name) || []);
 
 				// Get categories for the current folder
-				if (formData.folder1) {
+				if (formData.folder) {
 					const { data: categoriesData, error: categoriesError } = await supabase
 						.from('folder_categories')
 						.select(`
 							categories!inner(name),
 							folders!inner(name)
 						`)
-						.eq('folders.name', formData.folder1);
+						.eq('folders.name', formData.folder);
 
 					if (categoriesError) throw categoriesError;
 					setAvailableCategories(categoriesData?.map((fc: any) => fc.categories.name) || []);
@@ -158,7 +158,7 @@ const EditPackagePage: React.FC = () => {
 		if (isAdmin) {
 			fetchFoldersAndCategories();
 		}
-	}, [isAdmin, formData.folder1]);
+	}, [isAdmin, formData.folder]);
 
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -182,9 +182,9 @@ const EditPackagePage: React.FC = () => {
 			...prev,
 			[name]: value,
 		}));
-		if (name === 'folder1') {
+		if (name === 'folder') {
 			// Reset category when folder changes
-			setFormData(prev => ({ ...prev, category1: '' }));
+			setFormData(prev => ({ ...prev, category: '' }));
 			setAvailableCategories([]);
 		}
 	};
@@ -213,10 +213,6 @@ const EditPackagePage: React.FC = () => {
 					link: formData.link || null,
 					license: formData.license || null,
 					last_updated: new Date().toISOString(),
-					// Update old columns for rollback capability
-					tags: formData.tags || [],
-					folder1: formData.folder1 || null,
-					category1: formData.category1 || null
 				})
 				.eq('id', packageId);
 
@@ -235,8 +231,8 @@ const EditPackagePage: React.FC = () => {
 			const { error: fcError } = await supabase
 				.rpc('update_package_folder_category', {
 					package_uuid: packageId,
-					folder_name: formData.folder1 || '',
-					category_name: formData.category1 || ''
+					folder_name: formData.folder || '',
+					category_name: formData.category || ''
 				});
 
 			if (fcError) console.error('Error updating folder/category:', fcError);
@@ -369,12 +365,12 @@ const EditPackagePage: React.FC = () => {
 					</Grid>
 					<Grid item xs={12} sm={6}>
 						<FormControl fullWidth variant="outlined">
-							<InputLabel id="folder1-label">Folder</InputLabel>
+							<InputLabel id="folder-label">Folder</InputLabel>
 							<Select
-								labelId="folder1-label"
-								id="folder1"
-								name="folder1"
-								value={formData.folder1 || ''}
+								labelId="folder-label"
+								id="folder"
+								name="folder"
+								value={formData.folder || ''}
 								onChange={handleSelectChange}
 								label="Folder"
 							>
@@ -391,15 +387,15 @@ const EditPackagePage: React.FC = () => {
 					</Grid>
 					<Grid item xs={12} sm={6}>
 						<FormControl fullWidth variant="outlined">
-							<InputLabel id="category1-label">Category</InputLabel>
+							<InputLabel id="category-label">Category</InputLabel>
 							<Select
-								labelId="category1-label"
-								id="category1"
-								name="category1"
-								value={formData.category1 || ''}
+								labelId="category-label"
+								id="category"
+								name="category"
+								value={formData.category || ''}
 								onChange={handleSelectChange}
 								label="Category"
-								disabled={!formData.folder1}
+								disabled={!formData.folder}
 							>
 								<MenuItem value="">
 									<em>None</em>

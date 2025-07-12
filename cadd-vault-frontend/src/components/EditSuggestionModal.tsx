@@ -1,7 +1,7 @@
 // src/components/EditSuggestionModal.tsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { PackageSuggestion } from '../types';
+import { PackageSuggestionWithNormalizedData } from '../types';
 import {
 	Button, TextField,
 	CircularProgress, Grid, Autocomplete, Chip, Select, MenuItem, FormControl, InputLabel,
@@ -20,7 +20,7 @@ import { useAuth } from '../context/AuthContext';
 interface EditSuggestionModalProps {
 	open: boolean;
 	onClose: () => void;
-	suggestion: PackageSuggestion | null;
+	suggestion: PackageSuggestionWithNormalizedData | null;
 	onSaveSuccess: () => void;
 	onSaveAndApproveSuccess?: () => void;
 	isAdmin: boolean;
@@ -34,7 +34,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 	onSaveAndApproveSuccess,
 	isAdmin
 }) => {
-	const [formData, setFormData] = useState<Partial<PackageSuggestion>>({});
+	const [formData, setFormData] = useState<Partial<PackageSuggestionWithNormalizedData>>({});
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -81,7 +81,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 	useEffect(() => {
 		if (suggestion) {
-			const initialFormData: Partial<PackageSuggestion> = {
+			const initialFormData: Partial<PackageSuggestionWithNormalizedData> = {
 				package_name: suggestion.package_name || '',
 				description: suggestion.description || '',
 				publication_url: suggestion.publication_url || '',
@@ -90,8 +90,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				link_url: suggestion.link_url || '',
 				license: suggestion.license || '',
 				tags: suggestion.tags || [],
-				folder1: suggestion.folder1 || '',
-				category1: suggestion.category1 || '',
+				folder: suggestion.folder || '',
+				category: suggestion.category || '',
 				suggestion_reason: suggestion.suggestion_reason || '',
 				admin_notes: isAdmin ? (suggestion.admin_notes || '') : undefined,
 			};
@@ -117,8 +117,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 			setFormData(initialFormData);
 
-			if (suggestion.folder1 && allAvailableCategoriesMap[suggestion.folder1]) {
-				setCurrentCategories(allAvailableCategoriesMap[suggestion.folder1]);
+			if (suggestion.folder && allAvailableCategoriesMap[suggestion.folder]) {
+				setCurrentCategories(allAvailableCategoriesMap[suggestion.folder]);
 			} else {
 				setCurrentCategories([]);
 			}
@@ -136,16 +136,16 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 	}, [suggestion, isAdmin, open, allAvailableCategoriesMap, allAvailableTags, clearErrors]);
 
 	useEffect(() => {
-		if (formData.folder1 && allAvailableCategoriesMap[formData.folder1]) {
-			setCurrentCategories(allAvailableCategoriesMap[formData.folder1]);
+		if (formData.folder && allAvailableCategoriesMap[formData.folder]) {
+			setCurrentCategories(allAvailableCategoriesMap[formData.folder]);
 		} else {
 			setCurrentCategories([]);
 		}
 		// Reset category if the current category is not valid for the selected folder
-		if (formData.folder1 && !allAvailableCategoriesMap[formData.folder1]?.includes(formData.category1 || '')) {
-			setFormData(prev => ({ ...prev, category1: '' }));
+		if (formData.folder && !allAvailableCategoriesMap[formData.folder]?.includes(formData.category || '')) {
+			setFormData(prev => ({ ...prev, category: '' }));
 		}
-	}, [formData.folder1, allAvailableCategoriesMap, formData.category1]);
+	}, [formData.folder, allAvailableCategoriesMap, formData.category]);
 
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -157,8 +157,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			validateField(name, value);
 		}
 		
-		if (name === 'folder1') {
-			setFormData(prev => ({ ...prev, category1: '' })); // Reset category when folder changes
+		if (name === 'folder') {
+			setFormData(prev => ({ ...prev, category: '' })); // Reset category when folder changes
 		}
 	};
 
@@ -166,20 +166,20 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		setFormData(prev => ({ ...prev, tags: newValue }));
 	};
 
-	const handleSelectChange = (event: SelectChangeEvent<string>, fieldName: 'folder1' | 'category1') => {
+	const handleSelectChange = (event: SelectChangeEvent<string>, fieldName: 'folder' | 'category') => {
 		const { value } = event.target;
 
-		if (value === "__add_new__" && fieldName === 'folder1') {
+		if (value === "__add_new__" && fieldName === 'folder') {
 			setIsAddingFolder(true);
 			return;
-		} else if (value === "__add_new__" && fieldName === 'category1') {
+		} else if (value === "__add_new__" && fieldName === 'category') {
 			setIsAddingCategory(true);
 			return;
 		}
 
 		setFormData(prev => ({ ...prev, [fieldName]: value }));
-		if (fieldName === 'folder1') {
-			setFormData(prev => ({ ...prev, category1: '' })); // Reset category when folder changes
+		if (fieldName === 'folder') {
+			setFormData(prev => ({ ...prev, category: '' })); // Reset category when folder changes
 			if (value && allAvailableCategoriesMap[value]) {
 				setCurrentCategories(allAvailableCategoriesMap[value]);
 			} else {
@@ -205,7 +205,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		setError(null);
 		setSuccessMessage(null);
 
-		const updates: Partial<Omit<PackageSuggestion, 'id' | 'created_at' | 'status' | 'suggested_by_user_id' | 'reviewed_at' | 'reviewed_by_admin_id' | 'suggester_email'>> = {
+		// Update basic suggestion data without normalized fields
+		const updates = {
 			package_name: formData.package_name,
 			description: formData.description || undefined,
 			publication_url: formData.publication_url || undefined,
@@ -213,17 +214,12 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			repo_url: formData.repo_url || undefined,
 			link_url: formData.link_url || undefined,
 			license: formData.license || undefined,
-			tags: formData.tags && formData.tags.length > 0 ? formData.tags : undefined,
-			folder1: formData.folder1 || undefined,
-			category1: formData.category1 || undefined,
 			suggestion_reason: formData.suggestion_reason || undefined,
+			admin_notes: isAdmin ? (formData.admin_notes || undefined) : undefined,
 		};
 
-		if (isAdmin) {
-			updates.admin_notes = formData.admin_notes || undefined;
-		}
-
 		try {
+			// Update basic fields
 			const { error: updateError } = await supabase
 				.from('package_suggestions')
 				.update(updates)
@@ -232,6 +228,29 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			if (updateError) {
 				console.error("Supabase update error:", updateError);
 				throw updateError;
+			}
+
+			// Update tags in normalized table
+			const { error: tagsError } = await supabase
+				.rpc('update_suggestion_tags', {
+					suggestion_uuid: suggestion.id,
+					new_tags: formData.tags || []
+				});
+
+			if (tagsError) {
+				throw tagsError;
+			}
+
+			// Update folder/category in normalized table
+			const { error: folderCategoryError } = await supabase
+				.rpc('update_suggestion_folder_category', {
+					suggestion_uuid: suggestion.id,
+					folder_name: formData.folder || null,
+					category_name: formData.category || null
+				});
+
+			if (folderCategoryError) {
+				throw folderCategoryError;
 			}
 
 			setSuccessMessage("Suggestion updated successfully!");
@@ -254,7 +273,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		setSuccessMessage(null);
 
 		try {
-			// First update the suggestion
+			// First update the basic suggestion data
 			const suggestionUpdates = {
 				package_name: formData.package_name,
 				description: formData.description || null,
@@ -263,9 +282,6 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				repo_url: formData.repo_url || null,
 				link_url: formData.link_url || null,
 				license: formData.license || null,
-				tags: formData.tags && formData.tags.length > 0 ? formData.tags : null,
-				folder1: formData.folder1 || null,
-				category1: formData.category1 || null,
 				suggestion_reason: formData.suggestion_reason || null,
 				admin_notes: formData.admin_notes || null
 			};
@@ -276,6 +292,25 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				.eq('id', suggestion.id);
 
 			if (saveError) throw saveError;
+
+			// Update tags in normalized table
+			const { error: tagsError } = await supabase
+				.rpc('update_suggestion_tags', {
+					suggestion_uuid: suggestion.id,
+					new_tags: formData.tags || []
+				});
+
+			if (tagsError) throw tagsError;
+
+			// Update folder/category in normalized table
+			const { error: folderCategoryError } = await supabase
+				.rpc('update_suggestion_folder_category', {
+					suggestion_uuid: suggestion.id,
+					folder_name: formData.folder || null,
+					category_name: formData.category || null
+				});
+
+			if (folderCategoryError) throw folderCategoryError;
 
 			// Then approve using the database function
 			const { error: approveError } = await supabase
@@ -344,8 +379,8 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 			setFormData(prev => ({
 				...prev,
-				folder1: newFolderName.trim(),
-				category1: ''
+				folder: newFolderName.trim(),
+				category: ''
 			}));
 
 			setNewFolderName('');
@@ -365,7 +400,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 	// Update handleCreateCategory to use normalized structure
 	const handleCreateCategory = async () => {
-		if (!isAdmin || !formData.folder1 || !newCategoryName.trim()) {
+		if (!isAdmin || !formData.folder || !newCategoryName.trim()) {
 			setError("Please select a folder and enter a category name.");
 			return;
 		}
@@ -378,30 +413,30 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			// Use database function to ensure relationship
 			const { error } = await supabase
 				.rpc('ensure_folder_category_exists', {
-					folder_name: formData.folder1,
+					folder_name: formData.folder,
 					category_name: newCategoryName.trim()
 				});
 
 			if (error) throw error;
 
 			// Update local state
-			const currentCats = allAvailableCategoriesMap[formData.folder1] || [];
+			const currentCats = allAvailableCategoriesMap[formData.folder] || [];
 			if (!currentCats.includes(newCategoryName.trim())) {
 			const updatedCategories = {
 				...allAvailableCategoriesMap,
-				[formData.folder1]: [...currentCats, newCategoryName.trim()].sort()
+				[formData.folder]: [...currentCats, newCategoryName.trim()].sort()
 			};
 
 				useFilterStore.setState({
 					allAvailableCategories: updatedCategories
 				});
 
-				setCurrentCategories(updatedCategories[formData.folder1]);
+				setCurrentCategories(updatedCategories[formData.folder]);
 			}
 
 			setFormData(prev => ({
 				...prev,
-				category1: newCategoryName.trim()
+				category: newCategoryName.trim()
 			}));
 
 			setNewCategoryName('');
@@ -648,9 +683,9 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								<Select
 									labelId="folder1-edit-label"
 									id="folder1-edit"
-									name="folder1"
-									value={formData.folder1 || ''}
-									onChange={(e) => handleSelectChange(e as SelectChangeEvent<string>, 'folder1')}
+									name="folder"
+									value={formData.folder || ''}
+									onChange={(e) => handleSelectChange(e as SelectChangeEvent<string>, 'folder')}
 									label="Folder"
 								>
 									<MenuItem value=""><em>None</em></MenuItem>
@@ -695,21 +730,21 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 							)}
 						</Grid>
 						<Grid item xs={12} sm={6}>
-							<FormControl fullWidth variant="outlined" size="small" disabled={!formData.folder1}>
+							<FormControl fullWidth variant="outlined" size="small" disabled={!formData.folder}>
 								<InputLabel id="category1-edit-label">Category</InputLabel>
 								<Select
 									labelId="category1-edit-label"
 									id="category1-edit"
-									name="category1"
-									value={formData.category1 || ''}
-									onChange={(e) => handleSelectChange(e as SelectChangeEvent<string>, 'category1')}
+									name="category"
+									value={formData.category || ''}
+									onChange={(e) => handleSelectChange(e as SelectChangeEvent<string>, 'category')}
 									label="Category"
 								>
 									<MenuItem value=""><em>None</em></MenuItem>
 									{currentCategories.map((category) => (
 										<MenuItem key={category} value={category}>{category}</MenuItem>
 									))}
-									{isAdmin && formData.folder1 && (
+									{isAdmin && formData.folder && (
 										<MenuItem value="__add_new__" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
 											<AddIcon fontSize="small" sx={{ mr: 1 }} /> Add New Category
 										</MenuItem>

@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, Grid, Paper, Button, CircularProgress, Link, Chip, useTheme, Theme, Stack, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { supabase } from '../supabase';
-import { Package } from '../types';
+import { PackageWithNormalizedData } from '../types';
 import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete, FolderOutlined, CategoryOutlined } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
 import RatingInput from '../components/RatingInput';
@@ -97,7 +97,7 @@ const PackageDetailPage: React.FC = () => {
 	const userId = currentUser?.id || null;
 
 	// State
-	const [packageData, setPackageData] = useState<Package | null>(null);
+	const [packageData, setPackageData] = useState<PackageWithNormalizedData | null>(null);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 	const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
@@ -209,8 +209,8 @@ const PackageDetailPage: React.FC = () => {
 					const transformedPackage = {
 						...packageData,
 						tags: packageData.package_tags?.map((pt: any) => pt.tags?.name) || [],
-						folder1: packageData.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
-						category1: packageData.package_folder_categories?.[0]?.folder_categories?.categories?.name || ''
+						folder: packageData.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
+						category: packageData.package_folder_categories?.[0]?.folder_categories?.categories?.name || ''
 					};
 
 					// Get user rating if authenticated
@@ -497,24 +497,24 @@ const PackageDetailPage: React.FC = () => {
 						}}>Other</Typography>
 
 						{/* Folder */}
-						{packageData.folder1 && (
+						{packageData.folder && (
 							<Box mb={2}>
 								<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
 									<FolderOutlined sx={{ mr: 1, color: theme.palette.primary.main }} />
 									Folder
 								</Typography>
-								<Typography variant="body2">{packageData.folder1}</Typography>
+								<Typography variant="body2">{packageData.folder}</Typography>
 							</Box>
 						)}
 
 						{/* Category */}
-						{packageData.category1 && (
+						{packageData.category && (
 							<Box mb={2}>
 								<Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', color: theme.palette.text.primary }}>
 									<CategoryOutlined sx={{ mr: 1, color: theme.palette.secondary.main }} />
 									Category
 								</Typography>
-								<Typography variant="body2">{packageData.category1}</Typography>
+								<Typography variant="body2">{packageData.category}</Typography>
 							</Box>
 						)}
 

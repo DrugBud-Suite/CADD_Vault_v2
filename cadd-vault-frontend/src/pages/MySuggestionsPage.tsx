@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
-import { PackageSuggestion } from '../types';
+import { PackageSuggestionWithNormalizedData } from '../types';
 import {
 	Box, Typography, CircularProgress, Paper, Alert, Container,
 	Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip
@@ -19,12 +19,12 @@ const MySuggestionsPage: React.FC = () => {
 	// Stable user ID to prevent unnecessary re-renders due to object reference changes
 	const userId = currentUser?.id || null;
 	
-	const [suggestions, setSuggestions] = useState<PackageSuggestion[]>([]);
+	const [suggestions, setSuggestions] = useState<PackageSuggestionWithNormalizedData[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 
 	// State for the edit modal
-	const [editingSuggestion, setEditingSuggestion] = useState<PackageSuggestion | null>(null);
+	const [editingSuggestion, setEditingSuggestion] = useState<PackageSuggestionWithNormalizedData | null>(null);
 	const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
 	const fetchSuggestions = useCallback(async () => {
@@ -34,12 +34,46 @@ const MySuggestionsPage: React.FC = () => {
 		try {
 			const { data, error: fetchError } = await supabase
 				.from('package_suggestions')
-				.select('*')
+				.select(`
+					*,
+					package_suggestion_tags!left(
+						tag_id,
+						tags!inner(id, name)
+					),
+					package_suggestion_folder_categories!left(
+						folder_category_id,
+						folder_categories!inner(
+							id,
+							folder_id,
+							category_id,
+							folders!inner(id, name),
+							categories!inner(id, name)
+						)
+					)
+				`)
 				.eq('suggested_by_user_id', userId)
 				.order('created_at', { ascending: false });
 
 			if (fetchError) throw fetchError;
-			setSuggestions(data || []);
+			
+			// Transform data to PackageSuggestionWithNormalizedData format
+			const transformedData = (data || []).map(suggestion => {
+				const tags = suggestion.package_suggestion_tags?.map((pst: any) => pst.tags?.name).filter(Boolean) || [];
+				const folder = suggestion.package_suggestion_folder_categories?.[0]?.folder_categories?.folders?.name || '';
+				const category = suggestion.package_suggestion_folder_categories?.[0]?.folder_categories?.categories?.name || '';
+				
+				// Remove relation data and add normalized fields
+				const { package_suggestion_tags, package_suggestion_folder_categories, ...cleanSuggestion } = suggestion;
+				
+				return {
+					...cleanSuggestion,
+					tags,
+					folder,
+					category
+				};
+			});
+			
+			setSuggestions(transformedData);
 		} catch (err: any) {
 			console.error("Error fetching suggestions:", err.message);
 			setError(`Failed to load your suggestions: ${err.message}`);
@@ -77,7 +111,7 @@ const MySuggestionsPage: React.FC = () => {
 		}
 	};
 
-	const handleOpenEditModal = (suggestion: PackageSuggestion) => {
+	const handleOpenEditModal = (suggestion: PackageSuggestionWithNormalizedData) => {
 		if ((suggestion.status === 'pending' && suggestion.suggested_by_user_id === userId) || isAdmin) {
 			setEditingSuggestion(suggestion);
 			setIsEditModalOpen(true);
@@ -98,7 +132,7 @@ const MySuggestionsPage: React.FC = () => {
 		// Consider adding a success snackbar here
 	};
 
-	const getStatusChipColor = (status: PackageSuggestion['status']) => {
+	const getStatusChipColor = (status: PackageSuggestionWithNormalizedData['status']) => {
 		switch (status) {
 			case 'pending': return 'warning';
 			case 'approved': return 'success';

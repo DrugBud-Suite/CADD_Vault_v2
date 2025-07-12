@@ -1,4 +1,4 @@
-import { Package } from '../../types';
+import { PackageWithNormalizedData } from '../../types';
 
 /**
  * Formats license string for display
@@ -79,7 +79,7 @@ export const tagsToString = (tags: string[]): string => {
  * @param pkg Package object to analyze
  * @returns Icon identifier string
  */
-export const getPackageIcon = (pkg: Package): string => {
+export const getPackageIcon = (pkg: PackageWithNormalizedData): string => {
   // Logic to determine icon based on tags, URLs, etc.
   if (pkg.tags?.includes('database')) return 'database';
   if (pkg.tags?.includes('visualization')) return 'chart';

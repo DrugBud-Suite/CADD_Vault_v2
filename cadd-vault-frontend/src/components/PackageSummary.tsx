@@ -1,10 +1,10 @@
 import React from 'react';
 import { Tooltip, Box, Typography, Rating } from '@mui/material';
-import { Package } from '../types';
+import { PackageWithNormalizedData } from '../types';
 import { FiStar } from 'react-icons/fi';
 
 interface PackageSummaryProps {
-	selectedPackage: Package | null;
+	selectedPackage: PackageWithNormalizedData | null;
 }
 
 const PackageSummary: React.FC<PackageSummaryProps> = ({ selectedPackage }) => {

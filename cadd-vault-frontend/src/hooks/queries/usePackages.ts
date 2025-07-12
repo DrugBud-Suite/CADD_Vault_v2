@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { queryKeys } from '../../lib/react-query/queryKeys';
 import { packageApi, PackageFilters } from '../../lib/react-query/api/packages';
-import { Package } from '../../types';
+import { PackageWithNormalizedData } from '../../types';
 
 export function usePackages(filters: PackageFilters = {}) {
   return useQuery({
@@ -49,14 +49,14 @@ export function useUpdatePackage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<Package> }) =>
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<PackageWithNormalizedData> }) =>
       packageApi.updatePackage(id, updates),
     onMutate: async ({ id, updates }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: queryKeys.packages.detail(id) });
 
       // Snapshot previous value
-      const previousPackage = queryClient.getQueryData<Package>(
+      const previousPackage = queryClient.getQueryData<PackageWithNormalizedData>(
         queryKeys.packages.detail(id)
       );
 

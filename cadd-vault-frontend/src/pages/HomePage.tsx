@@ -23,7 +23,7 @@ const HomePage: React.FC = () => {
 	// --- Zustand Store Selectors using useShallow ---
 	const {
 		searchTerm, selectedTags, minStars, hasGithub, hasWebserver, hasPublication,
-		minCitations, minRating, folder1, category1, selectedLicenses, sortBy, sortDirection, viewMode, currentPage,
+		minCitations, minRating, folder, category, selectedLicenses, sortBy, sortDirection, viewMode, currentPage,
 	} = useFilterStore(useShallow(state => ({
 		searchTerm: state.searchTerm,
 		selectedTags: state.selectedTags,
@@ -33,8 +33,8 @@ const HomePage: React.FC = () => {
 		hasPublication: state.hasPublication,
 		minCitations: state.minCitations,
 		minRating: state.minRating,
-		folder1: state.folder1,
-		category1: state.category1,
+		folder: state.folder,
+		category: state.category,
 		selectedLicenses: state.selectedLicenses,
 		sortBy: state.sortBy,
 		sortDirection: state.sortDirection,
@@ -65,8 +65,8 @@ const HomePage: React.FC = () => {
 		hasPublication,
 		minCitations,
 		minRating,
-		folder1,
-		category1,
+		folder,
+		category,
 		selectedLicenses,
 		sortBy,
 		sortDirection,

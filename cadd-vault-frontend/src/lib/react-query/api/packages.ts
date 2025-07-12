@@ -1,5 +1,5 @@
 import { supabase } from '../../../supabase';
-import { Package } from '../../../types';
+import { PackageWithNormalizedData } from '../../../types';
 
 export interface PackageFilters {
   searchTerm?: string;
@@ -10,8 +10,8 @@ export interface PackageFilters {
   hasPublication?: boolean;
   minCitations?: number | null;
   minRating?: number | null;
-  folder1?: string | null;
-  category1?: string | null;
+  folder?: string | null;
+  category?: string | null;
   selectedLicenses?: string[];
   sortBy?: string | null;
   sortDirection?: 'asc' | 'desc';
@@ -22,7 +22,7 @@ export interface PackageFilters {
 }
 
 export interface PackageQueryResult {
-  packages: Package[];
+  packages: PackageWithNormalizedData[];
   totalCount: number;
   userRatings?: Map<string, { rating: number; rating_id: string }>;
 }
@@ -38,8 +38,8 @@ export const packageApi = {
       hasPublication,
       minCitations,
       minRating,
-      folder1,
-      category1,
+      folder,
+      category,
       selectedLicenses = [],
       sortBy,
       sortDirection = 'desc',
@@ -106,16 +106,16 @@ export const packageApi = {
     }
 
     // Apply folder/category filters (SERVER-SIDE)
-    if (folder1 || category1) {
+    if (folder || category) {
       let folderCategoryQuery = supabase
         .from('folder_categories')
         .select('id');
 
-      if (folder1) {
+      if (folder) {
         const { data: folderData } = await supabase
           .from('folders')
           .select('id')
-          .eq('name', folder1)
+          .eq('name', folder)
           .single();
 
         if (folderData) {
@@ -123,11 +123,11 @@ export const packageApi = {
         }
       }
 
-      if (category1) {
+      if (category) {
         const { data: categoryData } = await supabase
           .from('categories')
           .select('id')
-          .eq('name', category1)
+          .eq('name', category)
           .single();
 
         if (categoryData) {
@@ -234,7 +234,7 @@ export const packageApi = {
     };
   },
 
-  async getPackageById(id: string): Promise<Package> {
+  async getPackageById(id: string): Promise<PackageWithNormalizedData> {
     const { data, error } = await supabase
       .from('packages')
       .select(`
@@ -258,8 +258,8 @@ export const packageApi = {
     return transformPackageData(data);
   },
 
-  async createPackage(packageData: Partial<Package>): Promise<Package> {
-    const { tags, folder1, category1, ...restData } = packageData;
+  async createPackage(packageData: Partial<PackageWithNormalizedData>): Promise<PackageWithNormalizedData> {
+    const { tags, folder, category, ...restData } = packageData;
 
     const { data, error } = await supabase
       .from('packages')
@@ -277,19 +277,19 @@ export const packageApi = {
       });
     }
 
-    if (folder1 && category1) {
+    if (folder && category) {
       await supabase.rpc('update_package_folder_category', {
         package_uuid: data.id,
-        folder_name: folder1,
-        category_name: category1
+        folder_name: folder,
+        category_name: category
       });
     }
 
     return packageApi.getPackageById(data.id);
   },
 
-  async updatePackage(id: string, updates: Partial<Package>): Promise<Package> {
-    const { tags, folder1, category1, ...restData } = updates;
+  async updatePackage(id: string, updates: Partial<PackageWithNormalizedData>): Promise<PackageWithNormalizedData> {
+    const { tags, folder, category, ...restData } = updates;
 
     const { error } = await supabase
       .from('packages')
@@ -307,11 +307,11 @@ export const packageApi = {
     }
 
     // Handle folder/category update
-    if (folder1 !== undefined || category1 !== undefined) {
+    if (folder !== undefined || category !== undefined) {
       await supabase.rpc('update_package_folder_category', {
         package_uuid: id,
-        folder_name: folder1 || null,
-        category_name: category1 || null
+        folder_name: folder || null,
+        category_name: category || null
       });
     }
 
@@ -329,11 +329,11 @@ export const packageApi = {
 };
 
 // Helper function to transform nested data
-function transformPackageData(data: any): Package {
+function transformPackageData(data: any): PackageWithNormalizedData {
   return {
     ...data,
-    folder1: data.package_folder_categories?.[0]?.folder_categories?.folders?.name || null,
-    category1: data.package_folder_categories?.[0]?.folder_categories?.categories?.name || null,
+    folder: data.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
+    category: data.package_folder_categories?.[0]?.folder_categories?.categories?.name || '',
     tags: data.package_tags?.map((pt: any) => pt.tags?.name).filter(Boolean) as string[] || [],
   };
 }

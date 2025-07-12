@@ -2,11 +2,11 @@
 import React from 'react';
 import { Stack } from '@mui/material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
-import { Package } from '../../types'; // Adjust path as needed
+import { PackageWithNormalizedData } from '../../types'; // Adjust path as needed
 import PackageInfoChip from './PackageInfoChip';
 
 interface PackageMetricsProps {
-    pkg: Package;
+    pkg: PackageWithNormalizedData;
     variant?: 'card' | 'list'; // Pass down to PackageInfoChip
     direction?: "row" | "column";
     spacing?: number;

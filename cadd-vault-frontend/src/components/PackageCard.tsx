@@ -18,14 +18,14 @@ import {
 import { alpha } from '@mui/material/styles';
 import { MoreHoriz as MoreHorizIcon } from '@mui/icons-material';
 import { FiTag } from 'react-icons/fi';
-import { Package } from '../types';
+import { PackageWithNormalizedData } from '../types';
 import { useFilterStore } from '../store/filterStore';
 import RatingInput from './RatingInput';
 import PackageActions from './common/PackageActions';
 import PackageMetrics from './common/PackageMetrics';
 
 interface PackageCardProps {
-	pkg: Package;
+	pkg: PackageWithNormalizedData;
 }
 
 const PackageCardComponent = ({ pkg }: PackageCardProps) => {
@@ -33,7 +33,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 	const [tagsPopoverAnchor, setTagsPopoverAnchor] = useState<HTMLButtonElement | null>(null);
 
 	// Local state for rating data
-	const [localPkg, setLocalPkg] = useState<Package>(pkg);
+	const [localPkg, setLocalPkg] = useState<PackageWithNormalizedData>(pkg);
 	const mountedRef = useRef(true);
 
 	// Update local package data when props change

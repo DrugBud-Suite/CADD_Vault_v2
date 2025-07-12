@@ -48,10 +48,10 @@ const TableOfContentsSidebar: React.FC = () => {
 	// Use data from the filter store
 	const allAvailableFolders = useFilterStore((state) => state.allAvailableFolders);
 	const allAvailableCategoriesMap = useFilterStore((state) => state.allAvailableCategories);
-	const setFolder1Filter = useFilterStore((state) => state.setFolder1);
-	const setCategory1Filter = useFilterStore((state) => state.setCategory1);
-	const selectedFolder1 = useFilterStore((state) => state.folder1);
-	const selectedCategory1 = useFilterStore((state) => state.category1);
+	const setFolderFilter = useFilterStore((state) => state.setFolder);
+	const setCategoryFilter = useFilterStore((state) => state.setCategory);
+	const selectedFolder = useFilterStore((state) => state.folder);
+	const selectedCategory = useFilterStore((state) => state.category);
 
 
 	const [tocData, setTocData] = useState<TocData>({});
@@ -98,13 +98,13 @@ const TableOfContentsSidebar: React.FC = () => {
 	};
 
 	const handleCategoryClick = (folder: string, category: string | null) => {
-		setFolder1Filter(folder === 'Uncategorized' ? null : folder);
-		setCategory1Filter(category);
+		setFolderFilter(folder === 'Uncategorized' ? null : folder);
+		setCategoryFilter(category);
 	};
 
 	const handleFolderHeaderClick = (folder: string) => {
-		setFolder1Filter(folder === 'Uncategorized' ? null : folder);
-		setCategory1Filter(null);
+		setFolderFilter(folder === 'Uncategorized' ? null : folder);
+		setCategoryFilter(null);
 		if (!openFolders.has(folder)) {
 			handleFolderClick(folder);
 		}
@@ -175,23 +175,23 @@ const TableOfContentsSidebar: React.FC = () => {
 						mb: 0.25,
 						py: 0.5,
 						borderRadius: 1.5,
-						bgcolor: selectedFolder1 === null && selectedCategory1 === null ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
-						color: selectedFolder1 === null && selectedCategory1 === null ? 'primary.main' : 'text.primary',
+						bgcolor: selectedFolder === null && selectedCategory === null ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
+						color: selectedFolder === null && selectedCategory === null ? 'primary.main' : 'text.primary',
 						'&:hover': {
 							bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
 						},
 						transition: 'background-color 0.2s, color 0.2s',
 					}}
 					onClick={() => {
-						setFolder1Filter(null);
-						setCategory1Filter(null);
+						setFolderFilter(null);
+						setCategoryFilter(null);
 					}}
 				>
 					<ListItemText
 						primary="All Packages"
 						primaryTypographyProps={{
 							sx: {
-								fontWeight: selectedFolder1 === null && selectedCategory1 === null ? 'bold' : 'medium',
+								fontWeight: selectedFolder === null && selectedCategory === null ? 'bold' : 'medium',
 								fontSize: '0.9rem',
 							}
 						}}
@@ -207,8 +207,8 @@ const TableOfContentsSidebar: React.FC = () => {
 								borderRadius: 1.5,
 								py: 0,
 								pl: 2,
-								bgcolor: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === null ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
-								color: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === null ? 'primary.main' : 'text.primary',
+								bgcolor: selectedFolder === (folder === 'Uncategorized' ? null : folder) && selectedCategory === null ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
+								color: selectedFolder === (folder === 'Uncategorized' ? null : folder) && selectedCategory === null ? 'primary.main' : 'text.primary',
 								'&:hover': {
 									bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
 								},
@@ -219,7 +219,7 @@ const TableOfContentsSidebar: React.FC = () => {
 								primary={folder}
 								primaryTypographyProps={{
 									sx: {
-										fontWeight: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === null ? 'bold' : 'medium',
+										fontWeight: selectedFolder === (folder === 'Uncategorized' ? null : folder) && selectedCategory === null ? 'bold' : 'medium',
 										fontSize: '0.9rem',
 									}
 								}}
@@ -256,8 +256,8 @@ const TableOfContentsSidebar: React.FC = () => {
 												py: 0.2,
 												borderRadius: 1.5,
 												position: 'relative',
-												bgcolor: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === category ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
-												color: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === category ? 'primary.main' : 'text.secondary',
+												bgcolor: selectedFolder === (folder === 'Uncategorized' ? null : folder) && selectedCategory === category ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+												color: selectedFolder === (folder === 'Uncategorized' ? null : folder) && selectedCategory === category ? 'primary.main' : 'text.secondary',
 												'&:hover': {
 													bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
 												},
@@ -268,7 +268,7 @@ const TableOfContentsSidebar: React.FC = () => {
 												primary={category}
 												primaryTypographyProps={{
 													sx: {
-														fontWeight: selectedFolder1 === (folder === 'Uncategorized' ? null : folder) && selectedCategory1 === category ? 'medium' : 'normal',
+														fontWeight: selectedFolder === (folder === 'Uncategorized' ? null : folder) && selectedCategory === category ? 'medium' : 'normal',
 														fontSize: '0.8rem',
 													}
 												}}

@@ -47,7 +47,7 @@ import {
 import { supabase, ensureValidSession } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { PackageSuggestion } from '../types';
+import { PackageSuggestionWithNormalizedData } from '../types';
 import EditSuggestionModal from '../components/EditSuggestionModal';
 
 // Define PackageType interface if not in types
@@ -56,8 +56,8 @@ interface PackageType {
 	package_name: string;
 }
 
-// Extended PackageSuggestion interface to include all fields
-interface ExtendedPackageSuggestion extends PackageSuggestion {
+// Extended PackageSuggestionWithNormalizedData interface to include all fields
+interface ExtendedPackageSuggestion extends PackageSuggestionWithNormalizedData {
 	repo_link?: string | null;
 	webserver?: string | null;
 	publication?: string | null;
@@ -625,9 +625,9 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 						Tags: {suggestion.tags.join(', ')}
 					</Typography>
 				)}
-				{suggestion.folder1 && (
+				{suggestion.folder && (
 					<Typography variant="caption">
-						Folder: {suggestion.folder1} {suggestion.category1 && `> ${suggestion.category1}`}
+						Folder: {suggestion.folder} {suggestion.category && `> ${suggestion.category}`}
 					</Typography>
 				)}
 			</Box>
