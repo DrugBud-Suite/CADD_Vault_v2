@@ -7,7 +7,6 @@ import { supabase } from '../supabase';
 import { Package } from '../types';
 import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete, FolderOutlined, CategoryOutlined } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
-import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import RatingInput from '../components/RatingInput';
 import { useAuth } from '../context/AuthContext';
 
@@ -238,25 +237,6 @@ const PackageDetailPage: React.FC = () => {
 		fetchPackage();
 	}, [packageId, userId]);
 
-	useEffect(() => {
-		// Listen for rating updates
-		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
-			// Only update if this is the current package
-			if (event.packageId === packageId && mountedRef.current) {
-				console.log(`PackageDetailPage received rating update for package ${event.packageId}: ${event.averageRating} (${event.ratingsCount} ratings)`);
-
-				setPackageData(prev => prev ? {
-					...prev,
-					average_rating: event.averageRating,
-					ratings_count: event.ratingsCount
-				} : null);
-			}
-		});
-
-		return () => {
-			unsubscribe();
-		};
-	}, [packageId]);
 
 	// Loading state
 	if (loading) {
@@ -319,10 +299,6 @@ const PackageDetailPage: React.FC = () => {
 				<Box sx={{ position: 'absolute', top: 20, right: isAdmin ? (packageData?.package_name && packageData.package_name.length > 15 ? 300 : 210) : 16, zIndex: 1 }}>
 					<RatingInput
 						packageId={packageId}
-						averageRating={packageData.average_rating ?? 0}
-						ratingsCount={packageData.ratings_count ?? 0}
-						userRating={packageData.user_rating}
-						userRatingId={packageData.user_rating_id}
 					/>
 				</Box>
 			)}

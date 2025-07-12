@@ -573,18 +573,26 @@ export class DataService {
         switch (logic) {
             case 'OR':
                 // Used by main app - packages with ANY of the selected tags
-                return query.filter('tags', 'cs', JSON.stringify(tags));
+                // Join with package_tags and tags tables to filter by tag names
+                return query
+                    .select('*, package_tags!inner(tags!inner(name))')
+                    .in('package_tags.tags.name', tags);
 
             case 'AND':
                 // Used by admin bulk operations - packages with ALL selected tags
+                // For AND logic, we need to ensure the package has all specified tags
                 tags.forEach(tag => {
-                    query = query.contains('tags', [tag]);
+                    query = query
+                        .select('*, package_tags!inner(tags!inner(name))')
+                        .eq('package_tags.tags.name', tag);
                 });
                 return query;
 
             case 'SINGLE':
                 // Used for single tag searches - packages containing exactly this tag
-                return query.contains('tags', [tags[0]]);
+                return query
+                    .select('*, package_tags!inner(tags!inner(name))')
+                    .eq('package_tags.tags.name', tags[0]);
 
             default:
                 return query;

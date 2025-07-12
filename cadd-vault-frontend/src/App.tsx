@@ -4,17 +4,15 @@ import { Routes, Route } from 'react-router-dom'; // BrowserRouter is in main.ts
 import { Typography, Box, CircularProgress, Container } from '@mui/material';
 import Layout from './components/Layout';
 import AdminRoute from './components/AdminRoute';
+import { useTabFocusSessionRefresh } from './hooks/useTabFocusSessionRefresh';
 import './App.css';
-import AdminBulkUploadPage from './pages/AdminBulkUploadPage';
 // Lazy load page components
 const HomePage = lazy(() => import('./pages/HomePage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const PackageDetailPage = lazy(() => import('./pages/PackageDetailPage'));
-const AddPackagePage = lazy(() => import('./pages/AddPackagePage'));
 const EditPackagePage = lazy(() => import('./pages/EditPackagePage'));
 const SuggestPackagePage = lazy(() => import('./pages/SuggestPackagePage'));
 const AdminReviewSuggestionsPage = lazy(() => import('./pages/AdminReviewSuggestionsPage'));
-const AdminBulkOperationsPage = lazy(() => import('./pages/AdminBulkOperationsPage'));
 const MySuggestionsPage = lazy(() => import('./pages/MySuggestionsPage'));
 
 // Placeholder for a simple Login Page if direct navigation is desired
@@ -27,6 +25,9 @@ const LoginPagePlaceholder = () => (
 
 
 function App() {
+	// Initialize session refresh on tab focus
+	useTabFocusSessionRefresh();
+
 	// Fallback UI for Suspense
 	const suspenseFallback = (
 		<Box display="flex" justifyContent="center" alignItems="center" sx={{ height: '100vh' }}>
@@ -49,11 +50,8 @@ function App() {
 
 					{/* Admin Routes */}
 					<Route element={<AdminRoute />}>
-						<Route path="/admin/bulk-upload" element={<AdminBulkUploadPage />} />
-						<Route path="/add-package" element={<AddPackagePage />} />
 						<Route path="/edit-package/:packageId" element={<EditPackagePage />} />
 						<Route path="/admin/review-suggestions" element={<AdminReviewSuggestionsPage />} />
-						<Route path="/admin/bulk-operations" element={<AdminBulkOperationsPage />} />
 					</Route>
 				</Routes>
 			</Suspense>

@@ -1,5 +1,5 @@
 // src/components/RatingInput.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
 	Box,
 	Rating,
@@ -16,41 +16,33 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useAuth } from '../context/AuthContext';
-import { RatingService, RatingEventEmitter } from '../services/ratingService';
+import { usePackageRating, useUpsertRating, useDeleteRating } from '../hooks/queries/useRatings';
 
 interface RatingInputProps {
 	packageId: string;
-	averageRating?: number;
-	ratingsCount?: number;
-	userRating?: number | null;
-	userRatingId?: string | null;
 }
 
 const RatingInput: React.FC<RatingInputProps> = ({
 	packageId,
-	averageRating = 0,
-	ratingsCount = 0,
-	userRating = null,
 }) => {
 	const { currentUser } = useAuth();
+
+	// React Query hooks
+	const { data: ratingData, isLoading } = usePackageRating(packageId);
+	const upsertRating = useUpsertRating();
+	const deleteRating = useDeleteRating();
+
+	// Extract rating data
+	const averageRating = ratingData?.average_rating || 0;
+	const ratingsCount = ratingData?.ratings_count || 0;
+	const userRating = ratingData?.user_rating || null;
 
 	// Local state for UI interactions only
 	const [popoverRating, setPopoverRating] = useState<number | null>(userRating);
 	const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
-	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// Ref to prevent stale closures
-	const mountedRef = useRef(true);
-
-	// Cleanup on unmount
-	React.useEffect(() => {
-		return () => {
-			mountedRef.current = false;
-		};
-	}, []);
-
-	// Update popover rating when userRating prop changes
+	// Update popover rating when userRating changes
 	React.useEffect(() => {
 		setPopoverRating(userRating);
 	}, [userRating]);
@@ -73,81 +65,41 @@ const RatingInput: React.FC<RatingInputProps> = ({
 		_event: React.SyntheticEvent,
 		newValue: number | null,
 	) => {
-	  if (!currentUser || newValue === null || submitting) return;
+	  if (!currentUser || newValue === null || upsertRating.isPending) return;
 
-	  setSubmitting(true);
 	  setError(null);
 	  setPopoverRating(newValue);
 
 	  try {
-		const result = await RatingService.upsertRating(packageId, newValue);
+		await upsertRating.mutateAsync({
+			packageId,
+			rating: newValue
+		});
 
-		if (mountedRef.current) {
-			// Update local popover state
-			setPopoverRating(result.user_rating);
-
-			// Emit event for other components to update their data
-		  RatingEventEmitter.emit({
-			  packageId,
-			  averageRating: result.average_rating,
-			  ratingsCount: result.ratings_count,
-			  userRating: result.user_rating
-		  });
-
-			// Close popover after successful submission
-			setTimeout(() => {
-				if (mountedRef.current) {
-					handlePopoverClose();
-				}
-			}, 500);
-		}
-	} catch (err: any) {
+		// Close popover after successful submission
+		setTimeout(() => {
+			handlePopoverClose();
+		}, 500);
+	} catch (err) {
 		console.error('Error submitting rating:', err);
-		if (mountedRef.current) {
-			setError('Failed to submit rating. Please try again.');
-			setPopoverRating(userRating); // Revert optimistic update
-		}
-	} finally {
-		if (mountedRef.current) {
-			setSubmitting(false);
-		}
+		setError('Failed to submit rating. Please try again.');
+		setPopoverRating(userRating); // Revert optimistic update
 	}
 	};
 
 	const handleDeleteRating = async () => {
-		if (!currentUser || !userRating || submitting) return;
+		if (!currentUser || !userRating || deleteRating.isPending) return;
 
-		setSubmitting(true);
 		setError(null);
 
 	  try {
-		  const result = await RatingService.deleteRating(packageId);
-
-		if (mountedRef.current) {
-			// Update local popover state
-			setPopoverRating(null);
-
-			// Emit event for other components to update their data
-		  RatingEventEmitter.emit({
-			  packageId,
-			  averageRating: result.average_rating,
-			  ratingsCount: result.ratings_count,
-			  userRating: undefined
-		  });
-
-		  // Close popover
-		  handlePopoverClose();
-	  }
-	} catch (err: any) {
+		await deleteRating.mutateAsync(packageId);
+		// Close popover
+		handlePopoverClose();
+	} catch (err) {
 		console.error('Error deleting rating:', err);
-		if (mountedRef.current) {
-			setError('Failed to delete rating. Please try again.');
-		}
-	} finally {
-		  if (mountedRef.current) {
-			  setSubmitting(false);
-		  }
-	  }
+		setError('Failed to delete rating. Please try again.');
+	}
   };
 
 	const open = Boolean(anchorEl);
@@ -161,10 +113,10 @@ const RatingInput: React.FC<RatingInputProps> = ({
 					  size="small"
 					  onClick={handlePopoverOpen}
 					  aria-describedby={id}
-						disabled={submitting || !currentUser}
+						disabled={isLoading || upsertRating.isPending || deleteRating.isPending || !currentUser}
 					  sx={{ p: 0.5 }}
 				  >
-						{submitting ? (
+						{(isLoading || upsertRating.isPending || deleteRating.isPending) ? (
 						  <CircularProgress size={20} />
 					  ) : (
 						  <StarIcon
@@ -220,7 +172,7 @@ const RatingInput: React.FC<RatingInputProps> = ({
 					  onChange={handleRatingChange}
 					  precision={1}
 					  emptyIcon={<StarBorderIcon fontSize="inherit" />}
-					  disabled={submitting}
+					  disabled={upsertRating.isPending || deleteRating.isPending}
 					  sx={{ fontSize: '1.5rem' }}
 				  />
 
@@ -231,18 +183,18 @@ const RatingInput: React.FC<RatingInputProps> = ({
 						  size="small"
 						  startIcon={<DeleteIcon />}
 						  onClick={handleDeleteRating}
-						  disabled={submitting}
+						  disabled={upsertRating.isPending || deleteRating.isPending}
 						  sx={{ mt: 1 }}
 					  >
 						  Remove Rating
 					  </Button>
 				  )}
 
-				  {submitting && (
+				  {(upsertRating.isPending || deleteRating.isPending) && (
 					  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 						  <CircularProgress size={16} />
 						  <Typography variant="caption" color="text.secondary">
-							  {userRating ? 'Updating...' : 'Submitting...'}
+							  {deleteRating.isPending ? 'Removing...' : userRating ? 'Updating...' : 'Submitting...'}
 						  </Typography>
 					  </Box>
 				  )}

@@ -14,8 +14,6 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import HomeIcon from '@mui/icons-material/Home';
 import InfoIcon from '@mui/icons-material/Info';
-import UploadFileIcon from '@mui/icons-material/UploadFile'; // Import for Bulk Upload icon
-import EditAttributesIcon from '@mui/icons-material/EditAttributes'; // Import for Bulk Operations icon
 import { useTheme } from '@mui/material/styles';
 import { useFilterStore } from '../store/filterStore';
 import ThemeToggle from './ThemeToggle';
@@ -261,21 +259,6 @@ export default function Header() {
 							<>
 								<Button
 									component={RouterLink}
-									to="/add-package"
-									variant="contained"
-									color="secondary"
-									size="small"
-									sx={{
-										fontWeight: location.pathname === '/add-package' ? 'bold' : 'normal',
-										textTransform: 'none',
-										lineHeight: 1.2,
-										textAlign: 'center'
-									}}
-								>
-									Add<br />Package
-								</Button>
-								<Button
-									component={RouterLink}
 									to="/admin/review-suggestions"
 									variant="contained"
 									color="secondary"
@@ -288,36 +271,6 @@ export default function Header() {
 									}}
 								>
 									Review<br />Suggestions
-								</Button>
-								<Button // New Bulk Upload Button
-									component={RouterLink}
-									to="/admin/bulk-upload"
-									variant="contained"
-									color="secondary"
-									size="small"
-									sx={{
-										fontWeight: location.pathname === '/admin/bulk-upload' ? 'bold' : 'normal',
-										textTransform: 'none',
-										lineHeight: 1.2,
-										textAlign: 'center'
-									}}
-								>
-									Bulk<br />Upload
-								</Button>
-								<Button
-									component={RouterLink}
-									to="/admin/bulk-operations"
-									variant="contained"
-									color="secondary"
-									size="small"
-									sx={{
-										fontWeight: location.pathname === '/admin/bulk-operations' ? 'bold' : 'normal',
-										textTransform: 'none',
-										lineHeight: 1.2,
-										textAlign: 'center'
-									}}
-								>
-									Bulk<br />Operations
 								</Button>
 							</>
 						)}
@@ -339,29 +292,9 @@ export default function Header() {
 							</Tooltip>
 							{isAdmin && ( // Check for isAdmin
 								<>
-									<Tooltip title="Add Package (Admin)">
-										<IconButton component={RouterLink} to="/add-package" color="secondary" size="small">
-											<AddIcon />
-										</IconButton>
-									</Tooltip>
 									<Tooltip title="Review Suggestions (Admin)">
 										<IconButton component={RouterLink} to="/admin/review-suggestions" color="secondary" size="small">
 											<AdminPanelSettingsIcon />
-										</IconButton>
-									</Tooltip>
-									<Tooltip title="Bulk Upload (Admin)">
-										<IconButton component={RouterLink} to="/admin/bulk-upload" color="secondary" size="small">
-											<UploadFileIcon />
-										</IconButton>
-									</Tooltip>
-									<Tooltip title="Bulk Operations (Admin)">
-										<IconButton
-											component={RouterLink}
-											to="/admin/bulk-operations"
-											color="secondary"
-											size="small"
-										>
-											<EditAttributesIcon />
 										</IconButton>
 									</Tooltip>
 								</>

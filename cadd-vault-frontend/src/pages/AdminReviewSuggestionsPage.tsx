@@ -1,285 +1,137 @@
 // src/pages/AdminReviewSuggestionsPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabase';
-import { useAuth } from '../context/AuthContext';
-import { useFilterStore } from '../store/filterStore';
-import { PackageSuggestion, Package as PackageType } from '../types'; // PackageType for adding to packages table
 import {
-	Box, Typography, CircularProgress, Paper, Alert, Container,
-	Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip,
-	Button, IconButton, Tooltip, Dialog, DialogActions, DialogContent,
-	DialogContentText, DialogTitle, TextField, Tabs, Tab, Snackbar,
-	Checkbox, FormControlLabel, ButtonGroup, Badge
-	// Grid and MuiLink removed as they were unused
+	Container,
+	Typography,
+	Box,
+	CircularProgress,
+	Alert,
+	Snackbar,
+	Button,
+	Table,
+	TableBody,
+	TableCell,
+	TableContainer,
+	TableHead,
+	TableRow,
+	Paper,
+	Chip,
+	Dialog,
+	DialogTitle,
+	DialogContent,
+	DialogActions,
+	TextField,
+	IconButton,
+	Tabs,
+	Tab,
+	Checkbox,
+	FormControlLabel,
+	ButtonGroup,
+	Tooltip,
+	Link,
 } from '@mui/material';
-import ThumbUpIcon from '@mui/icons-material/ThumbUp';
-import ThumbDownIcon from '@mui/icons-material/ThumbDown';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteForeverIcon from '@mui/icons-material/DeleteForever'; // For permanent delete
-import AddToQueueIcon from '@mui/icons-material/AddToQueue'; // For "Add to Database"
-import CodeIcon from '@mui/icons-material/Code'; // For repository
-import ArticleIcon from '@mui/icons-material/Article'; // For publication
-import WebIcon from '@mui/icons-material/Web'; // For webserver
-import LinkIcon from '@mui/icons-material/Link'; // For other links
-import WarningIcon from '@mui/icons-material/Warning'; // For duplicate warnings
-import ErrorIcon from '@mui/icons-material/Error'; // For exact duplicates
+import {
+	CheckCircle as CheckCircleIcon,
+	Cancel as CancelIcon,
+	Delete as DeleteIcon,
+	Edit as EditIcon,
+	ThumbUp as ThumbUpIcon,
+	ThumbDown as ThumbDownIcon,
+	DeleteForever as DeleteForeverIcon,
+	AddToQueue as AddToQueueIcon,
+	RemoveRedEye as RemoveRedEyeIcon,
+	GitHub as GitHubIcon,
+	Language as WebIcon,
+	Article as ArticleIcon,
+} from '@mui/icons-material';
+import { supabase, ensureValidSession } from '../supabase';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { PackageSuggestion } from '../types';
 import EditSuggestionModal from '../components/EditSuggestionModal';
-import { findDuplicates, DuplicateInfo } from '../utils/duplicate-detection';
-import { urlValidators } from '../utils/validation';
 
-const isValidUrl = (urlString: string | undefined | null): boolean => {
-	if (!urlString) return false;
-	return urlValidators.isValidUrl().test(urlString);
-};
+// Define PackageType interface if not in types
+interface PackageType {
+	id: string;
+	package_name: string;
+}
 
-const URLIcon: React.FC<{
-	url: string | undefined | null,
-	type: 'repo' | 'publication' | 'webserver' | 'link',
-	isRequired?: boolean
-}> = ({ url, type, isRequired = false }) => {
-	const getIcon = () => {
-		switch (type) {
-			case 'repo': return <CodeIcon fontSize="small" />;
-			case 'publication': return <ArticleIcon fontSize="small" />;
-			case 'webserver': return <WebIcon fontSize="small" />;
-			case 'link': return <LinkIcon fontSize="small" />;
+// Extended PackageSuggestion interface to include all fields
+interface ExtendedPackageSuggestion extends PackageSuggestion {
+	repo_link?: string | null;
+	webserver?: string | null;
+	publication?: string | null;
+	user_email?: string | null;
+	package_id?: string | null;
+}
+
+// Add the session retry wrapper
+async function withSessionRetry<T>(
+	operation: () => Promise<{ data: T | null; error: any }>,
+	options: { maxRetries?: number; onRetry?: () => void } = {}
+): Promise<{ data: T | null; error: any }> {
+	const { maxRetries = 1, onRetry } = options;
+	let lastError: any = null;
+
+	for (let attempt = 0; attempt <= maxRetries; attempt++) {
+		try {
+			const result = await operation();
+
+			// Check if the error is auth-related
+			if (result.error &&
+				(result.error.message?.includes('JWT') ||
+					result.error.message?.includes('token') ||
+					result.error.code === 'PGRST301' ||
+					result.error.code === '401')) {
+
+				if (attempt < maxRetries) {
+					console.log('Auth error detected, refreshing session...');
+					onRetry?.();
+
+					// Try to refresh the session
+					const { error: refreshError } = await supabase.auth.refreshSession();
+
+					if (refreshError) {
+						console.error('Failed to refresh session:', refreshError);
+						lastError = refreshError;
+						continue;
+					}
+
+					// Wait a bit before retrying
+					await new Promise(resolve => setTimeout(resolve, 100));
+					continue;
+				}
+			}
+
+			return result;
+		} catch (error) {
+			lastError = error;
+			if (attempt < maxRetries) {
+				console.log(`Operation failed, retrying (${attempt + 1}/${maxRetries})...`);
+				await new Promise(resolve => setTimeout(resolve, 100));
+			}
 		}
-	};
+	}
 
-	const getTooltipTitle = () => {
-		if (!url && !isRequired) return `No ${type} URL provided`;
-		if (!url && isRequired) return `${type} URL required but missing`;
-		if (!isValidUrl(url)) return `Invalid ${type} URL: ${url}`;
-		return `${type} URL: ${url}`;
-	};
-
-	const getColor = () => {
-		if (!url && !isRequired) return 'disabled';
-		if (!url && isRequired) return 'error';
-		if (isValidUrl(url)) return 'success';
-		return 'error';
-	};
-
-	return (
-		<Tooltip title={getTooltipTitle()}>
-			<Box component="span" sx={{ color: getColor() === 'success' ? 'success.main' : getColor() === 'error' ? 'error.main' : 'text.disabled' }}>
-				{getIcon()}
-			</Box>
-		</Tooltip>
-	);
-};
-
-const PackageTooltipContent: React.FC<{ suggestion: PackageSuggestion }> = ({ suggestion }) => {
-	return (
-		<Box sx={{ maxWidth: 500 }}>
-			<Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'primary.main' }}>
-				{suggestion.package_name}
-			</Typography>
-
-			{suggestion.description && (
-				<Typography variant="body2" sx={{ mb: 1 }}>
-					<strong>Description:</strong> {suggestion.description}
-				</Typography>
-			)}
-
-			{suggestion.suggestion_reason && (
-				<Typography variant="body2" sx={{ mb: 1 }}>
-					<strong>Suggestion Reason:</strong> {suggestion.suggestion_reason}
-				</Typography>
-			)}
-
-			{suggestion.tags && suggestion.tags.length > 0 && (
-				<Typography variant="body2" sx={{ mb: 1 }}>
-					<strong>Tags:</strong> {suggestion.tags.join(', ')}
-				</Typography>
-			)}
-
-			{suggestion.license && (
-				<Typography variant="body2" sx={{ mb: 1 }}>
-					<strong>License:</strong> {suggestion.license}
-				</Typography>
-			)}
-
-			{suggestion.folder1 && (
-				<Typography variant="body2" sx={{ mb: 1 }}>
-					<strong>Folder:</strong> {suggestion.folder1}
-				</Typography>
-			)}
-
-			{suggestion.category1 && (
-				<Typography variant="body2" sx={{ mb: 1 }}>
-					<strong>Category:</strong> {suggestion.category1}
-				</Typography>
-			)}
-
-			<Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
-				URLs:
-			</Typography>
-			<Box sx={{ pl: 1, mb: 1 }}>
-				{suggestion.repo_url ? (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-						<CodeIcon fontSize="small" color="success" />
-						Repository:
-						<Box component="a" href={suggestion.repo_url} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
-							URL
-						</Box>
-					</Typography>
-				) : (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-						<CodeIcon fontSize="small" sx={{ mr: 0.5 }} />
-						Repository: Not provided
-					</Typography>
-				)}
-
-				{suggestion.publication_url ? (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-						<ArticleIcon fontSize="small" color="success" />
-						Publication:
-						<Box component="a" href={suggestion.publication_url} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
-							URL
-						</Box>
-					</Typography>
-				) : (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-						<ArticleIcon fontSize="small" sx={{ mr: 0.5 }} />
-						Publication: Not provided
-					</Typography>
-				)}
-
-				{suggestion.webserver_url ? (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-						<WebIcon fontSize="small" color="success" />
-						Webserver:
-						<Box component="a" href={suggestion.webserver_url} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
-							URL
-						</Box>
-					</Typography>
-				) : (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-						<WebIcon fontSize="small" sx={{ mr: 0.5 }} />
-						Webserver: Not provided
-					</Typography>
-				)}
-
-				{suggestion.link_url ? (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-						<LinkIcon fontSize="small" color="success" />
-						Other Link:
-						<Box component="a" href={suggestion.link_url} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
-							URL
-						</Box>
-					</Typography>
-				) : (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-						<LinkIcon fontSize="small" sx={{ mr: 0.5 }} />
-						Other Link: Not provided
-					</Typography>
-				)}
-			</Box>
-
-			<Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
-				Submission Details:
-			</Typography>
-			<Box sx={{ pl: 1, mb: 1 }}>
-				<Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
-					<strong>Submitted by:</strong> {suggestion.suggester_email || 'Anonymous'}
-				</Typography>
-				<Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
-					<strong>Date:</strong> {new Date(suggestion.created_at).toLocaleDateString()} at {new Date(suggestion.created_at).toLocaleTimeString()}
-				</Typography>
-				<Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
-					<strong>Status:</strong> {suggestion.status}
-				</Typography>
-				{suggestion.reviewed_at && (
-					<Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
-						<strong>Reviewed:</strong> {new Date(suggestion.reviewed_at).toLocaleDateString()} at {new Date(suggestion.reviewed_at).toLocaleTimeString()}
-					</Typography>
-				)}
-			</Box>
-
-			{suggestion.admin_notes && (
-				<Box sx={{ mt: 1, p: 1, backgroundColor: 'action.hover', borderRadius: 1 }}>
-					<Typography variant="body2" sx={{ fontSize: '0.75rem', fontStyle: 'italic' }}>
-						<strong>Admin Notes:</strong> {suggestion.admin_notes}
-					</Typography>
-				</Box>
-			)}
-		</Box>
-	);
-};
-
-// Using imported duplicate detection utilities
-
-const DuplicateWarningComponent: React.FC<{ duplicates: DuplicateInfo[] }> = ({ duplicates }) => {
-	if (duplicates.length === 0) return null;
-
-	const exactDuplicates = duplicates.filter(d => d.type === 'exact_duplicate');
-	const similarItems = duplicates.filter(d => d.type !== 'exact_duplicate');
-
-	return (
-		<Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-			{exactDuplicates.length > 0 && (
-				<Tooltip
-					title={
-						<Box>
-							<Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-								Exact Duplicates Found:
-							</Typography>
-							{exactDuplicates.map((dup, idx) => (
-								<Typography key={idx} variant="body2" sx={{ fontSize: '0.75rem' }}>
-									• "{dup.conflictingItem}" in {dup.source}
-								</Typography>
-							))}
-						</Box>
-					}
-				>
-					<Badge color="error" variant="dot">
-						<ErrorIcon color="error" fontSize="small" />
-					</Badge>
-				</Tooltip>
-			)}
-			{similarItems.length > 0 && exactDuplicates.length === 0 && (
-				<Tooltip
-					title={
-						<Box>
-							<Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-								Similar Items Found:
-							</Typography>
-							{similarItems.map((dup, idx) => (
-								<Typography key={idx} variant="body2" sx={{ fontSize: '0.75rem' }}>
-									• "{dup.conflictingItem}" in {dup.source}
-								</Typography>
-							))}
-						</Box>
-					}
-				>
-					<Badge color="warning" variant="dot">
-						<WarningIcon color="warning" fontSize="small" />
-					</Badge>
-				</Tooltip>
-			)}
-		</Box>
-	);
-};
-
+	return { data: null, error: lastError };
+}
 
 const AdminReviewSuggestionsPage: React.FC = () => {
 	const navigate = useNavigate();
 	const { isAdmin, loading: authLoading, currentUser } = useAuth();
-	const [suggestions, setSuggestions] = useState<PackageSuggestion[]>([]);
+	const [suggestions, setSuggestions] = useState<ExtendedPackageSuggestion[]>([]);
 	const [existingPackages, setExistingPackages] = useState<PackageType[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
-	const [actionLoading, setActionLoading] = useState<string | null>(null); // For specific row actions
+	const [actionLoading, setActionLoading] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
+	const [sessionError, setSessionError] = useState<boolean>(false);
 
-
-	const [selectedSuggestionForReject, setSelectedSuggestionForReject] = useState<PackageSuggestion | null>(null);
+	const [selectedSuggestionForReject, setSelectedSuggestionForReject] = useState<ExtendedPackageSuggestion | null>(null);
 	const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
 	const [adminNotesForReject, setAdminNotesForReject] = useState('');
 
-	const [editingSuggestion, setEditingSuggestion] = useState<PackageSuggestion | null>(null);
+	const [editingSuggestion, setEditingSuggestion] = useState<ExtendedPackageSuggestion | null>(null);
 	const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
 	const [filterStatus, setFilterStatus] = useState<'pending' | 'approved' | 'rejected' | 'added'>('pending');
@@ -289,83 +141,118 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 	const [isSelectAll, setIsSelectAll] = useState(false);
 	const [batchActionLoading, setBatchActionLoading] = useState(false);
 
+	// Hover popup state
+	const [hoveredSuggestion, setHoveredSuggestion] = useState<string | null>(null);
+
+	// Add visibility change listener to refresh session
+	useEffect(() => {
+		const handleVisibilityChange = async () => {
+			if (!document.hidden && currentUser) {
+				console.log('Tab regained focus, checking session...');
+				try {
+					await ensureValidSession();
+					// If we had a session error, clear it and refresh data
+					if (sessionError) {
+						setSessionError(false);
+						setError(null);
+						fetchSuggestions(filterStatus);
+					}
+				} catch (err) {
+					console.error('Session refresh failed:', err);
+					setSessionError(true);
+					setError('Your session has expired. Please refresh the page to continue.');
+				}
+			}
+		};
+
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+		window.addEventListener('focus', handleVisibilityChange);
+
+		return () => {
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
+			window.removeEventListener('focus', handleVisibilityChange);
+		};
+	}, [currentUser, filterStatus, sessionError]);
+
 	const fetchSuggestions = useCallback(async (status: typeof filterStatus) => {
 		setLoading(true);
 		setError(null);
 		try {
-			// Fetch suggestions
-			const { data, error: rpcError } = await supabase
-				.rpc('get_suggestions_with_user_email', { filter_status: status });
+			// Ensure valid session before fetching
+			await ensureValidSession();
+
+			// Fetch suggestions with retry
+			const { data, error: rpcError } = await withSessionRetry(
+				async () => await supabase.rpc('get_suggestions_with_user_email', { filter_status: status }),
+				{ onRetry: () => setError('Refreshing session...') }
+			);
 
 			if (rpcError) {
 				console.error("Supabase RPC fetch error:", rpcError);
 				if (rpcError.code === '42804' && rpcError.details?.includes('character varying(255)')) {
-					setError(`Database function error: Email column type mismatch. Ensure 'u.email::text' is used. Original: ${rpcError.message}`);
+					setError(`Database function error: Email column type mismatch. Ensure 'u.email::text' is used.`);
 				} else {
-					setError(`Failed to load suggestions: ${rpcError.message}`);
+					setError(`Failed to fetch suggestions: ${rpcError.message}`);
 				}
 				setSuggestions([]);
-				return;
+			} else {
+				setSuggestions(data || []);
 			}
-			setSuggestions(data as PackageSuggestion[] || []);
 
 			// Fetch existing packages for duplicate detection
-			const { data: packagesData, error: packagesError } = await supabase
-				.from('packages')
-				.select('id, package_name');
+			const { data: existingData, error: existingError } = await withSessionRetry(
+				async () => await supabase.from('packages').select('id, package_name')
+			);
 
-			if (packagesError) {
-				console.error("Error fetching packages for duplicate detection:", packagesError);
-				// Don't fail completely, just log the error and continue without duplicate detection
-				setExistingPackages([]);
+			if (existingError) {
+				console.error("Error fetching existing packages:", existingError);
 			} else {
-				setExistingPackages(packagesData as PackageType[] || []);
+				setExistingPackages(existingData || []);
 			}
 		} catch (err: any) {
-			console.error("Error fetching suggestions:", err.message);
-			setError(`Failed to load suggestions: ${err.message}`);
+			console.error("Error in fetchSuggestions:", err);
+			setError(`An unexpected error occurred: ${err.message}`);
 			setSuggestions([]);
-			setExistingPackages([]);
 		} finally {
 			setLoading(false);
 		}
 	}, []);
 
 	useEffect(() => {
-		if (!authLoading && !isAdmin) {
-			navigate('/');
-		} else if (isAdmin) {
-			// Refresh metadata when admin accesses the page to ensure fresh folder/category data
-			const refreshAndFetch = async () => {
-				try {
-					await useFilterStore.getState().refreshMetadata();
-				} catch (error) {
-					console.warn('Failed to refresh metadata on AdminReviewSuggestionsPage:', error);
-					// Don't block the page loading if metadata refresh fails
-				}
-				await fetchSuggestions(filterStatus);
-			};
-			refreshAndFetch();
+		if (!authLoading && isAdmin) {
+			fetchSuggestions(filterStatus);
 		}
-	}, [isAdmin, authLoading, navigate, fetchSuggestions, filterStatus]);
+	}, [authLoading, isAdmin, filterStatus, fetchSuggestions]);
 
 	const handleApproveSuggestion = async (suggestionId: string) => {
 		if (!currentUser) return;
+
 		setActionLoading(suggestionId);
+		setError(null);
+
 		try {
-			const { error: updateError } = await supabase
-				.from('package_suggestions')
-				.update({
-					status: 'approved',
-					reviewed_at: new Date().toISOString(),
-					reviewed_by_admin_id: currentUser.id
-				})
-				.eq('id', suggestionId);
+			await ensureValidSession();
+
+			const { error: updateError } = await withSessionRetry(
+				async () => await supabase
+					.from('package_suggestions')
+					.update({
+						status: 'approved',
+						reviewed_at: new Date().toISOString(),
+						reviewed_by_admin_id: currentUser.id
+					})
+					.eq('id', suggestionId),
+				{
+					onRetry: () => setError('Session expired, refreshing...')
+				}
+			);
+
 			if (updateError) throw updateError;
-			setSuccessMessage("Suggestion approved!");
+
+			setSuccessMessage("Suggestion approved successfully.");
 			fetchSuggestions(filterStatus);
 		} catch (err: any) {
-			setError(`Failed to approve suggestion: ${err.message}`);
+			handleDatabaseError(err, 'Failed to approve suggestion');
 		} finally {
 			setActionLoading(null);
 		}
@@ -373,51 +260,61 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 
 	const handleUpdateSuggestionStatus = async (suggestionId: string, newStatus: 'rejected' | 'added', notes?: string) => {
 		if (!currentUser) return;
+
 		setActionLoading(suggestionId);
+
 		try {
-			const { error: updateError } = await supabase
-				.from('package_suggestions')
-				.update({
-					status: newStatus,
-					admin_notes: notes,
-					reviewed_at: new Date().toISOString(),
-					reviewed_by_admin_id: currentUser.id
-				})
-				.eq('id', suggestionId);
+			await ensureValidSession();
+
+			const { error: updateError } = await withSessionRetry(
+				async () => await supabase
+					.from('package_suggestions')
+					.update({
+						status: newStatus,
+						admin_notes: notes,
+						reviewed_at: new Date().toISOString(),
+						reviewed_by_admin_id: currentUser.id
+					})
+					.eq('id', suggestionId)
+			);
 
 			if (updateError) throw updateError;
+
 			setSuccessMessage(`Suggestion status updated to ${newStatus}.`);
 			fetchSuggestions(filterStatus);
 			setIsRejectModalOpen(false);
 			setSelectedSuggestionForReject(null);
 			setAdminNotesForReject('');
 		} catch (err: any) {
-			setError(`Failed to update suggestion status: ${err.message}`);
+			handleDatabaseError(err, 'Failed to update suggestion status');
 		} finally {
 			setActionLoading(null);
 		}
 	};
 
-	const handleAddPackageDirectly = async (suggestion: PackageSuggestion) => {
+	const handleAddPackageDirectly = async (suggestion: ExtendedPackageSuggestion) => {
 		if (!currentUser) return;
+
 		setActionLoading(suggestion.id);
 		setError(null);
 		setSuccessMessage(null);
 
 		try {
-			// Use the database function that handles normalization
-			const { error } = await supabase
-				.rpc('approve_suggestion_with_normalized_data', {
+			await ensureValidSession();
+
+			const { error } = await withSessionRetry(
+				async () => await supabase.rpc('approve_suggestion_with_normalized_data', {
 					suggestion_id: suggestion.id,
 					approved_by: currentUser.id
-				});
+				})
+			);
 
 			if (error) throw error;
 
 			setSuccessMessage("Package added successfully and suggestion marked as added.");
 			fetchSuggestions(filterStatus);
 		} catch (err: any) {
-			setError(`Failed to add package: ${err.message}`);
+			handleDatabaseError(err, 'Failed to add package');
 		} finally {
 			setActionLoading(null);
 		}
@@ -425,46 +322,217 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 
 	const handleDeleteSuggestion = async (suggestionId: string, packageName: string) => {
 		if (!window.confirm(`Are you sure you want to permanently delete the suggestion for "${packageName}"? This action cannot be undone.`)) return;
+
 		setActionLoading(suggestionId);
 		setError(null);
 		setSuccessMessage(null);
+
 		try {
-			const { error: deleteError } = await supabase
-				.from('package_suggestions')
-				.delete()
-				.eq('id', suggestionId);
+			await ensureValidSession();
+
+			const { error: deleteError } = await withSessionRetry(
+				async () => await supabase
+					.from('package_suggestions')
+					.delete()
+					.eq('id', suggestionId)
+			);
 
 			if (deleteError) throw deleteError;
+
 			setSuccessMessage(`Suggestion "${packageName}" deleted successfully.`);
 			fetchSuggestions(filterStatus);
 		} catch (err: any) {
-			setError(`Failed to delete suggestion: ${err.message}`);
+			handleDatabaseError(err, 'Failed to delete suggestion');
 		} finally {
 			setActionLoading(null);
 		}
 	};
 
+	// Batch operations handlers
+	const handleBatchApprove = async () => {
+		if (selectedSuggestions.size === 0) return;
+		if (!window.confirm(`Are you sure you want to approve ${selectedSuggestions.size} selected suggestion(s)?`)) return;
 
-	const handleOpenEditModal = (suggestion: PackageSuggestion) => {
-		setEditingSuggestion(suggestion);
-		setIsEditModalOpen(true);
-	};
-	const handleCloseEditModal = () => {
-		setEditingSuggestion(null);
-		setIsEditModalOpen(false);
-	};
-	const handleEditSaveSuccess = () => {
-		fetchSuggestions(filterStatus);
-		setIsEditModalOpen(false);
-		setEditingSuggestion(null);
-		setSuccessMessage("Suggestion updated successfully.");
+		setBatchActionLoading(true);
+		setError(null);
+
+		try {
+			await ensureValidSession();
+
+			const { error: updateError } = await withSessionRetry(
+				async () => await supabase
+					.from('package_suggestions')
+					.update({
+						status: 'approved',
+						reviewed_at: new Date().toISOString(),
+						reviewed_by_admin_id: currentUser?.id
+					})
+					.in('id', Array.from(selectedSuggestions))
+			);
+
+			if (updateError) throw updateError;
+
+			setSuccessMessage(`${selectedSuggestions.size} suggestion(s) approved successfully!`);
+			setSelectedSuggestions(new Set());
+			setIsSelectAll(false);
+			fetchSuggestions(filterStatus);
+		} catch (err: any) {
+			handleDatabaseError(err, 'Failed to approve suggestions');
+		} finally {
+			setBatchActionLoading(false);
+		}
 	};
 
-	const openRejectModal = (suggestion: PackageSuggestion) => {
+	const handleBatchReject = async () => {
+		if (selectedSuggestions.size === 0) return;
+		if (!window.confirm(`Are you sure you want to reject ${selectedSuggestions.size} selected suggestion(s)?`)) return;
+
+		setBatchActionLoading(true);
+		setError(null);
+
+		try {
+			await ensureValidSession();
+
+			const { error: updateError } = await withSessionRetry(
+				async () => await supabase
+					.from('package_suggestions')
+					.update({
+						status: 'rejected',
+						reviewed_at: new Date().toISOString(),
+						reviewed_by_admin_id: currentUser?.id
+					})
+					.in('id', Array.from(selectedSuggestions))
+			);
+
+			if (updateError) throw updateError;
+
+			setSuccessMessage(`${selectedSuggestions.size} suggestion(s) rejected successfully!`);
+			setSelectedSuggestions(new Set());
+			setIsSelectAll(false);
+			fetchSuggestions(filterStatus);
+		} catch (err: any) {
+			handleDatabaseError(err, 'Failed to reject suggestions');
+		} finally {
+			setBatchActionLoading(false);
+		}
+	};
+
+	const handleBatchDelete = async () => {
+		if (selectedSuggestions.size === 0) return;
+		if (!window.confirm(`Are you sure you want to permanently delete ${selectedSuggestions.size} selected suggestion(s)? This action cannot be undone.`)) return;
+
+		setBatchActionLoading(true);
+		setError(null);
+
+		try {
+			await ensureValidSession();
+
+			const { error: deleteError } = await withSessionRetry(
+				async () => await supabase
+					.from('package_suggestions')
+					.delete()
+					.in('id', Array.from(selectedSuggestions))
+			);
+
+			if (deleteError) throw deleteError;
+
+			setSuccessMessage(`${selectedSuggestions.size} suggestion(s) deleted successfully!`);
+			setSelectedSuggestions(new Set());
+			setIsSelectAll(false);
+			fetchSuggestions(filterStatus);
+		} catch (err: any) {
+			handleDatabaseError(err, 'Failed to delete suggestions');
+		} finally {
+			setBatchActionLoading(false);
+		}
+	};
+
+	const handleBatchAddToDatabase = async () => {
+		if (selectedSuggestions.size === 0) return;
+		if (!window.confirm(`Are you sure you want to add ${selectedSuggestions.size} selected approved suggestion(s) to the database?`)) return;
+
+		setBatchActionLoading(true);
+		setError(null);
+		setSuccessMessage(null);
+
+		try {
+			await ensureValidSession();
+
+			// Get the selected suggestions
+			const selectedSuggestionsList = suggestions.filter(s => selectedSuggestions.has(s.id));
+
+			let successCount = 0;
+			let errorCount = 0;
+			const errors: string[] = [];
+
+			// Process each suggestion individually using the RPC function
+			for (const suggestion of selectedSuggestionsList) {
+				try {
+					const { error } = await withSessionRetry(
+						async () => await supabase.rpc('approve_suggestion_with_normalized_data', {
+							suggestion_id: suggestion.id,
+							approved_by: currentUser?.id
+						})
+					);
+
+					if (error) {
+						console.error(`Error processing suggestion ${suggestion.package_name}:`, error);
+						errors.push(`Failed to add "${suggestion.package_name}": ${error.message}`);
+						errorCount++;
+					} else {
+						successCount++;
+					}
+				} catch (err: any) {
+					console.error(`Error processing suggestion ${suggestion.package_name}:`, err);
+					errors.push(`Failed to process "${suggestion.package_name}": ${err.message}`);
+					errorCount++;
+				}
+			}
+
+			// Set appropriate success/error messages
+			if (successCount > 0 && errorCount === 0) {
+				setSuccessMessage(`Successfully added ${successCount} package(s) to database and marked suggestions as 'Added'.`);
+			} else if (successCount > 0 && errorCount > 0) {
+				setSuccessMessage(`Added ${successCount} package(s) successfully. ${errorCount} failed.`);
+				setError(`Some operations failed: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`);
+			} else {
+				setError(`All operations failed: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`);
+			}
+
+			setSelectedSuggestions(new Set());
+			setIsSelectAll(false);
+			fetchSuggestions(filterStatus);
+		} catch (err: any) {
+			handleDatabaseError(err, 'Failed to batch add packages');
+		} finally {
+			setBatchActionLoading(false);
+		}
+	};
+
+	// Helper function to handle database errors
+	const handleDatabaseError = (err: any, defaultMessage: string) => {
+		console.error(defaultMessage, err);
+
+		if (err.message?.includes('session') || err.message?.includes('JWT') || err.code === 'PGRST301') {
+			setSessionError(true);
+			setError('Your session has expired. Please refresh the page and try again.');
+			// Optionally trigger a reload after a delay
+			setTimeout(() => {
+				if (window.confirm('Your session has expired. Would you like to refresh the page?')) {
+					window.location.reload();
+				}
+			}, 2000);
+		} else {
+			setError(`${defaultMessage}: ${err.message}`);
+		}
+	};
+
+	const openRejectModal = (suggestion: ExtendedPackageSuggestion) => {
 		setSelectedSuggestionForReject(suggestion);
 		setAdminNotesForReject(suggestion.admin_notes || '');
 		setIsRejectModalOpen(true);
 	};
+
 	const handleCloseRejectModal = () => {
 		setSelectedSuggestionForReject(null);
 		setIsRejectModalOpen(false);
@@ -501,155 +569,24 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 		setIsSelectAll(newSelected.size === suggestions.length);
 	};
 
-	const handleBatchApprove = async () => {
-		if (selectedSuggestions.size === 0) return;
-		if (!window.confirm(`Are you sure you want to approve ${selectedSuggestions.size} selected suggestion(s)?`)) return;
-
-		setBatchActionLoading(true);
-		setError(null);
-
-		try {
-			const { error: updateError } = await supabase
-				.from('package_suggestions')
-				.update({
-					status: 'approved',
-					reviewed_at: new Date().toISOString(),
-					reviewed_by_admin_id: currentUser?.id
-				})
-				.in('id', Array.from(selectedSuggestions));
-
-			if (updateError) throw updateError;
-
-			setSuccessMessage(`${selectedSuggestions.size} suggestion(s) approved successfully!`);
-			setSelectedSuggestions(new Set());
-			setIsSelectAll(false);
-			fetchSuggestions(filterStatus);
-		} catch (err: any) {
-			setError(`Failed to approve suggestions: ${err.message}`);
-		} finally {
-			setBatchActionLoading(false);
-		}
+	const handleOpenEditModal = (suggestion: ExtendedPackageSuggestion) => {
+		setEditingSuggestion(suggestion);
+		setIsEditModalOpen(true);
 	};
 
-	const handleBatchReject = async () => {
-		if (selectedSuggestions.size === 0) return;
-		const adminNotes = window.prompt(`Please provide a reason for rejecting ${selectedSuggestions.size} selected suggestion(s):`);
-		if (!adminNotes) return;
-
-		setBatchActionLoading(true);
-		setError(null);
-
-		try {
-			const { error: updateError } = await supabase
-				.from('package_suggestions')
-				.update({
-					status: 'rejected',
-					admin_notes: adminNotes,
-					reviewed_at: new Date().toISOString(),
-					reviewed_by_admin_id: currentUser?.id
-				})
-				.in('id', Array.from(selectedSuggestions));
-
-			if (updateError) throw updateError;
-
-			setSuccessMessage(`${selectedSuggestions.size} suggestion(s) rejected successfully!`);
-			setSelectedSuggestions(new Set());
-			setIsSelectAll(false);
-			fetchSuggestions(filterStatus);
-		} catch (err: any) {
-			setError(`Failed to reject suggestions: ${err.message}`);
-		} finally {
-			setBatchActionLoading(false);
-		}
+	const handleCloseEditModal = () => {
+		setEditingSuggestion(null);
+		setIsEditModalOpen(false);
 	};
 
-	const handleBatchDelete = async () => {
-		if (selectedSuggestions.size === 0) return;
-		if (!window.confirm(`Are you sure you want to permanently delete ${selectedSuggestions.size} selected suggestion(s)? This action cannot be undone.`)) return;
-
-		setBatchActionLoading(true);
-		setError(null);
-
-		try {
-			const { error: deleteError } = await supabase
-				.from('package_suggestions')
-				.delete()
-				.in('id', Array.from(selectedSuggestions));
-
-			if (deleteError) throw deleteError;
-
-			setSuccessMessage(`${selectedSuggestions.size} suggestion(s) deleted successfully!`);
-			setSelectedSuggestions(new Set());
-			setIsSelectAll(false);
-			fetchSuggestions(filterStatus);
-		} catch (err: any) {
-			setError(`Failed to delete suggestions: ${err.message}`);
-		} finally {
-			setBatchActionLoading(false);
-		}
+	const handleEditSaveSuccess = () => {
+		fetchSuggestions(filterStatus);
+		setIsEditModalOpen(false);
+		setEditingSuggestion(null);
+		setSuccessMessage("Suggestion updated successfully.");
 	};
 
-	const handleBatchAddToDatabase = async () => {
-		if (selectedSuggestions.size === 0) return;
-		if (!window.confirm(`Are you sure you want to add ${selectedSuggestions.size} selected approved suggestion(s) to the database?`)) return;
-
-		setBatchActionLoading(true);
-		setError(null);
-		setSuccessMessage(null);
-
-		try {
-			// Get the selected suggestions
-			const selectedSuggestionsList = suggestions.filter(s => selectedSuggestions.has(s.id));
-
-			let successCount = 0;
-			let errorCount = 0;
-			const errors: string[] = [];
-
-			// Process each suggestion individually using the RPC function
-			for (const suggestion of selectedSuggestionsList) {
-				try {
-					// Use the database function that handles normalization
-					const { error } = await supabase
-						.rpc('approve_suggestion_with_normalized_data', {
-							suggestion_id: suggestion.id,
-							approved_by: currentUser?.id
-						});
-
-					if (error) {
-						console.error(`Error processing suggestion ${suggestion.package_name}:`, error);
-						errors.push(`Failed to add "${suggestion.package_name}": ${error.message}`);
-						errorCount++;
-					} else {
-						successCount++;
-					}
-				} catch (err: any) {
-					console.error(`Error processing suggestion ${suggestion.package_name}:`, err);
-					errors.push(`Failed to process "${suggestion.package_name}": ${err.message}`);
-					errorCount++;
-				}
-			}
-
-			// Set appropriate success/error messages
-			if (successCount > 0 && errorCount === 0) {
-				setSuccessMessage(`Successfully added ${successCount} package(s) to database and marked suggestions as 'Added'.`);
-			} else if (successCount > 0 && errorCount > 0) {
-				setSuccessMessage(`Added ${successCount} package(s) successfully. ${errorCount} failed.`);
-				setError(`Some operations failed: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`);
-			} else {
-				setError(`All operations failed: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`);
-			}
-
-			setSelectedSuggestions(new Set());
-			setIsSelectAll(false);
-			fetchSuggestions(filterStatus);
-		} catch (err: any) {
-			setError(`Failed to batch add packages: ${err.message}`);
-		} finally {
-			setBatchActionLoading(false);
-		}
-	};
-
-	const getStatusChipColor = (status: PackageSuggestion['status']) => {
+	const getStatusChipColor = (status: ExtendedPackageSuggestion['status']) => {
 		switch (status) {
 			case 'pending': return 'warning';
 			case 'approved': return 'success';
@@ -659,9 +596,53 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 		}
 	};
 
+	// Check for duplicate package names
+	const isDuplicate = (packageName: string) => {
+		return existingPackages.some(pkg =>
+			pkg.package_name.toLowerCase() === packageName.toLowerCase()
+		);
+	};
+
+	// Render tooltip content for suggestions
+	const renderSuggestionTooltip = (suggestion: ExtendedPackageSuggestion) => (
+		<Box sx={{ p: 1 }}>
+			<Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+				{suggestion.package_name}
+			</Typography>
+			{suggestion.description && (
+				<Typography variant="body2" sx={{ mb: 1 }}>
+					{suggestion.description}
+				</Typography>
+			)}
+			<Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+				{suggestion.license && (
+					<Typography variant="caption">
+						License: {suggestion.license}
+					</Typography>
+				)}
+				{suggestion.tags && suggestion.tags.length > 0 && (
+					<Typography variant="caption">
+						Tags: {suggestion.tags.join(', ')}
+					</Typography>
+				)}
+				{suggestion.folder1 && (
+					<Typography variant="caption">
+						Folder: {suggestion.folder1} {suggestion.category1 && `> ${suggestion.category1}`}
+					</Typography>
+				)}
+			</Box>
+			{suggestion.admin_notes && (
+				<Typography variant="caption" sx={{ mt: 1, fontStyle: 'italic' }}>
+					Admin notes: {suggestion.admin_notes}
+				</Typography>
+			)}
+		</Box>
+	);
+
 	if (authLoading) {
 		return <Box display="flex" justifyContent="center" alignItems="center" height="50vh"><CircularProgress /></Box>;
 	}
+
 	if (!isAdmin) {
 		return <Container maxWidth="md" sx={{ mt: 4 }}><Alert severity="error">Access Denied. Admins only.</Alert></Container>;
 	}
@@ -682,6 +663,19 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 				message={successMessage}
 			/>
 
+			{sessionError && (
+				<Alert severity="error" sx={{ mb: 2 }}>
+					Your session has expired. Please refresh the page to continue working.
+					<Button
+						size="small"
+						onClick={() => window.location.reload()}
+						sx={{ ml: 2 }}
+					>
+						Refresh Now
+					</Button>
+				</Alert>
+			)}
+
 			<Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
 				<Tabs value={filterStatus} onChange={handleTabChange} aria-label="suggestion status filter">
 					<Tab label="Pending" value="pending" />
@@ -692,7 +686,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 			</Box>
 
 			{loading && <Box display="flex" justifyContent="center" py={3}><CircularProgress /></Box>}
-			{error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+			{error && !sessionError && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
 			{!loading && !error && suggestions.length === 0 && (
 				<Typography sx={{ mt: 2 }}>No {filterStatus} suggestions found.</Typography>
@@ -708,14 +702,14 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 									checked={isSelectAll}
 									indeterminate={selectedSuggestions.size > 0 && selectedSuggestions.size < suggestions.length}
 									onChange={handleSelectAll}
-									disabled={batchActionLoading}
+									disabled={batchActionLoading || sessionError}
 								/>
 							}
 							label={`Select All (${selectedSuggestions.size}/${suggestions.length})`}
 						/>
 
 						{selectedSuggestions.size > 0 && (
-							<ButtonGroup variant="outlined" disabled={batchActionLoading}>
+							<ButtonGroup variant="outlined" disabled={batchActionLoading || sessionError}>
 								{filterStatus === 'pending' && (
 									<>
 										<Button
@@ -762,204 +756,297 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 
 					<TableContainer component={Paper} elevation={2}>
 						<Table sx={{ minWidth: 800 }} aria-label="review suggestions table">
-						<TableHead>
-							<TableRow>
+							<TableHead>
+								<TableRow>
 									<TableCell padding="checkbox">
 										<Checkbox
 											checked={isSelectAll}
 											indeterminate={selectedSuggestions.size > 0 && selectedSuggestions.size < suggestions.length}
 											onChange={handleSelectAll}
-											disabled={batchActionLoading}
+											disabled={batchActionLoading || sessionError}
 										/>
 									</TableCell>
-								<TableCell>Package Name</TableCell>
-									<TableCell align="center" sx={{ width: '60px' }}>
-										<Tooltip title="Duplicate/Similar Warnings">
-											<WarningIcon fontSize="small" />
-										</Tooltip>
-									</TableCell>
-								<TableCell>Suggested By</TableCell>
-								<TableCell>Submitted</TableCell>
-								<TableCell>Status</TableCell>
-									<TableCell align="center" sx={{ width: '50px' }}>
-										<Tooltip title="Repository URL">
-											<CodeIcon fontSize="small" />
-										</Tooltip>
-									</TableCell>
-									<TableCell align="center" sx={{ width: '50px' }}>
-										<Tooltip title="Publication URL">
-											<ArticleIcon fontSize="small" />
-										</Tooltip>
-									</TableCell>
-									<TableCell align="center" sx={{ width: '50px' }}>
-										<Tooltip title="Webserver URL">
-											<WebIcon fontSize="small" />
-										</Tooltip>
-									</TableCell>
-									<TableCell align="center" sx={{ width: '50px' }}>
-										<Tooltip title="Other Link URL">
-											<LinkIcon fontSize="small" />
-										</Tooltip>
-									</TableCell>
-								<TableCell align="right" sx={{ minWidth: '180px' }}>Actions</TableCell>
-							</TableRow>
-						</TableHead>
-						<TableBody>
-								{suggestions.map((suggestion) => {
-									const duplicates = findDuplicates(suggestion, suggestions, existingPackages);
-									return (
-										<TableRow key={suggestion.id} hover sx={{ opacity: actionLoading === suggestion.id ? 0.5 : 1 }}>
-											<TableCell padding="checkbox">
-												<Checkbox
-													checked={selectedSuggestions.has(suggestion.id)}
-													onChange={() => handleSelectSuggestion(suggestion.id)}
-													disabled={batchActionLoading || actionLoading === suggestion.id}
-												/>
-											</TableCell>
-											<TableCell component="th" scope="row">
-												<Tooltip
-													title={<PackageTooltipContent suggestion={suggestion} />}
+									<TableCell>Package Name</TableCell>
+									<TableCell>Description</TableCell>
+									<TableCell>Links</TableCell>
+									<TableCell>Suggested By</TableCell>
+									<TableCell>Status</TableCell>
+									<TableCell align="center">Actions</TableCell>
+								</TableRow>
+							</TableHead>
+							<TableBody>
+								{suggestions.map((suggestion) => (
+									<TableRow
+										key={suggestion.id}
+										onMouseEnter={() => setHoveredSuggestion(suggestion.id)}
+										onMouseLeave={() => setHoveredSuggestion(null)}
+									>
+										<TableCell padding="checkbox">
+											<Checkbox
+												checked={selectedSuggestions.has(suggestion.id)}
+												onChange={() => handleSelectSuggestion(suggestion.id)}
+												disabled={batchActionLoading || sessionError}
+											/>
+										</TableCell>
+										<TableCell>
+											<Box>
+												<Tooltip 
+													title={renderSuggestionTooltip(suggestion)}
+													open={hoveredSuggestion === suggestion.id}
 													placement="right"
-													componentsProps={{
-														tooltip: {
-															sx: {
-																bgcolor: 'background.paper',
-																color: 'text.primary',
-																border: '1px solid',
-																borderColor: 'divider',
-																boxShadow: 3,
-																'& .MuiTooltip-arrow': {
-																	color: 'background.paper',
-																	'&::before': {
-																		border: '1px solid',
-																		borderColor: 'divider',
-																	},
-																},
-															},
-														},
-													}}
 													arrow
 												>
-													<Typography
-														sx={{
+													<Link
+														component="button"
+														variant="body1"
+														onClick={() => handleOpenEditModal(suggestion)}
+														sx={{ 
+															fontWeight: 'bold',
+															textAlign: 'left',
 															cursor: 'pointer',
-															fontWeight: 500,
-															color: 'primary.main',
 															'&:hover': {
 																textDecoration: 'underline'
 															}
 														}}
-														onClick={() => handleOpenEditModal(suggestion)}
 													>
 														{suggestion.package_name}
+													</Link>
+												</Tooltip>
+												{isDuplicate(suggestion.package_name) && (
+													<Chip
+														label="Duplicate"
+														color="error"
+														size="small"
+														sx={{ mt: 0.5, ml: 1 }}
+													/>
+												)}
+												{suggestion.license && (
+													<Typography variant="caption" color="text.secondary" display="block">
+														License: {suggestion.license}
 													</Typography>
-												</Tooltip>
-											</TableCell>
-										<TableCell align="center">
-											<DuplicateWarningComponent duplicates={duplicates} />
+												)}
+											</Box>
 										</TableCell>
-										<TableCell>{suggestion.suggester_email || 'Anonymous/Error'}</TableCell>
-										<TableCell>{new Date(suggestion.created_at).toLocaleDateString()}</TableCell>
+										<TableCell sx={{ maxWidth: 300 }}>
+											<Typography variant="body2" sx={{
+												overflow: 'hidden',
+												textOverflow: 'ellipsis',
+												display: '-webkit-box',
+												WebkitLineClamp: 3,
+												WebkitBoxOrient: 'vertical',
+											}}>
+												{suggestion.description || 'No description provided'}
+											</Typography>
+										</TableCell>
 										<TableCell>
-											<Chip label={suggestion.status} color={getStatusChipColor(suggestion.status)} size="small" />
-										</TableCell>
-										<TableCell align="center"><URLIcon url={suggestion.repo_url} type="repo" /></TableCell>
-										<TableCell align="center"><URLIcon url={suggestion.publication_url} type="publication" isRequired={!suggestion.webserver_url && !suggestion.repo_url && !suggestion.link_url} /></TableCell>
-										<TableCell align="center"><URLIcon url={suggestion.webserver_url} type="webserver" /></TableCell>
-										<TableCell align="center"><URLIcon url={suggestion.link_url} type="link" /></TableCell>
-										<TableCell align="right">
-											<Tooltip title="View/Edit Details">
-												<span> {/* Span for Tooltip when IconButton is disabled */}
-													<IconButton size="small" onClick={() => handleOpenEditModal(suggestion)} disabled={actionLoading === suggestion.id}>
-														<EditIcon />
-													</IconButton>
-												</span>
-											</Tooltip>
-											{suggestion.status === 'pending' && (
-												<>
-													<Tooltip title="Approve">
-														<span>
-															<IconButton size="small" color="success" onClick={() => handleApproveSuggestion(suggestion.id)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
-																<ThumbUpIcon />
-															</IconButton>
-														</span>
-													</Tooltip>
-													<Tooltip title="Reject">
-														<span>
-															<IconButton size="small" color="error" onClick={() => openRejectModal(suggestion)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
-																<ThumbDownIcon />
-															</IconButton>
-														</span>
-													</Tooltip>
-												</>
-											)}
-											{suggestion.status === 'approved' && (
-												<Tooltip title="Add to Database Directly">
-													<span>
-														<IconButton size="small" color="primary" onClick={() => handleAddPackageDirectly(suggestion)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
-															<AddToQueueIcon />
+											<Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+												{suggestion.repo_link && (
+													<Tooltip title="GitHub Repository">
+														<IconButton
+															size="small"
+															href={suggestion.repo_link}
+															target="_blank"
+															rel="noopener noreferrer"
+															sx={{ p: 0.5 }}
+														>
+															<GitHubIcon fontSize="small" />
 														</IconButton>
-													</span>
-												</Tooltip>
-											)}
-											<Tooltip title="Delete Suggestion Permanently">
-												<span>
-													<IconButton size="small" color="error" onClick={() => handleDeleteSuggestion(suggestion.id, suggestion.package_name)} sx={{ ml: 0.5 }} disabled={actionLoading === suggestion.id}>
-														<DeleteForeverIcon />
+													</Tooltip>
+												)}
+												{suggestion.webserver && (
+													<Tooltip title="Website">
+														<IconButton
+															size="small"
+															href={suggestion.webserver}
+															target="_blank"
+															rel="noopener noreferrer"
+															sx={{ p: 0.5 }}
+														>
+															<WebIcon fontSize="small" />
+														</IconButton>
+													</Tooltip>
+												)}
+												{suggestion.publication && (
+													<Tooltip title="Publication">
+														<IconButton
+															size="small"
+															href={suggestion.publication}
+															target="_blank"
+															rel="noopener noreferrer"
+															sx={{ p: 0.5 }}
+														>
+															<ArticleIcon fontSize="small" />
+														</IconButton>
+													</Tooltip>
+												)}
+												{!suggestion.repo_link && !suggestion.webserver && !suggestion.publication && (
+													<Typography variant="caption" color="text.secondary">
+														No links provided
+													</Typography>
+												)}
+											</Box>
+										</TableCell>
+										<TableCell>
+											<Typography variant="caption">
+												{suggestion.user_email || 'Anonymous'}
+											</Typography>
+											<br />
+											<Typography variant="caption" color="text.secondary">
+												{new Date(suggestion.created_at).toLocaleDateString()}
+											</Typography>
+										</TableCell>
+										<TableCell>
+											<Chip
+												label={suggestion.status}
+												color={getStatusChipColor(suggestion.status)}
+												size="small"
+											/>
+										</TableCell>
+										<TableCell align="center">
+											<Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+												{/* View Package (if already added) */}
+												{suggestion.status === 'added' && suggestion.package_id && (
+													<IconButton
+														size="small"
+														color="info"
+														onClick={() => navigate(`/package/${encodeURIComponent(suggestion.package_id!)}`)}
+														title="View Package"
+													>
+														<RemoveRedEyeIcon fontSize="small" />
 													</IconButton>
-												</span>
-											</Tooltip>
+												)}
+
+												{/* Edit */}
+												<IconButton
+													size="small"
+													color="primary"
+													onClick={() => handleOpenEditModal(suggestion)}
+													disabled={actionLoading === suggestion.id || sessionError}
+													title="Edit Suggestion"
+												>
+													<EditIcon fontSize="small" />
+												</IconButton>
+
+												{/* Approve (only for pending) */}
+												{suggestion.status === 'pending' && (
+													<IconButton
+														size="small"
+														color="success"
+														onClick={() => handleApproveSuggestion(suggestion.id)}
+														disabled={actionLoading === suggestion.id || isDuplicate(suggestion.package_name) || sessionError}
+														title={isDuplicate(suggestion.package_name) ? "Cannot approve duplicate package" : "Approve"}
+													>
+														{actionLoading === suggestion.id ? (
+															<CircularProgress size={20} />
+														) : (
+															<CheckCircleIcon fontSize="small" />
+														)}
+													</IconButton>
+												)}
+
+												{/* Reject (only for pending) */}
+												{suggestion.status === 'pending' && (
+													<IconButton
+														size="small"
+														color="error"
+														onClick={() => openRejectModal(suggestion)}
+														disabled={actionLoading === suggestion.id || sessionError}
+														title="Reject"
+													>
+														<CancelIcon fontSize="small" />
+													</IconButton>
+												)}
+
+												{/* Add to Database (only for approved) */}
+												{suggestion.status === 'approved' && (
+													<IconButton
+														size="small"
+														color="primary"
+														onClick={() => handleAddPackageDirectly(suggestion)}
+														disabled={actionLoading === suggestion.id || isDuplicate(suggestion.package_name) || sessionError}
+														title={isDuplicate(suggestion.package_name) ? "Cannot add duplicate package" : "Add to Database"}
+													>
+														{actionLoading === suggestion.id ? (
+															<CircularProgress size={20} />
+														) : (
+															<AddToQueueIcon fontSize="small" />
+														)}
+													</IconButton>
+												)}
+
+												{/* Delete */}
+												<IconButton
+													size="small"
+													color="error"
+													onClick={() => handleDeleteSuggestion(suggestion.id, suggestion.package_name)}
+													disabled={actionLoading === suggestion.id || sessionError}
+													title="Delete Suggestion"
+												>
+													{actionLoading === suggestion.id ? (
+														<CircularProgress size={20} />
+													) : (
+														<DeleteIcon fontSize="small" />
+													)}
+												</IconButton>
+											</Box>
 										</TableCell>
 									</TableRow>
-								);
-							})}
-						</TableBody>
-					</Table>
-				</TableContainer>
+								))}
+							</TableBody>
+						</Table>
+					</TableContainer>
 				</>
 			)}
 
-			{editingSuggestion && (
-				<EditSuggestionModal
-					open={isEditModalOpen}
-					onClose={handleCloseEditModal}
-					suggestion={editingSuggestion}
-					onSaveSuccess={handleEditSaveSuccess}
-					isAdmin={true}
-				/>
-			)}
-
-			<Dialog open={isRejectModalOpen} onClose={handleCloseRejectModal} maxWidth="sm" fullWidth>
-				<DialogTitle>Reject Suggestion: {selectedSuggestionForReject?.package_name}</DialogTitle>
+			{/* Reject Modal */}
+			<Dialog
+				open={isRejectModalOpen}
+				onClose={handleCloseRejectModal}
+				maxWidth="sm"
+				fullWidth
+			>
+				<DialogTitle>Reject Suggestion</DialogTitle>
 				<DialogContent>
-					<DialogContentText sx={{ mb: 2 }}>
-						Please provide a reason for rejecting this suggestion. This will be visible to the user if they can view their rejected suggestions.
-					</DialogContentText>
+					<Typography variant="body2" sx={{ mb: 2 }}>
+						Are you sure you want to reject the suggestion for "{selectedSuggestionForReject?.package_name}"?
+					</Typography>
 					<TextField
-						autoFocus
-						margin="dense"
-						id="admin_notes_reject"
-						label="Admin Notes (Reason for Rejection)"
-						type="text"
 						fullWidth
-						variant="outlined"
 						multiline
 						rows={3}
+						label="Admin Notes (Optional)"
 						value={adminNotesForReject}
 						onChange={(e) => setAdminNotesForReject(e.target.value)}
+						placeholder="Provide a reason for rejection..."
 					/>
 				</DialogContent>
 				<DialogActions>
 					<Button onClick={handleCloseRejectModal}>Cancel</Button>
 					<Button
-						onClick={() => selectedSuggestionForReject && handleUpdateSuggestionStatus(selectedSuggestionForReject.id, 'rejected', adminNotesForReject)}
 						color="error"
-						disabled={!adminNotesForReject.trim()}
+						variant="contained"
+						onClick={() => {
+							if (selectedSuggestionForReject) {
+								handleUpdateSuggestionStatus(selectedSuggestionForReject.id, 'rejected', adminNotesForReject);
+							}
+						}}
+						disabled={actionLoading === selectedSuggestionForReject?.id || sessionError}
 					>
-						Confirm Rejection
+						Reject
 					</Button>
 				</DialogActions>
 			</Dialog>
+
+			{/* Edit Suggestion Modal */}
+			{editingSuggestion && (
+				<EditSuggestionModal
+					open={isEditModalOpen}
+					suggestion={editingSuggestion}
+					onClose={handleCloseEditModal}
+					onSaveSuccess={handleEditSaveSuccess}
+					isAdmin={isAdmin}
+				/>
+			)}
 		</Container>
 	);
 };

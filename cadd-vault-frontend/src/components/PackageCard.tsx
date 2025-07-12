@@ -20,7 +20,6 @@ import { MoreHoriz as MoreHorizIcon } from '@mui/icons-material';
 import { FiTag } from 'react-icons/fi';
 import { Package } from '../types';
 import { useFilterStore } from '../store/filterStore';
-import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import RatingInput from './RatingInput';
 import PackageActions from './common/PackageActions';
 import PackageMetrics from './common/PackageMetrics';
@@ -42,20 +41,6 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 		setLocalPkg(pkg);
 	}, [pkg]);
 
-	// Subscribe to rating updates
-	useEffect(() => {
-		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
-			if (event.packageId === pkg.id && mountedRef.current) {
-				setLocalPkg(prevPkg => ({
-					...prevPkg,
-					average_rating: event.averageRating,
-					ratings_count: event.ratingsCount
-				}));
-			}
-		});
-
-		return unsubscribe;
-	}, [pkg.id]);
 
 	// Cleanup on unmount
 	useEffect(() => {
@@ -156,10 +141,6 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 					<Box sx={{ flexShrink: 0 }}>
 						<RatingInput
 							packageId={localPkg.id}
-							averageRating={localPkg.average_rating ?? 0}
-							ratingsCount={localPkg.ratings_count ?? 0}
-							userRating={localPkg.user_rating}
-							userRatingId={localPkg.user_rating_id}
 						/>
 					</Box>
 				</Box>

@@ -15,7 +15,6 @@ import {
 import { alpha } from '@mui/material/styles';
 import { Package } from '../types';
 import { useFilterStore } from '../store/filterStore';
-import { RatingEventEmitter, type RatingUpdateEvent } from '../services/ratingService';
 import RatingInput from './RatingInput';
 import PackageActions from './common/PackageActions';
 import PackageMetrics from './common/PackageMetrics';
@@ -36,20 +35,6 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 		setLocalPkg(pkg);
 	}, [pkg]);
 
-	// Subscribe to rating updates
-	useEffect(() => {
-		const unsubscribe = RatingEventEmitter.subscribe((event: RatingUpdateEvent) => {
-			if (event.packageId === pkg.id && mountedRef.current) {
-				setLocalPkg(prevPkg => ({
-					...prevPkg,
-					average_rating: event.averageRating,
-					ratings_count: event.ratingsCount
-				}));
-			}
-		});
-
-		return unsubscribe;
-	}, [pkg.id]);
 
 	// Cleanup on unmount
 	useEffect(() => {
@@ -207,10 +192,6 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 			<Stack direction="column" spacing={1} alignItems="flex-end" sx={{ flexShrink: 0, pt: 0.5 }}>
 				<RatingInput
 					packageId={localPkg.id}
-					averageRating={localPkg.average_rating ?? 0}
-					ratingsCount={localPkg.ratings_count ?? 0}
-					userRating={localPkg.user_rating}
-					userRatingId={localPkg.user_rating_id}
 				/>
 				{/* Replaced with PackageActions component */}
 				<PackageActions pkg={localPkg} spacing={0.5} />
