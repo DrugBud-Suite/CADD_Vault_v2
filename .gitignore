@@ -50,3 +50,7 @@ supabase-backup/auth_and_storage_schema.sql
 supabase-backup/data.sql
 supabase-backup/roles.sql
 Refactoring_Guide.md
+React_Query_Implementation_Guide.md
+GEMINI.md
+cadd-vault-backend-scripts/__pycache__/test_integration.cpython-310-pytest-6.2.5.pyc
+cadd-vault-backend-scripts/tests/__pycache__/test_all.cpython-310-pytest-6.2.5.pyc
