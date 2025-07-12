@@ -20,9 +20,9 @@ const SuggestPackagePage: React.FC = () => {
 		repo_url: string;
 		link_url: string;
 		license: string;
-		tag_names: string[];
-		folder_name: string;
-		category_name: string;
+		tags: string[];
+		folder: string;
+		category: string;
 		suggestion_reason: string;
 	}>({
 		package_name: '',
@@ -32,9 +32,9 @@ const SuggestPackagePage: React.FC = () => {
 		repo_url: '',
 		link_url: '',
 		license: '',
-		tag_names: [],
-		folder_name: '',
-		category_name: '',
+		tags: [],
+		folder: '',
+		category: '',
 		suggestion_reason: '',
 	});
 	const [loading, setLoading] = useState<boolean>(false);
@@ -60,13 +60,13 @@ const SuggestPackagePage: React.FC = () => {
 	}, []);
 
 	useEffect(() => {
-		if (formData.folder_name) {
-			const categories = useFilterStore.getState().allAvailableCategories[formData.folder_name] || [];
+		if (formData.folder) {
+			const categories = useFilterStore.getState().allAvailableCategories[formData.folder] || [];
 			setAvailableCategories(categories);
 		} else {
 			setAvailableCategories([]);
 		}
-	}, [formData.folder_name]);
+	}, [formData.folder]);
 
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -75,8 +75,8 @@ const SuggestPackagePage: React.FC = () => {
 			...prev,
 			[name]: value,
 		}));
-		if (name === 'folder_name') {
-			setFormData(prev => ({ ...prev, category_name: '' }));
+		if (name === 'folder') {
+			setFormData(prev => ({ ...prev, category: '' }));
 		}
 	};
 
@@ -86,15 +86,15 @@ const SuggestPackagePage: React.FC = () => {
 			...prev,
 			[name]: value,
 		}));
-		if (name === 'folder_name') {
-			setFormData(prev => ({ ...prev, category_name: '' }));
+		if (name === 'folder') {
+			setFormData(prev => ({ ...prev, category: '' }));
 		}
 	};
 
 	const handleTagsChange = (_event: React.SyntheticEvent, newValue: string[]) => {
 		setFormData((prev) => ({
 			...prev,
-			tag_names: newValue,
+			tags: newValue,
 		}));
 	};
 
@@ -139,11 +139,11 @@ const SuggestPackagePage: React.FC = () => {
 			}
 
 			// Add tags to normalized table if provided
-			if (formData.tag_names && formData.tag_names.length > 0) {
+			if (formData.tags && formData.tags.length > 0) {
 				const { error: tagsError } = await supabase
 					.rpc('update_suggestion_tags', {
 						suggestion_uuid: insertedSuggestion.id,
-						new_tags: formData.tag_names
+						new_tags: formData.tags
 					});
 
 				if (tagsError) {
@@ -152,12 +152,12 @@ const SuggestPackagePage: React.FC = () => {
 			}
 
 			// Add folder/category to normalized table if provided
-			if (formData.folder_name && formData.category_name) {
+			if (formData.folder && formData.category) {
 				const { error: folderCategoryError } = await supabase
 					.rpc('update_suggestion_folder_category', {
 						suggestion_uuid: insertedSuggestion.id,
-						folder_name: formData.folder_name,
-						category_name: formData.category_name
+						folder_name: formData.folder,
+						category_name: formData.category
 					});
 
 				if (folderCategoryError) {
@@ -168,7 +168,7 @@ const SuggestPackagePage: React.FC = () => {
 			setSuccessMessage('Package suggestion submitted successfully! It will be reviewed by an admin.');
 			setFormData({
 				package_name: '', description: '', publication_url: '', webserver_url: '',
-				repo_url: '', link_url: '', license: '', tag_names: [], folder_name: '', category_name: '',
+				repo_url: '', link_url: '', license: '', tags: [], folder: '', category: '',
 				suggestion_reason: '',
 			});
 		} catch (err: any) {
@@ -289,9 +289,9 @@ const SuggestPackagePage: React.FC = () => {
 								<InputLabel id="folder-label">Folder</InputLabel>
 								<Select
 									labelId="folder-label"
-									id="folder_name"
-									name="folder_name"
-									value={formData.folder_name || ''}
+									id="folder"
+									name="folder"
+									value={formData.folder || ''}
 									onChange={handleSelectChange}
 									label="Folder"
 								>
@@ -304,13 +304,13 @@ const SuggestPackagePage: React.FC = () => {
 						</Grid>
 
 						<Grid item xs={12} sm={6}>
-							<FormControl fullWidth variant="outlined" disabled={!formData.folder_name}>
+							<FormControl fullWidth variant="outlined" disabled={!formData.folder}>
 								<InputLabel id="category-label">Category</InputLabel>
 								<Select
 									labelId="category-label"
-									id="category_name"
-									name="category_name"
-									value={formData.category_name || ''}
+									id="category"
+									name="category"
+									value={formData.category || ''}
 									onChange={handleSelectChange}
 									label="Category"
 								>
@@ -327,7 +327,7 @@ const SuggestPackagePage: React.FC = () => {
 								multiple
 								id="tags-suggest"
 								options={allAvailableTags}
-								value={formData.tag_names || []}
+								value={formData.tags || []}
 								onChange={handleTagsChange}
 								freeSolo
 								renderTags={(value: readonly string[], getTagProps) =>
