@@ -32,17 +32,18 @@ const PackageListComponent = ({
 		</Box>
 	);
 
-	// Always use virtualization for consistent performance
+	// Use consistent height estimate based on standardized item height
 	return (
 		<VirtualList
 			items={packages}
 			renderItem={renderItem}
 			height={height}
 			width="100%"
-			estimateSize={() => 120} // Estimated height for PackageListItem
+			estimateSize={() => 140}
 			overscan={5}
 			getItemKey={(pkg) => pkg.id}
 			onScroll={onScroll}
+			gap={12}
 		/>
 	);
 };

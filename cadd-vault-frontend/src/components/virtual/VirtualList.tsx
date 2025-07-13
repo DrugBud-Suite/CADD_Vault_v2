@@ -15,6 +15,7 @@ interface VirtualListProps<T> {
   EmptyComponent?: React.ComponentType;
   LoadingComponent?: React.ComponentType;
   isLoading?: boolean;
+	gap?: number;
 }
 
 export function VirtualList<T>({
@@ -30,6 +31,7 @@ export function VirtualList<T>({
   EmptyComponent,
   LoadingComponent,
   isLoading = false,
+	gap = 0,
 }: VirtualListProps<T>) {
   const {
     parentRef,
@@ -53,9 +55,6 @@ export function VirtualList<T>({
     return <EmptyComponent />;
   }
 
-  // Always use virtualization for consistent performance
-  // (Removed fallback to non-virtualized rendering)
-
   return (
     <Box
       ref={parentRef}
@@ -70,13 +69,15 @@ export function VirtualList<T>({
     >
       <Box
         sx={{
-          height: totalSize,
+				  height: totalSize + (gap * Math.max(0, items.length - 1)),
           width: '100%',
           position: 'relative',
         }}
       >
         {virtualItems.map((virtualItem) => {
           const item = items[virtualItem.index];
+			const gapOffset = gap * virtualItem.index;
+
           return (
             <Box
               key={virtualItem.key}
@@ -87,14 +88,14 @@ export function VirtualList<T>({
                 top: 0,
                 left: 0,
                 width: '100%',
-                transform: `translateY(${virtualItem.start}px)`,
+				  transform: `translateY(${virtualItem.start + gapOffset}px)`,
               }}
             >
               {renderItem(
                 item,
                 virtualItem.index,
                 {
-                  height: `${virtualItem.size}px`,
+					height: `${virtualItem.size}px`,
                   width: '100%',
                 }
               )}

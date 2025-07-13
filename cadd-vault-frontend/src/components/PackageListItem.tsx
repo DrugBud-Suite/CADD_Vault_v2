@@ -55,12 +55,14 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 				justifyContent: 'space-between',
 				alignItems: 'flex-start',
 				gap: 2,
-				py: 1.5,
+				minHeight: 140,
+				maxHeight: 140,
+				py: 2,
 				px: 2,
+				m: 0,
 				borderRadius: 2,
 				border: 0,
 				overflow: 'hidden',
-				mb: 1,
 				background: (theme: Theme) => theme.palette.mode === 'dark'
 					? 'linear-gradient(135deg, rgba(30,30,30,0.8) 0%, rgba(23,23,23,0.8) 100%)'
 					: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(249,250,251,0.8) 100%)',
@@ -76,14 +78,18 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 					boxShadow: (theme: Theme) => `0 0px 24px ${alpha(theme.palette.primary.main, 0.3)}`,
 					transform: 'translateY(-2px)',
 				},
-				'&:last-child': {
-					borderBottom: 'none',
-					mb: 0,
-				},
 			}}
 			component="div"
 		>
-			<Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', mr: 2, overflow: 'hidden' }}>
+			<Box sx={{
+				flexGrow: 1,
+				display: 'flex',
+				flexDirection: 'column',
+				mr: 2,
+				overflow: 'hidden',
+				height: '100%',
+				justifyContent: 'space-between'
+			}}>
 				<ListItemText
 					primary={
 						<Link
@@ -97,6 +103,8 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 								transition: 'all 0.2s ease-in-out',
 								color: (theme: Theme) => theme.palette.mode === 'dark' ? theme.palette.primary.light : theme.palette.primary.dark,
 								textDecoration: 'none',
+								display: 'block',
+								lineHeight: 1.3,
 								'&:hover': {
 									color: 'primary.main',
 									transform: 'translateY(-1px)',
@@ -122,74 +130,87 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 							{localPkg.package_name}
 						</Link>
 					}
-					sx={{ mt: 0.5, mb: 0.5 }}
+					sx={{ mt: 0, mb: 1 }}
 				/>
-				{localPkg.description && (
-					<Tooltip title={localPkg.description}>
-						<Typography
-							variant="body2"
-							color="text.secondary"
+
+				<Box sx={{ height: 36, mb: 1 }}>
+					{localPkg.description && (
+						<Tooltip title={localPkg.description}>
+							<Typography
+								variant="body2"
+								color="text.secondary"
+								sx={{
+									overflow: 'hidden',
+									textOverflow: 'ellipsis',
+									display: '-webkit-box',
+									WebkitLineClamp: 2,
+									WebkitBoxOrient: 'vertical',
+									lineHeight: 1.4,
+									height: '100%',
+								}}
+							>
+								{localPkg.description}
+							</Typography>
+						</Tooltip>
+					)}
+				</Box>
+
+				<Box sx={{ height: 24, overflow: 'hidden' }}>
+					{localPkg.tags && localPkg.tags.length > 0 && (
+						<Stack
+							direction="row"
+							spacing={0.5}
 							sx={{
-								mb: 1.25,
-								overflow: 'hidden',
-								textOverflow: 'ellipsis',
-								display: '-webkit-box',
-								WebkitLineClamp: 2,
-								WebkitBoxOrient: 'vertical',
-								lineHeight: 1.5,
+								flexWrap: 'nowrap',
+								overflowX: 'auto',
+								maxWidth: '100%',
+								height: '100%',
+								alignItems: 'center',
+								'&::-webkit-scrollbar': { height: '4px' },
+								'&::-webkit-scrollbar-thumb': {
+									backgroundColor: (theme: Theme) => alpha(theme.palette.text.secondary, 0.5),
+									borderRadius: '2px',
+								},
 							}}
 						>
-							{localPkg.description}
-						</Typography>
-					</Tooltip>
-				)}
-				{localPkg.tags && localPkg.tags.length > 0 && (
-					<Stack
-						direction="row"
-						spacing={0.5}
-						sx={{
-							flexWrap: 'nowrap',
-							overflowX: 'auto',
-							maxWidth: '100%',
-							pb: 0.5,
-							'&::-webkit-scrollbar': { height: '4px' },
-							'&::-webkit-scrollbar-thumb': {
-								backgroundColor: (theme: Theme) => alpha(theme.palette.text.secondary, 0.5),
-								borderRadius: '2px',
-							},
-						}}
-					>
-						{localPkg.tags.map((tag: string) => (
-							<Chip
-								key={tag}
-								label={tag}
-								size="small"
-								sx={{
-									height: '22px',
-									borderRadius: 4,
-									bgcolor: (theme: Theme) => theme.palette.mode === 'dark'
-										? alpha(theme.palette.primary.main, 0.12)
-										: alpha(theme.palette.primary.light, 0.12),
-									color: (theme: Theme) => theme.palette.mode === 'dark'
-										? theme.palette.primary.light
-										: theme.palette.primary.main,
-									fontWeight: 500,
-									fontSize: '0.7rem',
-									'&:hover': {
+							{localPkg.tags.map((tag: string) => (
+								<Chip
+									key={tag}
+									label={tag}
+									size="small"
+									sx={{
+										height: '20px',
+										borderRadius: 4,
 										bgcolor: (theme: Theme) => theme.palette.mode === 'dark'
-											? alpha(theme.palette.primary.main, 0.18)
-											: alpha(theme.palette.primary.light, 0.18),
-									},
-									cursor: 'pointer',
-								}}
-								onClick={(e) => handleTagClick(e, tag)}
-							/>
-						))}
-					</Stack>
-				)}
+											? alpha(theme.palette.primary.main, 0.12)
+											: alpha(theme.palette.primary.light, 0.12),
+										color: (theme: Theme) => theme.palette.mode === 'dark'
+											? theme.palette.primary.light
+											: theme.palette.primary.main,
+										fontWeight: 500,
+										fontSize: '0.7rem',
+										flexShrink: 0,
+										'&:hover': {
+											bgcolor: (theme: Theme) => theme.palette.mode === 'dark'
+												? alpha(theme.palette.primary.main, 0.18)
+												: alpha(theme.palette.primary.light, 0.18),
+										},
+										cursor: 'pointer',
+									}}
+									onClick={(e) => handleTagClick(e, tag)}
+								/>
+							))}
+						</Stack>
+					)}
+				</Box>
 			</Box>
 
-			<Stack direction="column" spacing={1} alignItems="flex-end" sx={{ flexShrink: 0, pt: 0.5 }}>
+			<Stack direction="column" spacing={1} alignItems="flex-end" sx={{
+				flexShrink: 0,
+				pt: 0.5,
+				height: '100%',
+				justifyContent: 'space-between'
+			}}>
 				<RatingInput
 					packageId={localPkg.id}
 				/>

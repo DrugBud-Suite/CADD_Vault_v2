@@ -157,7 +157,7 @@ const HomePage: React.FC = () => {
 	// Page count no longer needed with always-on virtualization
 
 	return (
-		<Container maxWidth="lg" sx={{ pt: 2, px: { xs: 1, sm: 2 }, pb: 0 }}>
+		<Container maxWidth="xl" sx={{ pt: 2, px: { xs: 1, sm: 2 }, pb: 0 }}>
 			{error && !loading && (
 				<Box py={4}>
 					<Alert
@@ -277,9 +277,9 @@ const HomePage: React.FC = () => {
 						<VirtualGrid
 							items={displayedPackagesInComponent}
 							renderItem={renderCardItem}
-							height="calc(100vh - 250px)" // Adjust based on header height
+							height="100vh" // Adjust based on header height
 							width="100%"
-							gap={16} // Material-UI spacing={2}
+							gap={10} // Material-UI spacing={2}
 							overscan={2}
 							getItemKey={(pkg) => pkg.id}
 							onScroll={handleScroll}
@@ -287,7 +287,7 @@ const HomePage: React.FC = () => {
 					) : (
 						<PackageList 
 							packages={displayedPackagesInComponent} 
-							height="calc(100vh - 250px)"
+								height="100vh"
 							onScroll={handleScroll}
 						/>
 					)}
