@@ -1,19 +1,23 @@
 // src/pages/HomePage.tsx
-import React, { useEffect, lazy, Suspense, ChangeEvent, Fragment } from 'react';
+import React, { useEffect, lazy, Suspense } from 'react';
 import { useFilterStore } from '../store/filterStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuth } from '../context/AuthContext';
-import { usePackages } from '../hooks/queries/usePackages';
+import { useInfinitePackages } from '../hooks/queries/usePackages';
 import { useFilterMetadata } from '../hooks/queries/useMetadata';
+import { PackageWithNormalizedData } from '../types';
 import {
 	Container, Box, Typography, CircularProgress, Alert, Select, MenuItem, IconButton,
-	ToggleButtonGroup, ToggleButton, Grid, Pagination, FormControl, SelectChangeEvent
+	ToggleButtonGroup, ToggleButton, FormControl, SelectChangeEvent
 } from '@mui/material';
 import { ViewList as ViewListIcon, ViewModule as ViewModuleIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon } from '@mui/icons-material';
 
 // Lazy load components
 const PackageCard = lazy(() => import('../components/PackageCard'));
 const PackageList = lazy(() => import('../components/PackageList'));
+
+// Import VirtualGrid for card view virtualization
+import { VirtualGrid } from '../components/virtual/VirtualGrid';
 
 const HomePage: React.FC = () => {
 	// --- Authentication context ---
@@ -23,7 +27,7 @@ const HomePage: React.FC = () => {
 	// --- Zustand Store Selectors using useShallow ---
 	const {
 		searchTerm, selectedTags, minStars, hasGithub, hasWebserver, hasPublication,
-		minCitations, minRating, folder, category, selectedLicenses, sortBy, sortDirection, viewMode, currentPage,
+		minCitations, minRating, folder, category, selectedLicenses, sortBy, sortDirection, viewMode, currentPage, pageSize,
 	} = useFilterStore(useShallow(state => ({
 		searchTerm: state.searchTerm,
 		selectedTags: state.selectedTags,
@@ -40,6 +44,7 @@ const HomePage: React.FC = () => {
 		sortDirection: state.sortDirection,
 		viewMode: state.viewMode,
 		currentPage: state.currentPage,
+		pageSize: state.pageSize,
 	})));
 
 	// Actions from store (these are stable references)
@@ -50,8 +55,6 @@ const HomePage: React.FC = () => {
 		setViewMode: state.setViewMode,
 		setCurrentPage: state.setCurrentPage,
 	})));
-
-	const itemsPerPage = 24;
 
 	// --- React Query hooks for data fetching ---
 	const { data: metadata, isLoading: metadataLoading, error: metadataError } = useFilterMetadata();
@@ -70,13 +73,18 @@ const HomePage: React.FC = () => {
 		selectedLicenses,
 		sortBy,
 		sortDirection,
-		page: currentPage,
-		pageSize: itemsPerPage,
 		includeUserRatings: !!userId,
 		currentUserId: userId,
 	};
 
-	const { data: packageResult, isLoading: packagesLoading, error: packagesError } = usePackages(packageFilters);
+	const { 
+		data: infiniteData, 
+		isLoading: packagesLoading, 
+		error: packagesError,
+		fetchNextPage,
+		hasNextPage,
+		isFetchingNextPage
+	} = useInfinitePackages(packageFilters);
 
 	// --- Update filter store with metadata when it loads ---
 	useEffect(() => {
@@ -93,19 +101,28 @@ const HomePage: React.FC = () => {
 	}, [metadata]);
 
 	// --- Derived state ---
-	const displayedPackagesInComponent = packageResult?.packages || [];
-	const totalFilteredCount = packageResult?.totalCount || 0;
+	// Flatten all pages from infinite query into a single array
+	const displayedPackagesInComponent = infiniteData?.pages.flatMap(page => page.packages) || [];
+	const totalFilteredCount = infiniteData?.pages[0]?.totalCount || 0;
 	const loading = metadataLoading || packagesLoading;
 	const error = metadataError || packagesError;
 
 	// Determine loading state for UI
 	const loadingState = metadataLoading ? 'metadata' : packagesLoading ? 'packages' : 'none';
 
+	// Scroll detection for infinite loading
+	const handleScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
+		const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+		const threshold = 200; // Trigger when 200px from bottom
+		
+		if (scrollHeight - scrollTop - clientHeight < threshold) {
+			if (hasNextPage && !isFetchingNextPage) {
+				fetchNextPage();
+			}
+		}
+	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
 	// --- Event Handlers ---
-	const handlePageChange = (_event: ChangeEvent<unknown>, value: number) => {
-		setCurrentPage(value);
-		window.scrollTo(0, 0);
-	};
 
 	const handleSortChange = (event: SelectChangeEvent<string>) => {
 		const value = event.target.value;
@@ -124,6 +141,17 @@ const HomePage: React.FC = () => {
 		}
 	};
 
+	// Always use virtualization for consistent performance
+
+	// Render item function for virtual grid
+	const renderCardItem = (pkg: PackageWithNormalizedData, _index: number, style: React.CSSProperties) => (
+		<Suspense fallback={suspenseFallback} key={pkg.id}>
+			<Box style={style}>
+				<PackageCard pkg={pkg} />
+			</Box>
+		</Suspense>
+	);
+
 	// --- Render Logic ---
 	const suspenseFallback = (
 		<Box display="flex" justifyContent="center" py={4}>
@@ -131,7 +159,7 @@ const HomePage: React.FC = () => {
 		</Box>
 	);
 
-	const pageCount = Math.ceil(totalFilteredCount / itemsPerPage);
+	// Page count no longer needed with always-on virtualization
 
 	return (
 		<Container maxWidth="lg" sx={{ pt: 2, px: { xs: 1, sm: 2 }, pb: 0 }}>
@@ -251,27 +279,22 @@ const HomePage: React.FC = () => {
 			{!loading && !error && (
 				<Suspense fallback={suspenseFallback}>
 					{viewMode === 'card' ? (
-						<Fragment>
-							<Grid container spacing={2} sx={{ p: 0 }}>
-								{displayedPackagesInComponent.map(pkg => (
-									<Grid item xs={12} sm={6} md={4} lg={3} key={pkg.id}>
-										<PackageCard pkg={pkg} />
-									</Grid>
-								))}
-							</Grid>
-							{pageCount > 1 && (
-								<Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
-									<Pagination
-										count={pageCount}
-										page={currentPage}
-										onChange={handlePageChange}
-										color="primary"
-									/>
-								</Box>
-							)}
-						</Fragment>
+						<VirtualGrid
+							items={displayedPackagesInComponent}
+							renderItem={renderCardItem}
+							height="calc(100vh - 250px)" // Adjust based on header height
+							width="100%"
+							gap={16} // Material-UI spacing={2}
+							overscan={2}
+							getItemKey={(pkg) => pkg.id}
+							onScroll={handleScroll}
+						/>
 					) : (
-							<PackageList packages={displayedPackagesInComponent} />
+						<PackageList 
+							packages={displayedPackagesInComponent} 
+							height="calc(100vh - 250px)"
+							onScroll={handleScroll}
+						/>
 					)}
 				</Suspense>
 			)}

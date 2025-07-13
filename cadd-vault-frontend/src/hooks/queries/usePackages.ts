@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { queryKeys } from '../../lib/react-query/queryKeys';
 import { packageApi, PackageFilters } from '../../lib/react-query/api/packages';
@@ -8,6 +8,21 @@ export function usePackages(filters: PackageFilters = {}) {
   return useQuery({
     queryKey: queryKeys.packages.list(filters),
     queryFn: () => packageApi.getPackages(filters),
+    staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
+    gcTime: 1000 * 60 * 30, // Keep in cache for 30 minutes
+  });
+}
+
+export function useInfinitePackages(filters: Omit<PackageFilters, 'page'> = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.packages.infinite(filters),
+    queryFn: ({ pageParam = 1 }) => packageApi.getPackages({ ...filters, page: pageParam }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      // Calculate if there are more pages
+      const currentTotal = allPages.reduce((sum, page) => sum + page.packages.length, 0);
+      return currentTotal < lastPage.totalCount ? allPages.length + 1 : undefined;
+    },
     staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
     gcTime: 1000 * 60 * 30, // Keep in cache for 30 minutes
   });

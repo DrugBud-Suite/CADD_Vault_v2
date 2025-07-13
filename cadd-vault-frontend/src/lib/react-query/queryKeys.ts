@@ -6,6 +6,8 @@ export const queryKeys = {
     lists: () => [...queryKeys.packages.all(), 'list'] as const,
     list: (filters?: Record<string, any>) => 
       [...queryKeys.packages.lists(), filters] as const,
+    infinite: (filters?: Record<string, any>) => 
+      [...queryKeys.packages.all(), 'infinite', filters] as const,
     details: () => [...queryKeys.packages.all(), 'detail'] as const,
     detail: (id: string) => [...queryKeys.packages.details(), id] as const,
     search: (term: string) => [...queryKeys.packages.all(), 'search', term] as const,

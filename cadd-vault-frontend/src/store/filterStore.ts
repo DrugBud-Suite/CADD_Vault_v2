@@ -27,6 +27,7 @@ export interface FilterState { // Exporting for use in components
     displayedPackages: PackageWithNormalizedData[];
     totalFilteredCount: number; // Total packages matching current filters (from server)
     currentPage: number;
+    pageSize: number; // Configurable page size (default 24, can be increased for virtualization)
 
     // Data derived from the entire dataset (for filter options, etc.)
     originalPackages: PackageWithNormalizedData[]; // Holds all packages, set once on initial load
@@ -61,6 +62,7 @@ export interface FilterState { // Exporting for use in components
     setDisplayedPackages: (packages: PackageWithNormalizedData[]) => void;
     setTotalFilteredCount: (count: number) => void;
     setCurrentPage: (page: number) => void;
+    setPageSize: (pageSize: number) => void;
 
     // Action to set the initial full dataset and derive all related metadata
     setOriginalPackagesAndDeriveMetadata: (packages: PackageWithNormalizedData[]) => void;
@@ -80,7 +82,7 @@ const initialStateValues: Omit<FilterState,
     'setSearchTerm' | 'setSelectedTags' | 'addTag' | 'setMinStars' | 'setHasGithub' |
     'setHasWebserver' | 'setHasPublication' | 'setMinCitations' | 'setMinRating' | 'setFolder' |
     'setCategory' | 'setSelectedLicenses' | 'setSort' | 'setDisplayedPackages' |
-    'setTotalFilteredCount' | 'setCurrentPage' | 'setOriginalPackagesAndDeriveMetadata' |
+    'setTotalFilteredCount' | 'setCurrentPage' | 'setPageSize' | 'setOriginalPackagesAndDeriveMetadata' |
     'refreshMetadata' | 'resetFilters' | 'setViewMode' | 'toggleFilterSidebar' | 'toggleNavSidebar' |
     // Omit fields that will be derived or fetched
     'originalPackages' | 'allAvailableTags' | 'allAvailableLicenses' |
@@ -102,6 +104,7 @@ const initialStateValues: Omit<FilterState,
     sortDirection: 'asc',
     viewMode: 'card',
     currentPage: 1,
+    pageSize: 100, // Default page size optimized for virtualization
     isFilterSidebarVisible: true,
     isNavSidebarVisible: true,
 };
@@ -156,6 +159,7 @@ export const useFilterStore = create<FilterState>()(
             setDisplayedPackages: (displayedPackages) => set({ displayedPackages }),
             setTotalFilteredCount: (totalFilteredCount) => set({ totalFilteredCount }),
             setCurrentPage: (currentPage) => set({ currentPage }),
+            setPageSize: (pageSize) => set({ pageSize, currentPage: 1 }), // Reset to first page when changing page size
 
 			setOriginalPackagesAndDeriveMetadata: (packages: PackageWithNormalizedData[]) => {
 				// This function is now deprecated but kept for compatibility
@@ -191,6 +195,7 @@ export const useFilterStore = create<FilterState>()(
                 sortBy: initialStateValues.sortBy,
                 sortDirection: initialStateValues.sortDirection,
                 currentPage: 1, // Reset current page
+                pageSize: initialStateValues.pageSize, // Reset page size
 
                 // Retain data that is fetched/derived once and doesn't change with filters
                 originalPackages: state.originalPackages,
@@ -227,6 +232,7 @@ export const useFilterStore = create<FilterState>()(
                 sortDirection: state.sortDirection,
                 viewMode: state.viewMode,
                 currentPage: state.currentPage,
+                pageSize: state.pageSize,
                 isFilterSidebarVisible: state.isFilterSidebarVisible,
                 isNavSidebarVisible: state.isNavSidebarVisible,
             }),
