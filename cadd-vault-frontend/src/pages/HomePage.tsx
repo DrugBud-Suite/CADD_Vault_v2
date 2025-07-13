@@ -27,7 +27,7 @@ const HomePage: React.FC = () => {
 	// --- Zustand Store Selectors using useShallow ---
 	const {
 		searchTerm, selectedTags, minStars, hasGithub, hasWebserver, hasPublication,
-		minCitations, minRating, folder, category, selectedLicenses, sortBy, sortDirection, viewMode, currentPage, pageSize,
+		minCitations, minRating, folder, category, selectedLicenses, sortBy, sortDirection, viewMode,
 	} = useFilterStore(useShallow(state => ({
 		searchTerm: state.searchTerm,
 		selectedTags: state.selectedTags,
@@ -43,17 +43,14 @@ const HomePage: React.FC = () => {
 		sortBy: state.sortBy,
 		sortDirection: state.sortDirection,
 		viewMode: state.viewMode,
-		currentPage: state.currentPage,
-		pageSize: state.pageSize,
 	})));
 
 	// Actions from store (these are stable references)
 	const {
-		setSort, setViewMode, setCurrentPage,
+		setSort, setViewMode,
 	} = useFilterStore(useShallow(state => ({
 		setSort: state.setSort,
 		setViewMode: state.setViewMode,
-		setCurrentPage: state.setCurrentPage,
 	})));
 
 	// --- React Query hooks for data fetching ---
@@ -126,12 +123,10 @@ const HomePage: React.FC = () => {
 
 	const handleSortChange = (event: SelectChangeEvent<string>) => {
 		const value = event.target.value;
-		setCurrentPage(1);
 		setSort(value === '' ? null : value, sortDirection);
 	};
 
 	const handleSortDirectionToggle = () => {
-		setCurrentPage(1);
 		setSort(sortBy, sortDirection === 'asc' ? 'desc' : 'asc');
 	};
 
