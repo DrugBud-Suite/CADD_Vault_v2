@@ -24,3 +24,4 @@ pytest-cov>=4.0.0
 # Optional: For more detailed test reporting
 pytest-xdist>=3.0.0  # Run tests in parallel
 pytest-mock>=3.10.0  # Additional mocking capabilities
+respx>=0.21.0        # httpx route-based mocking for service-layer tests

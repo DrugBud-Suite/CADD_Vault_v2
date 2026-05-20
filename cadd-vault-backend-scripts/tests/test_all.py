@@ -4,6 +4,10 @@ Tests core functionality with real API calls to ensure services work correctly.
 """
 
 import pytest
+
+pytestmark = pytest.mark.integration
+pytest.importorskip("supabase")
+
 import asyncio
 import os
 import logging
