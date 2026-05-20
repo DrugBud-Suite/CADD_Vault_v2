@@ -122,81 +122,73 @@ def parse_github_info(repo_url):
     return None, None
 
 
-transformed_data = []
+def transform_row(row):
+    """Transform a single CSV row dict into a Supabase-shaped row dict."""
+    transformed_row: dict = {'id': str(uuid.uuid4())}
 
-with open(input_csv_path, mode='r', encoding='utf-8') as infile:
-    reader = csv.DictReader(infile)
-    for row in reader:
-        transformed_row = {}
-        # Generate UUID for id
-        transformed_row['id'] = str(uuid.uuid4())
-
-        # Map and transform columns
-        for csv_header, supabase_column in column_mapping.items():
-            if csv_header in row:
-                value = row[csv_header]
-                # Handle specific transformations
-                if supabase_column == 'tags':
-                    # Convert comma-separated string to JSON array
-                    transformed_row[supabase_column] = json.dumps([tag.strip() for tag in value.split(',') if tag.strip()]) if value else json.dumps([])
-                elif supabase_column in ['github_stars', 'citations', 'ratings_count', 'ratingsum']:
-                    # Convert to integer, handle empty strings
-                    try:
-                        transformed_row[supabase_column] = int(value) if value else None
-                    except ValueError:
-                        print(f"Warning: Could not convert '{value}' to integer for column '{supabase_column}'. Setting to None.")
-                        transformed_row[supabase_column] = None
-                elif supabase_column in ['jif', 'average_rating']:
-                     # Convert to float, handle empty strings
-                    try:
-                        transformed_row[supabase_column] = float(value) if value else None
-                    except ValueError:
-                        print(f"Warning: Could not convert '{value}' to float for column '{supabase_column}'. Setting to None.")
-                        transformed_row[supabase_column] = None
-                elif supabase_column == 'last_commit':
-                    # Parse and format date
-                    transformed_row[supabase_column] = parse_date(value)
-                elif supabase_column == 'repo_link':
-                     # Use REPO_LINK if available, fallback to CODE
-                    transformed_row[supabase_column] = row.get('REPO_LINK') or row.get('CODE') or None
-                elif supabase_column == 'package_name':
-                    # Map ENTRY NAME to package_name
-                    transformed_row[supabase_column] = value if value else None
-                else:
-                    # Default mapping for other text fields
-                    transformed_row[supabase_column] = value if value else None
+    for csv_header, supabase_column in column_mapping.items():
+        if csv_header in row:
+            value = row[csv_header]
+            if supabase_column == 'tags':
+                transformed_row[supabase_column] = json.dumps(
+                    [tag.strip() for tag in value.split(',') if tag.strip()]
+                ) if value else json.dumps([])
+            elif supabase_column in ['github_stars', 'citations', 'ratings_count', 'ratingsum']:
+                try:
+                    transformed_row[supabase_column] = int(value) if value else None
+                except ValueError:
+                    print(f"Warning: Could not convert '{value}' to integer for column '{supabase_column}'. Setting to None.")
+                    transformed_row[supabase_column] = None
+            elif supabase_column in ['jif', 'average_rating']:
+                try:
+                    transformed_row[supabase_column] = float(value) if value else None
+                except ValueError:
+                    print(f"Warning: Could not convert '{value}' to float for column '{supabase_column}'. Setting to None.")
+                    transformed_row[supabase_column] = None
+            elif supabase_column == 'last_commit':
+                transformed_row[supabase_column] = parse_date(value)
+            elif supabase_column == 'repo_link':
+                transformed_row[supabase_column] = row.get('REPO_LINK') or row.get('CODE') or None
+            elif supabase_column == 'package_name':
+                transformed_row[supabase_column] = value if value else None
             else:
-                 # Set columns not in CSV to None
-                if supabase_column not in transformed_row: # Avoid overwriting if already set by specific logic
-                     transformed_row[supabase_column] = None
-
-
-        # Handle columns only in Supabase schema, not mapped from CSV
-        for col in supabase_only_columns:
-             if col not in transformed_row:
-                 transformed_row[col] = None
-
-        # Parse github_owner and github_repo from the determined repo_link
-        repo_link_value = transformed_row.get('repo_link')
-        if repo_link_value:
-            owner, repo = parse_github_info(repo_link_value)
-            transformed_row['github_owner'] = owner
-            transformed_row['github_repo'] = repo
+                transformed_row[supabase_column] = value if value else None
         else:
-            transformed_row['github_owner'] = None
-            transformed_row['github_repo'] = None
+            if supabase_column not in transformed_row:
+                transformed_row[supabase_column] = None
+
+    for col in supabase_only_columns:
+        if col not in transformed_row:
+            transformed_row[col] = None
+
+    repo_link_value = transformed_row.get('repo_link')
+    if repo_link_value:
+        owner, repo = parse_github_info(repo_link_value)
+        transformed_row['github_owner'] = owner
+        transformed_row['github_repo'] = repo
+    else:
+        transformed_row['github_owner'] = None
+        transformed_row['github_repo'] = None
+
+    return transformed_row
 
 
-        transformed_data.append(transformed_row)
+def transform(input_path=input_csv_path, output_path=output_csv_path):
+    """Read input CSV, transform every row, write output CSV."""
+    transformed_data = []
+    with open(input_path, mode='r', encoding='utf-8') as infile:
+        reader = csv.DictReader(infile)
+        for row in reader:
+            transformed_data.append(transform_row(row))
 
-# Write the transformed data to a new CSV file
-with open(output_csv_path, mode='w', newline='', encoding='utf-8') as outfile:
-    writer = csv.DictWriter(outfile, fieldnames=supabase_column_order)
+    with open(output_path, mode='w', newline='', encoding='utf-8') as outfile:
+        writer = csv.DictWriter(outfile, fieldnames=supabase_column_order)
+        writer.writeheader()
+        writer.writerows(transformed_data)
 
-    # Write the header row
-    writer.writeheader()
+    return transformed_data
 
-    # Write the data rows
-    writer.writerows(transformed_data)
 
-print(f"Transformation complete. Transformed data saved to {output_csv_path}")
+if __name__ == "__main__":
+    transform()
+    print(f"Transformation complete. Transformed data saved to {output_csv_path}")

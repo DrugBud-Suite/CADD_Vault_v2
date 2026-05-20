@@ -7,7 +7,6 @@ import re
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from functools import lru_cache
 from typing import Dict, Optional, Tuple
 from urllib.parse import unquote, urlparse
 
@@ -265,7 +264,7 @@ class PublicationService:
         """Check if an arXiv paper has been published"""
         try:
             await self.arxiv_limiter.wait_if_needed()
-            
+
             # First, check arXiv metadata for a DOI
             async with httpx.AsyncClient(timeout=self.config.timeout) as client:
                 response = await client.get(
@@ -273,10 +272,13 @@ class PublicationService:
                     headers=self.headers
                 )
                 response.raise_for_status()
+                # Save the arXiv XML before the EPMC call reassigns `response`,
+                # otherwise the title-fallback below would read EPMC JSON.
+                arxiv_text = response.text
 
                 # Parse XML response (simplified)
-                if '<doi>' in response.text:
-                    doi = response.text.split('<doi>', 1)[1].split('</doi>', 1)[0]
+                if '<doi>' in arxiv_text:
+                    doi = arxiv_text.split('<doi>', 1)[1].split('</doi>', 1)[0]
                     return doi, f"https://doi.org/{doi}"
 
                 # If no DOI in metadata, search Europe PMC by arXiv ID
@@ -300,8 +302,8 @@ class PublicationService:
                                 return published_doi, f"https://doi.org/{published_doi}"
 
                 # Fallback to title search if Europe PMC doesn't find a published version
-                if '<title>' in response.text:
-                    title = response.text.split('<title>', 1)[1].split('</title>', 1)[0]
+                if '<title>' in arxiv_text:
+                    title = arxiv_text.split('<title>', 1)[1].split('</title>', 1)[0]
                     title = title.strip()
                     if title and len(title) > 10:  # Ensure title is meaningful
                         if doi := await self._search_crossref_for_title(title, f"arXiv:{arxiv_id}"):
@@ -513,7 +515,6 @@ class PublicationService:
             self.logger.error(f"Error getting impact factor for journal {journal_info.get('journal', 'unknown')}: {str(e)}")
             return None
 
-    @lru_cache(maxsize=1000)
     def _get_cached_impact_factor(self, journal: str) -> Optional[float]:
         """Get impact factor from cache"""
         return self._impact_factor_cache.get(journal)
