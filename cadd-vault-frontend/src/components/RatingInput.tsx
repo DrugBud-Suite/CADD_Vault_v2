@@ -17,18 +17,25 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useAuth } from '../context/AuthContext';
 import { usePackageRating, useUpsertRating, useDeleteRating } from '../hooks/queries/useRatings';
+import { RatingData } from '../lib/react-query/api/ratings';
 
 interface RatingInputProps {
 	packageId: string;
+	/**
+	 * Rating data already fetched alongside the package list/grid. When
+	 * provided, the per-card rating query is seeded and fires no request.
+	 */
+	preloadedRating?: RatingData;
 }
 
 const RatingInput: React.FC<RatingInputProps> = ({
 	packageId,
+	preloadedRating,
 }) => {
 	const { currentUser } = useAuth();
 
 	// React Query hooks
-	const { data: ratingData, isLoading } = usePackageRating(packageId);
+	const { data: ratingData, isLoading } = usePackageRating(packageId, preloadedRating);
 	const upsertRating = useUpsertRating();
 	const deleteRating = useDeleteRating();
 

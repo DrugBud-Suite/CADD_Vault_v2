@@ -1,5 +1,3 @@
-import { PackageWithNormalizedData } from '../../types';
-
 /**
  * Formats license string for display
  * @param license License identifier or name
@@ -33,11 +31,11 @@ export const truncateDescription = (
   suffix: string = '...'
 ): string => {
   if (description.length <= maxLength) return description;
-  
-  // Find last space before maxLength
+
   const truncated = description.substring(0, maxLength);
   const lastSpace = truncated.lastIndexOf(' ');
-  
+  if (lastSpace <= 0) return description;
+
   return truncated.substring(0, lastSpace) + suffix;
 };
 
@@ -63,26 +61,4 @@ export const formatTag = (tag: string): string => {
   
   // Otherwise, capitalize first letter
   return tag.charAt(0).toUpperCase() + tag.slice(1).toLowerCase();
-};
-
-/**
- * Converts tags array to string for editing
- * @param tags Array of tag strings
- * @returns Comma-separated tag string
- */
-export const tagsToString = (tags: string[]): string => {
-  return tags.join(', ');
-};
-
-/**
- * Gets appropriate icon based on package type or content
- * @param pkg Package object to analyze
- * @returns Icon identifier string
- */
-export const getPackageIcon = (pkg: PackageWithNormalizedData): string => {
-  // Logic to determine icon based on tags, URLs, etc.
-  if (pkg.tags?.includes('database')) return 'database';
-  if (pkg.tags?.includes('visualization')) return 'chart';
-  if (pkg.repo_link?.includes('github.com')) return 'github';
-  return 'package';
 };

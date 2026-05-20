@@ -1,10 +1,14 @@
 // src/pages/HomePage.tsx
-import React, { useEffect, lazy, Suspense } from 'react';
+import React, { useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useFilterStore } from '../store/filterStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuth } from '../context/AuthContext';
 import { useInfinitePackages } from '../hooks/queries/usePackages';
 import { useFilterMetadata } from '../hooks/queries/useMetadata';
+import { queryKeys } from '../lib/react-query/queryKeys';
+import { buildRatingData } from '../lib/react-query/api/ratings';
+import { CONTENT_HEIGHT } from '../constants/layout';
 import { PackageWithNormalizedData } from '../types';
 import {
 	Container, Box, Typography, CircularProgress, Alert, Select, MenuItem, IconButton,
@@ -18,8 +22,19 @@ const PackageList = lazy(() => import('../components/PackageList'));
 
 // Import VirtualGrid for card view virtualization
 import { VirtualGrid } from '../components/virtual/VirtualGrid';
+import ExportButton from '../components/ExportButton';
+
+// Static fallback shown while a lazy-loaded card/list resolves
+const suspenseFallback = (
+	<Box display="flex" justifyContent="center" py={4}>
+		<CircularProgress />
+	</Box>
+);
 
 const HomePage: React.FC = () => {
+	// --- Query client for invalidations ---
+	const queryClient = useQueryClient();
+
 	// --- Authentication context ---
 	const { currentUser } = useAuth();
 	const userId = currentUser?.id || null;
@@ -54,9 +69,10 @@ const HomePage: React.FC = () => {
 	})));
 
 	// --- React Query hooks for data fetching ---
-	const { data: metadata, isLoading: metadataLoading, error: metadataError } = useFilterMetadata();
+	const { isLoading: metadataLoading, error: metadataError } = useFilterMetadata();
 
-	const packageFilters = {
+	// Memoize package filters to prevent unnecessary query refetches
+	const packageFilters = useMemo(() => ({
 		searchTerm,
 		selectedTags,
 		minStars,
@@ -72,7 +88,19 @@ const HomePage: React.FC = () => {
 		sortDirection,
 		includeUserRatings: !!userId,
 		currentUserId: userId,
-	};
+	}), [
+		searchTerm, selectedTags, minStars, hasGithub, hasWebserver, hasPublication,
+		minCitations, minRating, folder, category, selectedLicenses, sortBy, sortDirection, userId
+	]);
+
+	// Effect to invalidate queries when filters change significantly
+	useEffect(() => {
+		// Remove previous infinite query results when filters change to prevent stale data
+		queryClient.removeQueries({ 
+			queryKey: queryKeys.packages.all(),
+			type: 'inactive' // Only remove inactive queries to prevent interrupting current fetch
+		});
+	}, [queryClient, searchTerm, selectedTags, folder, category, selectedLicenses]);
 
 	const { 
 		data: infiniteData, 
@@ -83,23 +111,23 @@ const HomePage: React.FC = () => {
 		isFetchingNextPage
 	} = useInfinitePackages(packageFilters);
 
-	// --- Update filter store with metadata when it loads ---
-	useEffect(() => {
-		if (metadata) {
-			useFilterStore.setState({
-				allAvailableTags: metadata.allAvailableTags,
-				allAvailableLicenses: metadata.allAvailableLicenses,
-				allAvailableFolders: metadata.allAvailableFolders,
-				allAvailableCategories: metadata.allAvailableCategories,
-				datasetMaxStars: metadata.datasetMaxStars,
-				datasetMaxCitations: metadata.datasetMaxCitations,
-			});
-		}
-	}, [metadata]);
-
 	// --- Derived state ---
-	// Flatten all pages from infinite query into a single array
-	const displayedPackagesInComponent = infiniteData?.pages.flatMap(page => page.packages) || [];
+	// Flatten all pages from the infinite query into a single, stable array.
+	// Memoizing keeps the reference stable so the virtualizer does not reset
+	// scroll position on unrelated HomePage re-renders.
+	const displayedPackagesInComponent = useMemo(
+		() => infiniteData?.pages.flatMap(page => page.packages) ?? [],
+		[infiniteData]
+	);
+	// Merge per-page userRatings maps so list/grid cards can be seeded with
+	// rating data instead of each firing its own per-card query.
+	const userRatingsMap = useMemo(() => {
+		const merged = new Map<string, { rating: number; rating_id: string }>();
+		infiniteData?.pages.forEach(page => {
+			page.userRatings?.forEach((value, key) => merged.set(key, value));
+		});
+		return merged;
+	}, [infiniteData]);
 	const totalFilteredCount = infiniteData?.pages[0]?.totalCount || 0;
 	const loading = metadataLoading || packagesLoading;
 	const error = metadataError || packagesError;
@@ -139,20 +167,13 @@ const HomePage: React.FC = () => {
 	// Always use virtualization for consistent performance
 
 	// Render item function for virtual grid
-	const renderCardItem = (pkg: PackageWithNormalizedData, _index: number, style: React.CSSProperties) => (
+	const renderCardItem = useCallback((pkg: PackageWithNormalizedData, _index: number, style: React.CSSProperties) => (
 		<Suspense fallback={suspenseFallback} key={pkg.id}>
 			<Box style={style}>
-				<PackageCard pkg={pkg} />
+				<PackageCard pkg={pkg} preloadedRating={buildRatingData(pkg, userRatingsMap)} />
 			</Box>
 		</Suspense>
-	);
-
-	// --- Render Logic ---
-	const suspenseFallback = (
-		<Box display="flex" justifyContent="center" py={4}>
-			<CircularProgress />
-		</Box>
-	);
+	), [userRatingsMap]);
 
 	// Page count no longer needed with always-on virtualization
 
@@ -214,6 +235,7 @@ const HomePage: React.FC = () => {
 						)}
 					</Box>
 				<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+					<ExportButton filters={packageFilters} totalCount={totalFilteredCount} />
 					<Typography variant="body2" sx={{ mr: 1, minWidth: 55, color: 'text.secondary' }}>Sort by:</Typography>
 					<FormControl size="small" variant="outlined" sx={{ minWidth: 150 }}>
 						<Select
@@ -222,6 +244,7 @@ const HomePage: React.FC = () => {
 							value={sortBy ?? ''}
 							displayEmpty
 							onChange={handleSortChange}
+							inputProps={{ 'aria-label': 'Sort by' }}
 							MenuProps={{
 								PaperProps: {
 									sx: { mt: 1, borderRadius: 2, minWidth: 180 }
@@ -277,7 +300,7 @@ const HomePage: React.FC = () => {
 						<VirtualGrid
 							items={displayedPackagesInComponent}
 							renderItem={renderCardItem}
-							height="100vh" // Adjust based on header height
+							height={CONTENT_HEIGHT}
 							width="100%"
 							gap={10} // Material-UI spacing={2}
 							overscan={2}
@@ -285,10 +308,11 @@ const HomePage: React.FC = () => {
 							onScroll={handleScroll}
 						/>
 					) : (
-						<PackageList 
-							packages={displayedPackagesInComponent} 
-								height="100vh"
+						<PackageList
+							packages={displayedPackagesInComponent}
+							height={CONTENT_HEIGHT}
 							onScroll={handleScroll}
+							userRatingsMap={userRatingsMap}
 						/>
 					)}
 				</Suspense>

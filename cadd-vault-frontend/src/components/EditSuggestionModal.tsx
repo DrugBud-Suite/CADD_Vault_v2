@@ -1,11 +1,13 @@
 // src/components/EditSuggestionModal.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { PackageSuggestionWithNormalizedData } from '../types';
+import { getErrorMessage } from '../utils/errorMessage';
 import {
 	Button, TextField,
 	CircularProgress, Grid, Autocomplete, Chip, Select, MenuItem, FormControl, InputLabel,
 	Box,
+	Typography,
 	alpha,
 	IconButton,
 } from '@mui/material';
@@ -14,7 +16,10 @@ import AddIcon from '@mui/icons-material/Add';
 import { SelectChangeEvent } from '@mui/material/Select';
 import { BaseModal } from './common/BaseModal';
 import { useValidation, urlValidators, genericValidators } from '../utils/validation';
-import { useFilterStore } from '../store/filterStore';
+import { useQueryClient } from '@tanstack/react-query';
+import { useFilterMetadata } from '../hooks/queries/useMetadata';
+import { queryKeys } from '../lib/react-query/queryKeys';
+import { FilterMetadata } from '../lib/react-query/api/metadata';
 import { useAuth } from '../context/AuthContext';
 
 interface EditSuggestionModalProps {
@@ -73,11 +78,14 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 	const { errors, validate, validateField, clearErrors } = useValidation(validationSchema);
 
-	const allAvailableTags = useFilterStore(state => state.allAvailableTags);
-	const allAvailableFolders = useFilterStore(state => state.allAvailableFolders);
-	const allAvailableCategoriesMap = useFilterStore(state => state.allAvailableCategories);
+	const queryClient = useQueryClient();
+	const { data: metadata } = useFilterMetadata();
+	const allAvailableTags = useMemo(() => metadata?.allAvailableTags ?? [], [metadata]);
+	const allAvailableFolders = useMemo(() => metadata?.allAvailableFolders ?? [], [metadata]);
+	const allAvailableCategoriesMap = useMemo(() => metadata?.allAvailableCategories ?? {}, [metadata]);
 
 	const [currentCategories, setCurrentCategories] = useState<string[]>([]);
+	const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
 
 	useEffect(() => {
 		if (suggestion) {
@@ -96,7 +104,10 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				admin_notes: isAdmin ? (suggestion.admin_notes || '') : undefined,
 			};
 
-			// Auto-suggest tags from description if no tags are present
+			setFormData(initialFormData);
+
+			// Compute tag suggestions from the description (opt-in: shown to the
+			// admin as a "Suggested tags" row below, never applied silently).
 			if ((!suggestion.tags || suggestion.tags.length === 0) && suggestion.description) {
 				const descriptionWords = suggestion.description
 					.toLowerCase()
@@ -106,16 +117,12 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 				const uniqueDescriptionWords = Array.from(new Set(descriptionWords));
 
-				const suggestedTagsFromDescription = uniqueDescriptionWords.filter(word =>
-					allAvailableTags.includes(word)
+				setSuggestedTags(
+					uniqueDescriptionWords.filter(word => allAvailableTags.includes(word))
 				);
-
-				if (suggestedTagsFromDescription.length > 0) {
-					initialFormData.tags = suggestedTagsFromDescription;
-				}
+			} else {
+				setSuggestedTags([]);
 			}
-
-			setFormData(initialFormData);
 
 			if (suggestion.folder && allAvailableCategoriesMap[suggestion.folder]) {
 				setCurrentCategories(allAvailableCategoriesMap[suggestion.folder]);
@@ -125,6 +132,7 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 		} else {
 			setFormData({});
 			setCurrentCategories([]);
+			setSuggestedTags([]);
 		}
 		setError(null);
 		setSuccessMessage(null);
@@ -164,6 +172,25 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 	const handleTagChange = (_event: React.SyntheticEvent, newValue: string[]) => {
 		setFormData(prev => ({ ...prev, tags: newValue }));
+	};
+
+	const addSuggestedTag = (tag: string) => {
+		setFormData(prev => ({
+			...prev,
+			tags: prev.tags?.includes(tag) ? prev.tags : [...(prev.tags || []), tag],
+		}));
+		setSuggestedTags(prev => prev.filter(t => t !== tag));
+	};
+
+	const addAllSuggestedTags = () => {
+		setFormData(prev => {
+			const existing = prev.tags || [];
+			return {
+				...prev,
+				tags: [...existing, ...suggestedTags.filter(t => !existing.includes(t))],
+			};
+		});
+		setSuggestedTags([]);
 	};
 
 	const handleSelectChange = (event: SelectChangeEvent<string>, fieldName: 'folder' | 'category') => {
@@ -256,9 +283,9 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			setSuccessMessage("Suggestion updated successfully!");
 			setLoading(false);
 			onSaveSuccess(); // Callback to refresh parent component's data
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Error in handleSubmit:", err);
-			setError(err.message || "Failed to update suggestion.");
+			setError(getErrorMessage(err, "Failed to update suggestion."));
 			setLoading(false);
 		}
 	};
@@ -312,11 +339,11 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 			if (folderCategoryError) throw folderCategoryError;
 
-			// Then approve using the database function
+			// Then approve using the database function. Reviewer id is
+			// derived from auth.uid() server-side; do not pass approved_by.
 			const { error: approveError } = await supabase
 				.rpc('approve_suggestion_with_normalized_data', {
-					suggestion_id: suggestion.id,
-					approved_by: currentUser.id
+					p_suggestion_id: suggestion.id
 				});
 
 			if (approveError) throw approveError;
@@ -328,9 +355,9 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				onSaveSuccess(); // Use the existing callback
 			}
 			onClose();
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Error in save and approve:", err);
-			setError(`Failed to save and approve: ${err.message}`);
+			setError(`Failed to save and approve: ${getErrorMessage(err)}`);
 		} finally {
 			setLoading(false);
 		}
@@ -367,15 +394,17 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 				return;
 			}
 
-			// Update local state
-			const updatedFolders = [...allAvailableFolders, newFolderName.trim()].sort();
-			useFilterStore.setState({
-				allAvailableFolders: updatedFolders,
-				allAvailableCategories: {
-				...allAvailableCategoriesMap,
-				[newFolderName.trim()]: []
-				}
-			});
+			// Optimistically update the metadata cache
+			const newFolder = newFolderName.trim();
+			queryClient.setQueryData<FilterMetadata>(queryKeys.metadata.all(), (old) =>
+				old
+					? {
+						...old,
+						allAvailableFolders: [...old.allAvailableFolders, newFolder].sort(),
+						allAvailableCategories: { ...old.allAvailableCategories, [newFolder]: [] },
+					}
+					: old
+			);
 
 			setFormData(prev => ({
 				...prev,
@@ -388,11 +417,11 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			setSuccessMessage(`Folder "${newFolderName.trim()}" created successfully.`);
 
 			// Refresh metadata
-			await useFilterStore.getState().refreshMetadata();
+			await queryClient.invalidateQueries({ queryKey: queryKeys.metadata.all() });
 
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Error creating folder:", err);
-			setError(`Failed to create folder: ${err.message}`);
+			setError(`Failed to create folder: ${getErrorMessage(err)}`);
 		} finally {
 			setFolderCreationLoading(false);
 		}
@@ -419,19 +448,24 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 
 			if (error) throw error;
 
-			// Update local state
-			const currentCats = allAvailableCategoriesMap[formData.folder] || [];
-			if (!currentCats.includes(newCategoryName.trim())) {
-			const updatedCategories = {
-				...allAvailableCategoriesMap,
-				[formData.folder]: [...currentCats, newCategoryName.trim()].sort()
-			};
-
-				useFilterStore.setState({
-					allAvailableCategories: updatedCategories
-				});
-
-				setCurrentCategories(updatedCategories[formData.folder]);
+			// Optimistically update the metadata cache
+			const folder = formData.folder;
+			const newCategory = newCategoryName.trim();
+			const currentCats = allAvailableCategoriesMap[folder] || [];
+			if (!currentCats.includes(newCategory)) {
+				const updatedCats = [...currentCats, newCategory].sort();
+				queryClient.setQueryData<FilterMetadata>(queryKeys.metadata.all(), (old) =>
+					old
+						? {
+							...old,
+							allAvailableCategories: {
+								...old.allAvailableCategories,
+								[folder]: updatedCats,
+							},
+						}
+						: old
+				);
+				setCurrentCategories(updatedCats);
 			}
 
 			setFormData(prev => ({
@@ -444,11 +478,11 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 			setSuccessMessage(`Category "${newCategoryName.trim()}" created successfully.`);
 
 			// Refresh metadata
-			await useFilterStore.getState().refreshMetadata();
+			await queryClient.invalidateQueries({ queryKey: queryKeys.metadata.all() });
 
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Error creating category:", err);
-			setError(`Failed to create category: ${err.message}`);
+			setError(`Failed to create category: ${getErrorMessage(err)}`);
 		} finally {
 			setCategoryCreationLoading(false);
 		}
@@ -677,6 +711,28 @@ const EditSuggestionModal: React.FC<EditSuggestionModalProps> = ({
 								)}
 							/>
 						</Grid>
+						{suggestedTags.length > 0 && (
+							<Grid item xs={12}>
+								<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+									<Typography variant="caption" color="text.secondary">
+										Suggested from description:
+									</Typography>
+									{suggestedTags.map((tag) => (
+										<Chip
+											key={tag}
+											label={tag}
+											size="small"
+											variant="outlined"
+											icon={<AddIcon />}
+											onClick={() => addSuggestedTag(tag)}
+										/>
+									))}
+									<Button size="small" onClick={addAllSuggestedTags}>
+										Add all
+									</Button>
+								</Box>
+							</Grid>
+						)}
 						<Grid item xs={12} sm={6}>
 							<FormControl fullWidth variant="outlined" size="small">
 								<InputLabel id="folder1-edit-label">Folder</InputLabel>

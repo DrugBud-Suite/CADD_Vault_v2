@@ -1,5 +1,5 @@
 import { supabase } from '../../../supabase';
-import { PackageWithNormalizedData } from '../../../types';
+import { Package, PackageWithNormalizedData } from '../../../types';
 
 export interface PackageFilters {
   searchTerm?: string;
@@ -27,8 +27,41 @@ export interface PackageQueryResult {
   userRatings?: Map<string, { rating: number; rating_id: string }>;
 }
 
+// Columns that may be passed to .order(). The UI restricts sortBy to these
+// values; this allowlist guards against a caller (store action, console)
+// passing an arbitrary column name through to PostgREST.
+const ALLOWED_SORT_COLUMNS = new Set([
+  'package_name',
+  'average_rating',
+  'ratings_count',
+  'github_stars',
+  'citations',
+  'last_commit',
+]);
+
+// Helper function to add timeout to async operations
+const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = 30000): Promise<T> => {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Query timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+};
+
 export const packageApi = {
   async getPackages(filters: PackageFilters = {}): Promise<PackageQueryResult> {
+    // Wrap the entire function with timeout
+    return withTimeout((async (): Promise<PackageQueryResult> => {
     const {
       searchTerm,
       selectedTags = [],
@@ -86,73 +119,76 @@ export const packageApi = {
       if (tagData && tagData.length > 0) {
         const tagIds = tagData.map(t => t.id);
 
-        // Get packages that have ALL selected tags
-        for (const tagId of tagIds) {
-          // Get package IDs that have this tag
-          const { data: packageIds } = await supabase
-            .from('package_tags')
-            .select('package_id')
-            .eq('tag_id', tagId);
+        // Find packages that have ALL selected tags using proper intersection logic
+        // Use database function or raw SQL for proper tag intersection
+        const { data: packageIdsWithAllTags, error: tagError } = await supabase.rpc(
+          'get_packages_with_all_tags',
+          { tag_ids: tagIds }
+        );
 
-          if (packageIds && packageIds.length > 0) {
-            const pkgIds = packageIds.map(p => p.package_id);
-            query = query.in('id', pkgIds);
+        if (tagError) {
+          console.warn('RPC function not available, falling back to client-side filtering:', tagError);
+          
+          // Fallback: Get all package-tag associations for selected tags
+          const { data: packageTagData } = await supabase
+            .from('package_tags')
+            .select('package_id, tag_id')
+            .in('tag_id', tagIds);
+
+          if (packageTagData && packageTagData.length > 0) {
+            // Client-side intersection logic
+            const packageTagCounts = packageTagData.reduce((acc, pt) => {
+              acc[pt.package_id] = (acc[pt.package_id] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>);
+
+            // Only include packages that have ALL selected tags
+            const packageIdsWithAllTagsArray = Object.entries(packageTagCounts)
+              .filter(([, count]) => count === tagIds.length)
+              .map(([packageId]) => packageId);
+
+            if (packageIdsWithAllTagsArray.length > 0) {
+              query = query.in('id', packageIdsWithAllTagsArray);
+            } else {
+              // No packages have all selected tags
+              return { packages: [], totalCount: 0 };
+            }
           } else {
-            // If any tag has no packages, return empty result
-            query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+            // No packages with any of the selected tags
+            return { packages: [], totalCount: 0 };
           }
+        } else if (packageIdsWithAllTags && packageIdsWithAllTags.length > 0) {
+          const packageIds = packageIdsWithAllTags.map(
+            (p: { package_id: string }) => p.package_id
+          );
+          query = query.in('id', packageIds);
+        } else {
+          // No packages have all selected tags
+          return { packages: [], totalCount: 0 };
         }
+      } else {
+        // Selected tags don't exist in database
+        return { packages: [], totalCount: 0 };
       }
     }
 
-    // Apply folder/category filters (SERVER-SIDE)
+    // Apply folder/category filters (SERVER-SIDE, single RPC call)
     if (folder || category) {
-      let folderCategoryQuery = supabase
-        .from('folder_categories')
-        .select('id');
+      const { data: fcPackages, error: fcError } = await supabase.rpc(
+        'get_package_ids_for_folder_category',
+        { p_folder: folder ?? null, p_category: category ?? null }
+      );
 
-      if (folder) {
-        const { data: folderData } = await supabase
-          .from('folders')
-          .select('id')
-          .eq('name', folder)
-          .single();
+      if (fcError) throw fcError;
 
-        if (folderData) {
-          folderCategoryQuery = folderCategoryQuery.eq('folder_id', folderData.id);
-        }
+      const fcPackageIds = (fcPackages ?? []).map(
+        (row: { package_id: string }) => row.package_id
+      );
+      if (fcPackageIds.length === 0) {
+        // No packages match the folder/category filter
+        return { packages: [], totalCount: 0 };
       }
-
-      if (category) {
-        const { data: categoryData } = await supabase
-          .from('categories')
-          .select('id')
-          .eq('name', category)
-          .single();
-
-        if (categoryData) {
-          folderCategoryQuery = folderCategoryQuery.eq('category_id', categoryData.id);
-        }
-      }
-
-      const { data: fcData } = await folderCategoryQuery;
-      if (fcData && fcData.length > 0) {
-        const fcIds = fcData.map(fc => fc.id);
-        
-        // Get package IDs that have these folder/category combinations
-        const { data: packageIds } = await supabase
-          .from('package_folder_categories')
-          .select('package_id')
-          .in('folder_category_id', fcIds);
-        
-        if (packageIds && packageIds.length > 0) {
-          const pkgIds = packageIds.map(p => p.package_id);
-          query = query.in('id', pkgIds);
-        } else {
-          // If no packages match the folder/category filter, return empty result
-          query = query.eq('id', '00000000-0000-0000-0000-000000000000');
-        }
-      }
+      query = query.in('id', fcPackageIds);
     }
 
     // Apply various filters
@@ -184,11 +220,12 @@ export const packageApi = {
       query = query.in('license', selectedLicenses);
     }
 
-    // Apply sorting
-    if (sortBy) {
+    // Apply sorting (with id tiebreaker for stable pagination across chunked fetches)
+    if (sortBy && ALLOWED_SORT_COLUMNS.has(sortBy)) {
       const direction = sortDirection === 'asc';
       query = query.order(sortBy, { ascending: direction });
     }
+    query = query.order('id', { ascending: true });
 
     // Apply pagination (AFTER all filters are applied)
     if (page && pageSize) {
@@ -215,7 +252,7 @@ export const packageApi = {
 
         if (ratingsData) {
           userRatings = new Map(
-            ratingsData.map((rating: any) => [
+            ratingsData.map((rating: { package_id: string; rating: number; id: string }) => [
               rating.package_id,
               { rating: rating.rating, rating_id: rating.id }
             ])
@@ -232,6 +269,49 @@ export const packageApi = {
       totalCount: count || 0,
       userRatings
     };
+    })(), 30000); // 30 second timeout
+  },
+
+  async getAllPackagesForExport(
+    filters: PackageFilters,
+    options: { chunkSize?: number; hardCap?: number } = {}
+  ): Promise<{ packages: PackageWithNormalizedData[]; totalCount: number; truncated: boolean }> {
+    const { chunkSize = 1000, hardCap = 10000 } = options;
+
+    const baseFilters: PackageFilters = {
+      ...filters,
+      includeUserRatings: false,
+      currentUserId: null,
+    };
+
+    const allPackages: PackageWithNormalizedData[] = [];
+    let totalCount = 0;
+    let page = 1;
+    let truncated = false;
+
+    while (allPackages.length < hardCap) {
+      const remaining = hardCap - allPackages.length;
+      const pageSize = Math.min(chunkSize, remaining);
+
+      const result = await packageApi.getPackages({
+        ...baseFilters,
+        page,
+        pageSize,
+      });
+
+      if (page === 1) totalCount = result.totalCount;
+
+      allPackages.push(...result.packages);
+
+      if (result.packages.length < pageSize) break;
+      if (allPackages.length >= totalCount) break;
+
+      page++;
+    }
+
+    if (totalCount > hardCap) truncated = true;
+
+    return { packages: allPackages, totalCount, truncated };
   },
 
   async getPackageById(id: string): Promise<PackageWithNormalizedData> {
@@ -328,12 +408,24 @@ export const packageApi = {
   },
 };
 
+// Raw `packages` row shape as returned by the Supabase joins in this module
+// (covers both the getPackages and getPackageById select shapes).
+interface RawPackageRow extends Package {
+  package_tags?: ({ tags?: { name?: string } | null } | null)[] | null;
+  package_folder_categories?: ({
+    folder_categories?: {
+      folders?: { name?: string } | null;
+      categories?: { name?: string } | null;
+    } | null;
+  } | null)[] | null;
+}
+
 // Helper function to transform nested data
-function transformPackageData(data: any): PackageWithNormalizedData {
+function transformPackageData(data: RawPackageRow): PackageWithNormalizedData {
   return {
     ...data,
     folder: data.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
     category: data.package_folder_categories?.[0]?.folder_categories?.categories?.name || '',
-    tags: data.package_tags?.map((pt: any) => pt.tags?.name).filter(Boolean) as string[] || [],
+    tags: data.package_tags?.map((pt) => pt?.tags?.name).filter(Boolean) as string[] || [],
   };
 }

@@ -1,5 +1,5 @@
 // src/components/PackageListItem.tsx
-import React, { memo, useState, useEffect, useRef } from 'react';
+import React, { memo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
 	ListItem,
@@ -16,32 +16,17 @@ import { alpha } from '@mui/material/styles';
 import { PackageWithNormalizedData } from '../types';
 import { useFilterStore } from '../store/filterStore';
 import RatingInput from './RatingInput';
+import { RatingData } from '../lib/react-query/api/ratings';
 import PackageActions from './common/PackageActions';
 import PackageMetrics from './common/PackageMetrics';
 
 interface PackageListItemProps {
 	pkg: PackageWithNormalizedData;
+	preloadedRating?: RatingData;
 }
 
-const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
+const PackageListItem = memo(({ pkg, preloadedRating }: PackageListItemProps) => {
 	const addTag = useFilterStore((state) => state.addTag);
-
-	// Local state for rating data
-	const [localPkg, setLocalPkg] = useState<PackageWithNormalizedData>(pkg);
-	const mountedRef = useRef(true);
-
-	// Update local package data when props change
-	useEffect(() => {
-		setLocalPkg(pkg);
-	}, [pkg]);
-
-
-	// Cleanup on unmount
-	useEffect(() => {
-		return () => {
-			mountedRef.current = false;
-		};
-	}, []);
 
 	const handleTagClick = (event: React.MouseEvent, tag: string) => {
 		event.stopPropagation(); // Prevent ListItem's own click if it has one
@@ -94,7 +79,7 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 					primary={
 						<Link
 							component={RouterLink}
-							to={`/package/${encodeURIComponent(localPkg.id)}`}
+							to={`/package/${encodeURIComponent(pkg.id)}`}
 							underline="none"
 							sx={{
 								fontWeight: 600,
@@ -127,15 +112,15 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 								},
 							}}
 						>
-							{localPkg.package_name}
+							{pkg.package_name}
 						</Link>
 					}
 					sx={{ mt: 0, mb: 1 }}
 				/>
 
 				<Box sx={{ height: 36, mb: 1 }}>
-					{localPkg.description && (
-						<Tooltip title={localPkg.description}>
+					{pkg.description && (
+						<Tooltip title={pkg.description}>
 							<Typography
 								variant="body2"
 								color="text.secondary"
@@ -149,14 +134,14 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 									height: '100%',
 								}}
 							>
-								{localPkg.description}
+								{pkg.description}
 							</Typography>
 						</Tooltip>
 					)}
 				</Box>
 
 				<Box sx={{ height: 24, overflow: 'hidden' }}>
-					{localPkg.tags && localPkg.tags.length > 0 && (
+					{pkg.tags && pkg.tags.length > 0 && (
 						<Stack
 							direction="row"
 							spacing={0.5}
@@ -173,7 +158,7 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 								},
 							}}
 						>
-							{localPkg.tags.map((tag: string) => (
+							{pkg.tags.map((tag: string) => (
 								<Chip
 									key={tag}
 									label={tag}
@@ -212,13 +197,14 @@ const PackageListItem = memo(({ pkg }: PackageListItemProps) => {
 				justifyContent: 'space-between'
 			}}>
 				<RatingInput
-					packageId={localPkg.id}
+					packageId={pkg.id}
+					preloadedRating={preloadedRating}
 				/>
 				{/* Replaced with PackageActions component */}
-				<PackageActions pkg={localPkg} spacing={0.5} />
+				<PackageActions pkg={pkg} spacing={0.5} />
 
 				{/* Replaced with PackageMetrics component */}
-				<PackageMetrics pkg={localPkg} variant="list" spacing={1} />
+				<PackageMetrics pkg={pkg} variant="list" spacing={1} />
 			</Stack>
 		</ListItem>
 	);

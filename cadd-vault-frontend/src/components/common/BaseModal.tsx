@@ -42,23 +42,27 @@ export const BaseModal: React.FC<BaseModalProps> = ({
   showCloseButton = true,
   disableBackdropClick = false,
 }) => {
-  const handleClose = (_event: {}, reason: 'backdropClick' | 'escapeKeyDown') => {
+  const handleClose = (_event: Record<string, never>, reason: 'backdropClick' | 'escapeKeyDown') => {
     if (reason === 'backdropClick' && disableBackdropClick) {
       return;
     }
     onClose();
   };
 
+  const titleId = React.useId();
+
   return (
-    <Modal open={open} onClose={handleClose}>
+    <Modal open={open} onClose={handleClose} aria-labelledby={titleId}>
       <Paper
+        role="dialog"
+        aria-labelledby={titleId}
         sx={{
           position: 'absolute',
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
           width: fullWidth ? '90%' : 'auto',
-          maxWidth: maxWidth === 'xs' ? 400 : 
+          maxWidth: maxWidth === 'xs' ? 400 :
                     maxWidth === 'sm' ? 600 :
                     maxWidth === 'md' ? 900 :
                     maxWidth === 'lg' ? 1200 : 1536,
@@ -73,7 +77,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
         <Box sx={{ p: 3, pb: 2 }}>
           <Box display="flex" alignItems="center" justifyContent="space-between">
             <Box>
-              <Typography variant="h5" component="h2" fontWeight="bold">
+              <Typography id={titleId} variant="h5" component="h2" fontWeight="bold">
                 {title}
               </Typography>
               {subtitle && (
@@ -83,7 +87,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
               )}
             </Box>
             {showCloseButton && (
-              <IconButton onClick={onClose} size="small" disabled={loading}>
+              <IconButton onClick={onClose} size="small" disabled={loading} aria-label="close">
                 <CloseIcon />
               </IconButton>
             )}
@@ -95,12 +99,12 @@ export const BaseModal: React.FC<BaseModalProps> = ({
         {/* Content */}
         <Box sx={{ p: 3, overflowY: 'auto', flexGrow: 1 }}>
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }} onClose={() => {}}>
+            <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
           )}
           {success && (
-            <Alert severity="success" sx={{ mb: 2 }} onClose={() => {}}>
+            <Alert severity="success" sx={{ mb: 2 }}>
               {success}
             </Alert>
           )}

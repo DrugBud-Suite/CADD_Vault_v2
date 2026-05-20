@@ -96,7 +96,7 @@ export default function Header() {
 	};
 
 	const userTooltipTitle = currentUser
-		? `User ID: ${currentUser.id || 'N/A'}, Email: ${currentUser.email}`
+		? `Account: ${currentUser.email}`
 		: "User Menu";
 
 
@@ -198,9 +198,10 @@ export default function Header() {
 							fullWidth
 							variant="outlined"
 							size="small"
-							placeholder="Search..."
+							placeholder="Search by name, description, or tags..."
 							value={inputValue}
 							onChange={handleInputChange}
+							inputProps={{ 'aria-label': 'Search packages' }}
 							InputProps={{
 								startAdornment: (
 									<SearchIcon sx={{ mr: 1, color: 'action.active' }} />
@@ -329,7 +330,7 @@ export default function Header() {
 							>
 								<Box sx={{ px: 2, py: 1.5 }}>
 									<Typography variant="subtitle1" fontWeight="bold">
-										{(currentUser as any).displayName || currentUser.email?.split('@')[0] || 'User'}
+										{(currentUser.user_metadata?.['display_name'] as string | undefined) || currentUser.email?.split('@')[0] || 'User'}
 									</Typography>
 									<Typography variant="caption" color="text.secondary">
 										{currentUser.email}

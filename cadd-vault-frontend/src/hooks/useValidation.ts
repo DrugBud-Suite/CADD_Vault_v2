@@ -14,7 +14,7 @@ export const useValidation = (schema: FormValidationSchema) => {
    * @param data Form data object to validate
    * @returns Boolean indicating if the form is valid
    */
-  const validate = useCallback((data: Record<string, any>) => {
+  const validate = useCallback((data: Record<string, unknown>) => {
     const result = validateForm(data, schema);
     setErrors(result.errors);
     return result.isValid;
@@ -26,7 +26,7 @@ export const useValidation = (schema: FormValidationSchema) => {
    * @param value Value of the field to validate
    * @returns Boolean indicating if the field is valid
    */
-  const validateField = useCallback((fieldName: string, value: any) => {
+  const validateField = useCallback((fieldName: string, value: unknown) => {
     const fieldSchema = { [fieldName]: schema[fieldName] };
     const result = validateForm({ [fieldName]: value }, fieldSchema);
     

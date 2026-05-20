@@ -28,13 +28,6 @@ export interface Package {
 	last_updated?: string; // ISO timestamp of when the package was last updated
 }
 
-// Enhanced package query result that includes user rating map
-export interface PackageQueryResult {
-	packages: Package[];
-	totalCount: number;
-	userRatings?: Map<string, { rating: number; rating_id: string }>;
-}
-
 // Interface for individual user ratings (Supabase schema)
 export interface Rating {
 	id: string; // Supabase UUID

@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../supabase'; // Import Supabase client
 import { Session, User, AuthError, SignUpWithPasswordCredentials } from '@supabase/supabase-js'; // Import Supabase types
+import { getErrorMessage } from '../utils/errorMessage';
 
 // Re-defining EmailSignUpCredentials as it was in the original file,
 // Supabase's SignUpWithPasswordCredentials might not directly match if custom options were expected.
@@ -76,8 +77,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 			setIsAdmin(adminStatus); // Update state
 			return adminStatus;
 
-		} catch (e: any) {
-			console.error("Exception calling is_current_user_admin RPC:", e.message);
+		} catch (e: unknown) {
+			console.error("Exception calling is_current_user_admin RPC:", getErrorMessage(e));
 			setIsAdmin(false); // Set to false on exception
 			return false;
 		}

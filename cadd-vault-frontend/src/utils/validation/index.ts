@@ -10,7 +10,7 @@ export * from './validators';
  * @returns ValidationResult with isValid flag and errors object
  */
 export const validateForm = (
-  data: Record<string, any>,
+  data: Record<string, unknown>,
   schema: FormValidationSchema
 ): ValidationResult => {
   const errors: Record<string, string> = {};
@@ -49,13 +49,13 @@ import { useState, useCallback } from 'react';
 export const useValidation = (schema: FormValidationSchema) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const validate = useCallback((data: Record<string, any>): boolean => {
+  const validate = useCallback((data: Record<string, unknown>): boolean => {
     const result = validateForm(data, schema);
     setErrors(result.errors);
     return result.isValid;
   }, [schema]);
 
-  const validateField = useCallback((fieldName: string, value: any): boolean => {
+  const validateField = useCallback((fieldName: string, value: unknown): boolean => {
     const fieldSchema = schema[fieldName];
     if (!fieldSchema) return true;
 

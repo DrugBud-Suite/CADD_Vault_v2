@@ -4,7 +4,7 @@ import { queryKeys } from '../../lib/react-query/queryKeys';
 import { ratingsApi, RatingData } from '../../lib/react-query/api/ratings';
 import { useAuth } from '../../context/AuthContext';
 
-export function usePackageRating(packageId: string) {
+export function usePackageRating(packageId: string, initialData?: RatingData) {
   const { currentUser } = useAuth();
 
   return useQuery({
@@ -12,6 +12,9 @@ export function usePackageRating(packageId: string) {
     queryFn: () => ratingsApi.getPackageRating(packageId, currentUser?.id),
     enabled: !!packageId,
     staleTime: 1000 * 60 * 2, // 2 minutes - ratings can change frequently
+    // When list/grid views pass rating data already fetched with the package
+    // page, seed the cache so no per-card network request fires on mount.
+    initialData,
   });
 }
 

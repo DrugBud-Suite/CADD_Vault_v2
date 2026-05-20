@@ -6,6 +6,7 @@ import Header from './Header';
 import FilterSidebar from './FilterSidebar';
 import TableOfContentsSidebar from './TableOfContentsSidebar';
 import { useFilterStore } from '../store/filterStore';
+import { HEADER_HEIGHT, CONTENT_HEIGHT } from '../constants/layout';
 
 // Define sidebar widths as constants for easier management
 const filterSidebarWidth = 250;
@@ -20,21 +21,26 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
 	const isNavSidebarVisible = useFilterStore((state) => state.isNavSidebarVisible);
 	const toggleFilterSidebar = useFilterStore((state) => state.toggleFilterSidebar);
 	const toggleNavSidebar = useFilterStore((state) => state.toggleNavSidebar);
+	const setFilterSidebarVisible = useFilterStore((state) => state.setFilterSidebarVisible);
+	const setNavSidebarVisible = useFilterStore((state) => state.setNavSidebarVisible);
 
 	const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
 
+	// Collapse both sidebars when the viewport becomes small. Uses explicit
+	// setters (not toggles) so the result is deterministic regardless of
+	// current sidebar state.
 	useEffect(() => {
 		if (isSmallScreen) {
-			toggleFilterSidebar();
-			toggleNavSidebar();
+			setFilterSidebarVisible(false);
+			setNavSidebarVisible(false);
 		}
-	}, [isSmallScreen, toggleFilterSidebar, toggleNavSidebar]);
+	}, [isSmallScreen, setFilterSidebarVisible, setNavSidebarVisible]);
 
 	// Common drawer paper styles
 	const drawerPaperStyles = {
 		boxSizing: 'border-box',
-		top: '64px',
-		height: 'calc(100vh - 64px)',
+		top: `${HEADER_HEIGHT}px`,
+		height: CONTENT_HEIGHT,
 		backdropFilter: 'blur(8px)',
 		background: theme.palette.mode === 'dark'
 			? 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(23,23,23,0.95) 100%)'
@@ -86,7 +92,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
 									? `calc(100% - ${navSidebarWidth}px)`
 									: '100%',
 					flexGrow: 1,
-					pt: '64px',
+					pt: `${HEADER_HEIGHT}px`,
 					height: '100vh',
 					boxSizing: 'border-box',
 					display: 'flex',

@@ -6,6 +6,7 @@ import {
 import { alpha } from '@mui/material/styles';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { useFilterStore } from '../store/filterStore';
+import { useFilterMetadata } from '../hooks/queries/useMetadata';
 import { useShallow } from 'zustand/react/shallow'; // Import useShallow
 import { debounce } from 'lodash-es';
 
@@ -18,11 +19,7 @@ const FilterSidebar: React.FC = () => {
 		minCitations,
 		minRating,
 		selectedTags,
-		allAvailableTags,
 		selectedLicenses,
-		allAvailableLicenses,
-		datasetMaxStars,
-		datasetMaxCitations,
 		setHasGithub,
 		setHasWebserver,
 		setHasPublication,
@@ -40,11 +37,7 @@ const FilterSidebar: React.FC = () => {
 		minCitations: state.minCitations,
 		minRating: state.minRating,
 		selectedTags: state.selectedTags,
-		allAvailableTags: state.allAvailableTags,
 		selectedLicenses: state.selectedLicenses,
-		allAvailableLicenses: state.allAvailableLicenses,
-		datasetMaxStars: state.datasetMaxStars,
-		datasetMaxCitations: state.datasetMaxCitations,
 		setHasGithub: state.setHasGithub,
 		setHasWebserver: state.setHasWebserver,
 		setHasPublication: state.setHasPublication,
@@ -55,6 +48,13 @@ const FilterSidebar: React.FC = () => {
 		setSelectedLicenses: state.setSelectedLicenses,
 		resetFilters: state.resetFilters,
 	})));
+
+	// Server-derived filter metadata (tags, licenses, dataset maxima)
+	const { data: metadata } = useFilterMetadata();
+	const allAvailableTags = metadata?.allAvailableTags ?? [];
+	const allAvailableLicenses = metadata?.allAvailableLicenses ?? [];
+	const datasetMaxStars = metadata?.datasetMaxStars;
+	const datasetMaxCitations = metadata?.datasetMaxCitations;
 
 	// Local state for slider values to provide immediate UI feedback
 	const [localMinStars, setLocalMinStars] = useState<number | null>(minStars);

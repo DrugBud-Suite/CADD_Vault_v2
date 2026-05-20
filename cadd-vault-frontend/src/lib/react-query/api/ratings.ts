@@ -1,4 +1,5 @@
 import { supabase } from '../../../supabase';
+import { Package } from '../../../types';
 
 export interface RatingData {
   average_rating: number;
@@ -6,6 +7,25 @@ export interface RatingData {
   user_rating?: number;
   rating_id?: string;
 }
+
+/**
+ * Build a RatingData object from an already-fetched package row plus the
+ * userRatings map returned by `packageApi.getPackages`. Used to seed
+ * `usePackageRating` with `initialData` so list/grid views do not fire one
+ * network request per visible card.
+ */
+export const buildRatingData = (
+  pkg: Pick<Package, 'id' | 'average_rating' | 'ratings_count'>,
+  userRatings?: Map<string, { rating: number; rating_id: string }>,
+): RatingData => {
+  const own = userRatings?.get(pkg.id);
+  return {
+    average_rating: pkg.average_rating ?? 0,
+    ratings_count: pkg.ratings_count ?? 0,
+    user_rating: own?.rating,
+    rating_id: own?.rating_id,
+  };
+};
 
 export const ratingsApi = {
   async getPackageRating(packageId: string, userId?: string): Promise<RatingData> {

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { ThemeProvider as MuiThemeProvider, CssBaseline } from '@mui/material'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { ThemeProvider, useTheme } from './components/ThemeContext'
 import { AuthProvider } from './context/AuthContext';
@@ -17,6 +18,7 @@ function AppWrapper() {
 		<MuiThemeProvider theme={theme}>
 			<CssBaseline /> {/* Apply baseline styles */}
 			<App />
+			<Toaster position="top-right" toastOptions={{ duration: 4000 }} />
 		</MuiThemeProvider>
 	);
 }

@@ -3,6 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase'; // Import Supabase client
 import { useAuth } from '../context/AuthContext';
 import { PackageWithNormalizedData } from '../types';
+import { getErrorMessage } from '../utils/errorMessage';
+
+interface EditPackageTagRow { tags: { name: string } | null; }
+interface EditFolderCategoryRow {
+	categories: { name: string } | null;
+	folders: { name: string } | null;
+}
 import {
 	Box,
 	Typography,
@@ -68,7 +75,7 @@ const EditPackagePage: React.FC = () => {
 				// Transform the data with null safety
 				const packageData = {
 					...data,
-					tags: data.package_tags?.map((pt: any) => pt.tags?.name).filter(Boolean) || [],
+					tags: (data.package_tags as EditPackageTagRow[] | undefined)?.map((pt) => pt.tags?.name).filter((n): n is string => n != null) || [],
 					folder: data.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
 					category: data.package_folder_categories?.[0]?.folder_categories?.categories?.name || ''
 				};
@@ -76,9 +83,9 @@ const EditPackagePage: React.FC = () => {
 				setFormData(packageData);
 				setInitialDataLoaded(true);
 			}
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Error fetching package:", err);
-			setError(`Failed to load package data: ${err.message}`);
+			setError(`Failed to load package data: ${getErrorMessage(err)}`);
 		} finally {
 			setLoading(false);
 		}
@@ -111,7 +118,7 @@ const EditPackagePage: React.FC = () => {
 				if (error) throw error;
 
 				setExistingTags(data?.map(t => t.name) || []);
-			} catch (error: any) {
+			} catch (error: unknown) {
 				console.error("Error fetching tags:", error);
 			} finally {
 				setTagsLoading(false);
@@ -148,9 +155,9 @@ const EditPackagePage: React.FC = () => {
 						.eq('folders.name', formData.folder);
 
 					if (categoriesError) throw categoriesError;
-					setAvailableCategories(categoriesData?.map((fc: any) => fc.categories.name) || []);
+					setAvailableCategories((categoriesData as unknown as EditFolderCategoryRow[] | null)?.map((fc) => fc.categories?.name).filter((n): n is string => n != null) || []);
 				}
-			} catch (error: any) {
+			} catch (error: unknown) {
 				console.error("Error fetching folders/categories:", error);
 			}
 		};
@@ -238,9 +245,9 @@ const EditPackagePage: React.FC = () => {
 			if (fcError) console.error('Error updating folder/category:', fcError);
 
 			navigate(`/package/${encodeURIComponent(packageId)}`);
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error('Error updating package:', err);
-			setError(`Failed to update package: ${err.message}`);
+			setError(`Failed to update package: ${getErrorMessage(err)}`);
 		} finally {
 			setLoading(false);
 		}

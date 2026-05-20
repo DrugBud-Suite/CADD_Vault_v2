@@ -55,7 +55,7 @@ export async function ensureValidSession() {
       
       // If token expires in less than 5 minutes, refresh it
       if (expiresIn < 5 * 60 * 1000) {
-        console.log('Token expiring soon, refreshing...');
+        if (import.meta.env.DEV) console.log('Token expiring soon, refreshing...');
         const { data, error: refreshError } = await supabase.auth.refreshSession();
         
         if (refreshError) {

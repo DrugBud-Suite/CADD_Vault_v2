@@ -5,10 +5,13 @@ import { Box, Typography, Grid, Paper, Button, CircularProgress, Link, Chip, use
 import { alpha } from '@mui/material/styles';
 import { supabase } from '../supabase';
 import { PackageWithNormalizedData } from '../types';
+import { getErrorMessage } from '../utils/errorMessage';
 import { Gavel, MenuBook, Edit, Code as CodeIcon, Article, Language, Link as LinkIcon, Delete, FolderOutlined, CategoryOutlined } from '@mui/icons-material';
 import { FiStar, FiClock, FiBookOpen } from 'react-icons/fi';
 import RatingInput from '../components/RatingInput';
 import { useAuth } from '../context/AuthContext';
+
+interface PackageTagRow { tags: { name: string } | null; }
 
 const buttonStyle = {
 	borderRadius: 4,
@@ -133,9 +136,9 @@ const PackageDetailPage: React.FC = () => {
 			}
 			setOpenDeleteConfirm(false);
 			navigate('/'); // Navigate to homepage after deletion
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Error deleting package:", err);
-			setError(`Failed to delete package: ${err?.message || 'Unknown error'}`);
+			setError(`Failed to delete package: ${getErrorMessage(err)}`);
 			setOpenDeleteConfirm(false);
 		}
 	};
@@ -208,7 +211,7 @@ const PackageDetailPage: React.FC = () => {
 					// Transform the data
 					const transformedPackage = {
 						...packageData,
-						tags: packageData.package_tags?.map((pt: any) => pt.tags?.name) || [],
+						tags: (packageData.package_tags as PackageTagRow[] | undefined)?.map((pt) => pt.tags?.name).filter((n): n is string => n != null) || [],
 						folder: packageData.package_folder_categories?.[0]?.folder_categories?.folders?.name || '',
 						category: packageData.package_folder_categories?.[0]?.folder_categories?.categories?.name || ''
 					};
@@ -226,9 +229,9 @@ const PackageDetailPage: React.FC = () => {
 
 					setPackageData(transformedPackage);
 				}
-			} catch (err: any) {
+			} catch (err: unknown) {
 				console.error("Error fetching package:", err);
-				setError(`Failed to fetch package data: ${err.message}`);
+				setError(`Failed to fetch package data: ${getErrorMessage(err)}`);
 			} finally {
 				setLoading(false);
 			}

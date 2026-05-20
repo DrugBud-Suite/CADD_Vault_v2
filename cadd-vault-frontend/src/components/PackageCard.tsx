@@ -1,5 +1,5 @@
 // src/components/PackageCard.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
 	Card,
@@ -21,33 +21,18 @@ import { FiTag } from 'react-icons/fi';
 import { PackageWithNormalizedData } from '../types';
 import { useFilterStore } from '../store/filterStore';
 import RatingInput from './RatingInput';
+import { RatingData } from '../lib/react-query/api/ratings';
 import PackageActions from './common/PackageActions';
 import PackageMetrics from './common/PackageMetrics';
 
 interface PackageCardProps {
 	pkg: PackageWithNormalizedData;
+	preloadedRating?: RatingData;
 }
 
-const PackageCardComponent = ({ pkg }: PackageCardProps) => {
+const PackageCardComponent = ({ pkg, preloadedRating }: PackageCardProps) => {
 	const addTag = useFilterStore((state) => state.addTag);
 	const [tagsPopoverAnchor, setTagsPopoverAnchor] = useState<HTMLButtonElement | null>(null);
-
-	// Local state for rating data
-	const [localPkg, setLocalPkg] = useState<PackageWithNormalizedData>(pkg);
-	const mountedRef = useRef(true);
-
-	// Update local package data when props change
-	useEffect(() => {
-		setLocalPkg(pkg);
-	}, [pkg]);
-
-
-	// Cleanup on unmount
-	useEffect(() => {
-		return () => {
-			mountedRef.current = false;
-		};
-	}, []);
 
 	const handleTagClick = (tag: string) => {
 		addTag(tag);
@@ -105,7 +90,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 					>
 						<Link
 							component={RouterLink}
-							to={`/package/${encodeURIComponent(localPkg.id)}`}
+							to={`/package/${encodeURIComponent(pkg.id)}`}
 							underline="none"
 							sx={{
 								position: 'relative',
@@ -133,19 +118,20 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 								}
 							}}
 						>
-							{localPkg.package_name}
+							{pkg.package_name}
 						</Link>
 					</Typography>
 
 					{/* Rating in top right */}
 					<Box sx={{ flexShrink: 0 }}>
 						<RatingInput
-							packageId={localPkg.id}
+							packageId={pkg.id}
+							preloadedRating={preloadedRating}
 						/>
 					</Box>
 				</Box>
 
-				<Tooltip title={localPkg.description}>
+				<Tooltip title={pkg.description}>
 					<Typography
 						variant="body2"
 						color="text.secondary"
@@ -159,7 +145,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 							lineHeight: 1.5,
 						}}
 					>
-						{localPkg.description}
+						{pkg.description}
 					</Typography>
 				</Tooltip>
 
@@ -168,17 +154,17 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 
 				{/* Links Row - Replaced with PackageActions component */}
 				<Box sx={{ pt: 1 }}>
-					<PackageActions pkg={localPkg} />
+					<PackageActions pkg={pkg} />
 				</Box>
 
 				{/* Info Chips Row - Replaced with PackageMetrics component */}
 				<Box sx={{ pt: 1 }}>
-					<PackageMetrics pkg={localPkg} variant="card" />
+					<PackageMetrics pkg={pkg} variant="card" />
 				</Box>
 			</CardContent>
 
 			{/* Tags Section - with consistent height and "See All Tags" button */}
-			{localPkg.tags && localPkg.tags.length > 0 && (
+			{pkg.tags && pkg.tags.length > 0 && (
 				<>
 					<Divider sx={{ mx: 0 }} />
 					<CardContent
@@ -209,7 +195,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 									pr: 1
 								}}
 							>
-								{localPkg.tags.map((tag: string) => (
+								{pkg.tags.map((tag: string) => (
 									<Chip
 										key={tag}
 										label={tag}
@@ -281,7 +267,7 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 								All Tags
 							</Typography>
 							<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-								{localPkg.tags.map((tag: string) => (
+								{pkg.tags.map((tag: string) => (
 									<Chip
 										key={tag}
 										label={tag}
@@ -318,4 +304,4 @@ const PackageCardComponent = ({ pkg }: PackageCardProps) => {
 	);
 };
 
-export default PackageCardComponent;
+export default React.memo(PackageCardComponent);

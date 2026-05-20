@@ -52,20 +52,10 @@ export function useVirtualization<T>({
     [virtualizer]
   );
 
-  const measureItem = useCallback(
-    (index: number) => {
-      // This function is kept for compatibility but React Virtual
-      // handles measuring automatically with the ref on virtual items
-      console.debug('measureItem called for index:', index);
-    },
-    []
-  );
-
   return {
     parentRef,
     virtualizer,
     scrollToIndex,
-    measureItem,
     virtualItems: virtualizer.getVirtualItems(),
     totalSize: virtualizer.getTotalSize(),
   };

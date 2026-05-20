@@ -1,7 +1,9 @@
 // src/components/TableOfContentsSidebar.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 // Removed supabase import as data will come from the store
 import { useFilterStore } from '../store/filterStore'; // Assuming Package type is not directly needed here anymore
+import { useFilterMetadata } from '../hooks/queries/useMetadata';
+import { getErrorMessage } from '../utils/errorMessage';
 import {
 	List, ListItem, ListItemText, Collapse, IconButton, Box, Typography, CircularProgress
 } from '@mui/material';
@@ -46,8 +48,9 @@ const TreeBranch = ({ isOpen, isLast = false }: { isOpen: boolean; isLast?: bool
 
 const TableOfContentsSidebar: React.FC = () => {
 	// Use data from the filter store
-	const allAvailableFolders = useFilterStore((state) => state.allAvailableFolders);
-	const allAvailableCategoriesMap = useFilterStore((state) => state.allAvailableCategories);
+	const { data: metadata } = useFilterMetadata();
+	const allAvailableFolders = useMemo(() => metadata?.allAvailableFolders ?? [], [metadata]);
+	const allAvailableCategoriesMap = useMemo(() => metadata?.allAvailableCategories ?? {}, [metadata]);
 	const setFolderFilter = useFilterStore((state) => state.setFolder);
 	const setCategoryFilter = useFilterStore((state) => state.setCategory);
 	const selectedFolder = useFilterStore((state) => state.folder);
@@ -73,8 +76,8 @@ const TableOfContentsSidebar: React.FC = () => {
 				// and allAvailableFolders is a sorted list of folders.
 				setTocData(allAvailableCategoriesMap);
 				setLoading(false);
-			} catch (err: any) {
-				console.error("Error processing TOC data from store:", err.message);
+			} catch (err: unknown) {
+				console.error("Error processing TOC data from store:", getErrorMessage(err));
 				setError("Failed to load navigation data from store.");
 				setLoading(false);
 			}

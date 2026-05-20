@@ -45,6 +45,8 @@ import {
 	Article as ArticleIcon,
 } from '@mui/icons-material';
 import { supabase, ensureValidSession } from '../supabase';
+import { withSessionRetry } from '../lib/supabaseRetry';
+import { getErrorMessage } from '../utils/errorMessage';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { PackageSuggestionWithNormalizedData } from '../types';
@@ -65,64 +67,13 @@ interface ExtendedPackageSuggestion extends PackageSuggestionWithNormalizedData 
 	package_id?: string | null;
 }
 
-// Add the session retry wrapper
-async function withSessionRetry<T>(
-	operation: () => Promise<{ data: T | null; error: any }>,
-	options: { maxRetries?: number; onRetry?: () => void } = {}
-): Promise<{ data: T | null; error: any }> {
-	const { maxRetries = 1, onRetry } = options;
-	let lastError: any = null;
-
-	for (let attempt = 0; attempt <= maxRetries; attempt++) {
-		try {
-			const result = await operation();
-
-			// Check if the error is auth-related
-			if (result.error &&
-				(result.error.message?.includes('JWT') ||
-					result.error.message?.includes('token') ||
-					result.error.code === 'PGRST301' ||
-					result.error.code === '401')) {
-
-				if (attempt < maxRetries) {
-					console.log('Auth error detected, refreshing session...');
-					onRetry?.();
-
-					// Try to refresh the session
-					const { error: refreshError } = await supabase.auth.refreshSession();
-
-					if (refreshError) {
-						console.error('Failed to refresh session:', refreshError);
-						lastError = refreshError;
-						continue;
-					}
-
-					// Wait a bit before retrying
-					await new Promise(resolve => setTimeout(resolve, 100));
-					continue;
-				}
-			}
-
-			return result;
-		} catch (error) {
-			lastError = error;
-			if (attempt < maxRetries) {
-				console.log(`Operation failed, retrying (${attempt + 1}/${maxRetries})...`);
-				await new Promise(resolve => setTimeout(resolve, 100));
-			}
-		}
-	}
-
-	return { data: null, error: lastError };
-}
-
 const AdminReviewSuggestionsPage: React.FC = () => {
 	const navigate = useNavigate();
 	const { isAdmin, loading: authLoading, currentUser } = useAuth();
 	const [suggestions, setSuggestions] = useState<ExtendedPackageSuggestion[]>([]);
 	const [existingPackages, setExistingPackages] = useState<PackageType[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
-	const [actionLoading, setActionLoading] = useState<string | null>(null);
+	const [actionLoading, setActionLoading] = useState<{ id: string; action: 'approve' | 'reject' | 'add' | 'delete' } | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 	const [sessionError, setSessionError] = useState<boolean>(false);
@@ -144,35 +95,10 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 	// Hover popup state
 	const [hoveredSuggestion, setHoveredSuggestion] = useState<string | null>(null);
 
-	// Add visibility change listener to refresh session
-	useEffect(() => {
-		const handleVisibilityChange = async () => {
-			if (!document.hidden && currentUser) {
-				console.log('Tab regained focus, checking session...');
-				try {
-					await ensureValidSession();
-					// If we had a session error, clear it and refresh data
-					if (sessionError) {
-						setSessionError(false);
-						setError(null);
-						fetchSuggestions(filterStatus);
-					}
-				} catch (err) {
-					console.error('Session refresh failed:', err);
-					setSessionError(true);
-					setError('Your session has expired. Please refresh the page to continue.');
-				}
-			}
-		};
-
-		document.addEventListener('visibilitychange', handleVisibilityChange);
-		window.addEventListener('focus', handleVisibilityChange);
-
-		return () => {
-			document.removeEventListener('visibilitychange', handleVisibilityChange);
-			window.removeEventListener('focus', handleVisibilityChange);
-		};
-	}, [currentUser, filterStatus, sessionError]);
+	// Session refresh on tab focus is handled globally by
+	// useTabFocusSessionRefresh (registered in App.tsx). When an operation
+	// fails because the session expired, handleDatabaseError surfaces the
+	// sessionError Alert with a "Refresh Now" action.
 
 	const fetchSuggestions = useCallback(async (status: typeof filterStatus) => {
 		setLoading(true);
@@ -209,9 +135,10 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 			} else {
 				setExistingPackages(existingData || []);
 			}
-		} catch (err: any) {
+		} catch (err) {
 			console.error("Error in fetchSuggestions:", err);
-			setError(`An unexpected error occurred: ${err.message}`);
+			const message = getErrorMessage(err);
+			setError(`An unexpected error occurred: ${message}`);
 			setSuggestions([]);
 		} finally {
 			setLoading(false);
@@ -227,7 +154,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 	const handleApproveSuggestion = async (suggestionId: string) => {
 		if (!currentUser) return;
 
-		setActionLoading(suggestionId);
+		setActionLoading({ id: suggestionId, action: 'approve' });
 		setError(null);
 
 		try {
@@ -251,7 +178,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 
 			setSuccessMessage("Suggestion approved successfully.");
 			fetchSuggestions(filterStatus);
-		} catch (err: any) {
+		} catch (err) {
 			handleDatabaseError(err, 'Failed to approve suggestion');
 		} finally {
 			setActionLoading(null);
@@ -261,7 +188,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 	const handleUpdateSuggestionStatus = async (suggestionId: string, newStatus: 'rejected' | 'added', notes?: string) => {
 		if (!currentUser) return;
 
-		setActionLoading(suggestionId);
+		setActionLoading({ id: suggestionId, action: newStatus === 'rejected' ? 'reject' : 'add' });
 
 		try {
 			await ensureValidSession();
@@ -285,7 +212,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 			setIsRejectModalOpen(false);
 			setSelectedSuggestionForReject(null);
 			setAdminNotesForReject('');
-		} catch (err: any) {
+		} catch (err) {
 			handleDatabaseError(err, 'Failed to update suggestion status');
 		} finally {
 			setActionLoading(null);
@@ -295,7 +222,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 	const handleAddPackageDirectly = async (suggestion: ExtendedPackageSuggestion) => {
 		if (!currentUser) return;
 
-		setActionLoading(suggestion.id);
+		setActionLoading({ id: suggestion.id, action: 'add' });
 		setError(null);
 		setSuccessMessage(null);
 
@@ -304,8 +231,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 
 			const { error } = await withSessionRetry(
 				async () => await supabase.rpc('approve_suggestion_with_normalized_data', {
-					suggestion_id: suggestion.id,
-					approved_by: currentUser.id
+					p_suggestion_id: suggestion.id
 				})
 			);
 
@@ -313,7 +239,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 
 			setSuccessMessage("Package added successfully and suggestion marked as added.");
 			fetchSuggestions(filterStatus);
-		} catch (err: any) {
+		} catch (err) {
 			handleDatabaseError(err, 'Failed to add package');
 		} finally {
 			setActionLoading(null);
@@ -323,7 +249,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 	const handleDeleteSuggestion = async (suggestionId: string, packageName: string) => {
 		if (!window.confirm(`Are you sure you want to permanently delete the suggestion for "${packageName}"? This action cannot be undone.`)) return;
 
-		setActionLoading(suggestionId);
+		setActionLoading({ id: suggestionId, action: 'delete' });
 		setError(null);
 		setSuccessMessage(null);
 
@@ -341,7 +267,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 
 			setSuccessMessage(`Suggestion "${packageName}" deleted successfully.`);
 			fetchSuggestions(filterStatus);
-		} catch (err: any) {
+		} catch (err) {
 			handleDatabaseError(err, 'Failed to delete suggestion');
 		} finally {
 			setActionLoading(null);
@@ -376,7 +302,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 			setSelectedSuggestions(new Set());
 			setIsSelectAll(false);
 			fetchSuggestions(filterStatus);
-		} catch (err: any) {
+		} catch (err) {
 			handleDatabaseError(err, 'Failed to approve suggestions');
 		} finally {
 			setBatchActionLoading(false);
@@ -410,7 +336,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 			setSelectedSuggestions(new Set());
 			setIsSelectAll(false);
 			fetchSuggestions(filterStatus);
-		} catch (err: any) {
+		} catch (err) {
 			handleDatabaseError(err, 'Failed to reject suggestions');
 		} finally {
 			setBatchActionLoading(false);
@@ -440,7 +366,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 			setSelectedSuggestions(new Set());
 			setIsSelectAll(false);
 			fetchSuggestions(filterStatus);
-		} catch (err: any) {
+		} catch (err) {
 			handleDatabaseError(err, 'Failed to delete suggestions');
 		} finally {
 			setBatchActionLoading(false);
@@ -470,8 +396,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 				try {
 					const { error } = await withSessionRetry(
 						async () => await supabase.rpc('approve_suggestion_with_normalized_data', {
-							suggestion_id: suggestion.id,
-							approved_by: currentUser?.id
+							p_suggestion_id: suggestion.id
 						})
 					);
 
@@ -482,9 +407,10 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 					} else {
 						successCount++;
 					}
-				} catch (err: any) {
+				} catch (err) {
 					console.error(`Error processing suggestion ${suggestion.package_name}:`, err);
-					errors.push(`Failed to process "${suggestion.package_name}": ${err.message}`);
+					const message = getErrorMessage(err);
+					errors.push(`Failed to process "${suggestion.package_name}": ${message}`);
 					errorCount++;
 				}
 			}
@@ -502,7 +428,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 			setSelectedSuggestions(new Set());
 			setIsSelectAll(false);
 			fetchSuggestions(filterStatus);
-		} catch (err: any) {
+		} catch (err) {
 			handleDatabaseError(err, 'Failed to batch add packages');
 		} finally {
 			setBatchActionLoading(false);
@@ -510,20 +436,18 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 	};
 
 	// Helper function to handle database errors
-	const handleDatabaseError = (err: any, defaultMessage: string) => {
+	const handleDatabaseError = (err: unknown, defaultMessage: string) => {
 		console.error(defaultMessage, err);
 
-		if (err.message?.includes('session') || err.message?.includes('JWT') || err.code === 'PGRST301') {
+		const message = getErrorMessage(err);
+		const code = (err as { code?: string } | null)?.code;
+		if (message.includes('session') || message.includes('JWT') || code === 'PGRST301') {
 			setSessionError(true);
 			setError('Your session has expired. Please refresh the page and try again.');
-			// Optionally trigger a reload after a delay
-			setTimeout(() => {
-				if (window.confirm('Your session has expired. Would you like to refresh the page?')) {
-					window.location.reload();
-				}
-			}, 2000);
+			// The persistent sessionError Alert below renders a "Refresh Now"
+			// button; no surprise timed window.confirm dialog.
 		} else {
-			setError(`${defaultMessage}: ${err.message}`);
+			setError(`${defaultMessage}: ${message}`);
 		}
 	};
 
@@ -910,6 +834,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 														size="small"
 														color="info"
 														onClick={() => navigate(`/package/${encodeURIComponent(suggestion.package_id!)}`)}
+														aria-label="View package"
 														title="View Package"
 													>
 														<RemoveRedEyeIcon fontSize="small" />
@@ -921,7 +846,8 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 													size="small"
 													color="primary"
 													onClick={() => handleOpenEditModal(suggestion)}
-													disabled={actionLoading === suggestion.id || sessionError}
+													disabled={actionLoading?.id === suggestion.id || sessionError}
+													aria-label="Edit suggestion"
 													title="Edit Suggestion"
 												>
 													<EditIcon fontSize="small" />
@@ -933,10 +859,11 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 														size="small"
 														color="success"
 														onClick={() => handleApproveSuggestion(suggestion.id)}
-														disabled={actionLoading === suggestion.id || isDuplicate(suggestion.package_name) || sessionError}
-														title={isDuplicate(suggestion.package_name) ? "Cannot approve duplicate package" : "Approve"}
+														disabled={actionLoading?.id === suggestion.id || isDuplicate(suggestion.package_name) || sessionError}
+														aria-label="Approve suggestion"
+													title={isDuplicate(suggestion.package_name) ? "Cannot approve duplicate package" : "Approve"}
 													>
-														{actionLoading === suggestion.id ? (
+														{actionLoading?.id === suggestion.id && actionLoading.action === 'approve' ? (
 															<CircularProgress size={20} />
 														) : (
 															<CheckCircleIcon fontSize="small" />
@@ -950,8 +877,9 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 														size="small"
 														color="error"
 														onClick={() => openRejectModal(suggestion)}
-														disabled={actionLoading === suggestion.id || sessionError}
-														title="Reject"
+														disabled={actionLoading?.id === suggestion.id || sessionError}
+														aria-label="Reject suggestion"
+													title="Reject"
 													>
 														<CancelIcon fontSize="small" />
 													</IconButton>
@@ -963,10 +891,10 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 														size="small"
 														color="primary"
 														onClick={() => handleAddPackageDirectly(suggestion)}
-														disabled={actionLoading === suggestion.id || isDuplicate(suggestion.package_name) || sessionError}
+														disabled={actionLoading?.id === suggestion.id || isDuplicate(suggestion.package_name) || sessionError}
 														title={isDuplicate(suggestion.package_name) ? "Cannot add duplicate package" : "Add to Database"}
 													>
-														{actionLoading === suggestion.id ? (
+														{actionLoading?.id === suggestion.id && actionLoading.action === 'add' ? (
 															<CircularProgress size={20} />
 														) : (
 															<AddToQueueIcon fontSize="small" />
@@ -979,10 +907,11 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 													size="small"
 													color="error"
 													onClick={() => handleDeleteSuggestion(suggestion.id, suggestion.package_name)}
-													disabled={actionLoading === suggestion.id || sessionError}
+													disabled={actionLoading?.id === suggestion.id || sessionError}
+													aria-label="Delete suggestion"
 													title="Delete Suggestion"
 												>
-													{actionLoading === suggestion.id ? (
+													{actionLoading?.id === suggestion.id && actionLoading.action === 'delete' ? (
 														<CircularProgress size={20} />
 													) : (
 														<DeleteIcon fontSize="small" />
@@ -1030,7 +959,7 @@ const AdminReviewSuggestionsPage: React.FC = () => {
 								handleUpdateSuggestionStatus(selectedSuggestionForReject.id, 'rejected', adminNotesForReject);
 							}
 						}}
-						disabled={actionLoading === selectedSuggestionForReject?.id || sessionError}
+						disabled={actionLoading?.id === selectedSuggestionForReject?.id || sessionError}
 					>
 						Reject
 					</Button>

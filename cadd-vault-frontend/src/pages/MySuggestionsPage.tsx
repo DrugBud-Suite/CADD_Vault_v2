@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import { PackageSuggestionWithNormalizedData } from '../types';
+import { getErrorMessage } from '../utils/errorMessage';
 import {
 	Box, Typography, CircularProgress, Paper, Alert, Container,
 	Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip
@@ -11,6 +12,21 @@ import {
 import EditIcon from '@mui/icons-material/Edit'; // Import EditIcon
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditSuggestionModal from '../components/EditSuggestionModal'; // Import the modal
+
+interface SuggestionTagRow { tag_id: string; tags: { name: string } | null; }
+interface SuggestionFolderCategoryRow {
+	folder_category_id: string;
+	folder_categories: {
+		id: string; folder_id: string; category_id: string;
+		folders: { id: string; name: string } | null;
+		categories: { id: string; name: string } | null;
+	} | null;
+}
+interface SuggestionQueryRow {
+	[key: string]: unknown;
+	package_suggestion_tags?: SuggestionTagRow[];
+	package_suggestion_folder_categories?: SuggestionFolderCategoryRow[];
+}
 
 const MySuggestionsPage: React.FC = () => {
 	const navigate = useNavigate();
@@ -57,14 +73,15 @@ const MySuggestionsPage: React.FC = () => {
 			if (fetchError) throw fetchError;
 			
 			// Transform data to PackageSuggestionWithNormalizedData format
-			const transformedData = (data || []).map(suggestion => {
-				const tags = suggestion.package_suggestion_tags?.map((pst: any) => pst.tags?.name).filter(Boolean) || [];
+			const transformedData = ((data || []) as SuggestionQueryRow[]).map(suggestion => {
+				const tags = suggestion.package_suggestion_tags?.map((pst) => pst.tags?.name).filter((n): n is string => n != null) || [];
 				const folder = suggestion.package_suggestion_folder_categories?.[0]?.folder_categories?.folders?.name || '';
 				const category = suggestion.package_suggestion_folder_categories?.[0]?.folder_categories?.categories?.name || '';
-				
+
 				// Remove relation data and add normalized fields
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
 				const { package_suggestion_tags, package_suggestion_folder_categories, ...cleanSuggestion } = suggestion;
-				
+
 				return {
 					...cleanSuggestion,
 					tags,
@@ -72,11 +89,11 @@ const MySuggestionsPage: React.FC = () => {
 					category
 				};
 			});
-			
-			setSuggestions(transformedData);
-		} catch (err: any) {
-			console.error("Error fetching suggestions:", err.message);
-			setError(`Failed to load your suggestions: ${err.message}`);
+
+			setSuggestions(transformedData as PackageSuggestionWithNormalizedData[]);
+		} catch (err: unknown) {
+			console.error("Error fetching suggestions:", getErrorMessage(err));
+			setError(`Failed to load your suggestions: ${getErrorMessage(err)}`);
 			setSuggestions([]);
 		} finally {
 			setLoading(false);
@@ -106,8 +123,8 @@ const MySuggestionsPage: React.FC = () => {
 			if (deleteError) throw deleteError;
 			setSuggestions(prev => prev.filter((s) => s.id !== suggestionId));
 			// Consider adding a success snackbar here
-		} catch (err: any) {
-			setError(`Failed to delete suggestion: ${err.message}`);
+		} catch (err: unknown) {
+			setError(`Failed to delete suggestion: ${getErrorMessage(err)}`);
 		}
 	};
 

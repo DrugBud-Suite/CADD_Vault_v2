@@ -25,6 +25,8 @@ export function useInfinitePackages(filters: Omit<PackageFilters, 'page'> = {}) 
     },
     staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
     gcTime: 1000 * 60 * 30, // Keep in cache for 30 minutes
+    refetchOnWindowFocus: false, // Disable to prevent conflicts with filter changes
+    refetchOnMount: true, // Refetch on mount only when data is stale (staleTime gates it)
   });
 }
 
@@ -43,8 +45,8 @@ export function useCreatePackage() {
   return useMutation({
     mutationFn: packageApi.createPackage,
     onSuccess: (newPackage) => {
-      // Invalidate all package lists
-      queryClient.invalidateQueries({ queryKey: queryKeys.packages.lists() });
+      // Invalidate all package queries (all() subsumes lists() and infinite queries)
+      queryClient.invalidateQueries({ queryKey: queryKeys.packages.all() });
       
       // Set the new package in cache
       queryClient.setQueryData(queryKeys.packages.detail(newPackage.id), newPackage);
@@ -99,6 +101,7 @@ export function useUpdatePackage() {
       // Always refetch after error or success
       queryClient.invalidateQueries({ queryKey: queryKeys.packages.detail(id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.packages.lists() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.packages.all() });
     },
     onSuccess: () => {
       toast.success('Package updated successfully');
@@ -117,6 +120,7 @@ export function useDeletePackage() {
       
       // Invalidate lists to refetch
       queryClient.invalidateQueries({ queryKey: queryKeys.packages.lists() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.packages.all() });
       
       // Invalidate metadata to refresh counts
       queryClient.invalidateQueries({ queryKey: queryKeys.metadata.all() });

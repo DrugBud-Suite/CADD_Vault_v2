@@ -7,7 +7,8 @@ import {
 	Box, Typography, TextField, Button, CircularProgress, Paper, Grid,
 	Autocomplete, Chip, Alert, MenuItem, FormControl, InputLabel, Select, SelectChangeEvent, Container
 } from '@mui/material';
-import { useFilterStore } from '../store/filterStore';
+import { useFilterMetadata } from '../hooks/queries/useMetadata';
+import { getErrorMessage } from '../utils/errorMessage';
 
 const SuggestPackagePage: React.FC = () => {
 	const navigate = useNavigate();
@@ -41,10 +42,12 @@ const SuggestPackagePage: React.FC = () => {
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-	const allAvailableTags = useFilterStore(state => state.allAvailableTags);
-
-	const [availableFolders, setAvailableFolders] = useState<string[]>([]);
-	const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+	const { data: metadata } = useFilterMetadata();
+	const allAvailableTags = metadata?.allAvailableTags ?? [];
+	const availableFolders = metadata?.allAvailableFolders ?? [];
+	const availableCategories = formData.folder
+		? (metadata?.allAvailableCategories[formData.folder] ?? [])
+		: [];
 
 	useEffect(() => {
 		if (!authLoading && !currentUser) {
@@ -53,20 +56,6 @@ const SuggestPackagePage: React.FC = () => {
 			setError(null);
 		}
 	}, [currentUser, authLoading, navigate]);
-
-	useEffect(() => {
-		const folders = useFilterStore.getState().allAvailableFolders;
-		setAvailableFolders(folders);
-	}, []);
-
-	useEffect(() => {
-		if (formData.folder) {
-			const categories = useFilterStore.getState().allAvailableCategories[formData.folder] || [];
-			setAvailableCategories(categories);
-		} else {
-			setAvailableCategories([]);
-		}
-	}, [formData.folder]);
 
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -109,6 +98,22 @@ const SuggestPackagePage: React.FC = () => {
 		}
 		if (!formData.package_name) {
 			setError('Package Name is required.');
+			return;
+		}
+
+		// Reject non-http(s) URLs (e.g. javascript:) before they are stored and
+		// later rendered as href attributes.
+		const urlFields: { label: string; value: string }[] = [
+			{ label: 'Publication URL', value: formData.publication_url },
+			{ label: 'Webserver/Homepage URL', value: formData.webserver_url },
+			{ label: 'Code Repository URL', value: formData.repo_url },
+			{ label: 'Other Relevant Link', value: formData.link_url },
+		];
+		const invalidUrl = urlFields.find(
+			(field) => field.value.trim() !== '' && !/^https?:\/\//i.test(field.value.trim()),
+		);
+		if (invalidUrl) {
+			setError(`${invalidUrl.label} must be a valid http(s) URL.`);
 			return;
 		}
 
@@ -171,9 +176,10 @@ const SuggestPackagePage: React.FC = () => {
 				repo_url: '', link_url: '', license: '', tags: [], folder: '', category: '',
 				suggestion_reason: '',
 			});
-		} catch (err: any) {
-			console.error('Error submitting package suggestion: ', err.message);
-			setError(`Failed to submit suggestion: ${err.message}`);
+		} catch (err) {
+			const message = getErrorMessage(err);
+			console.error('Error submitting package suggestion: ', message);
+			setError(`Failed to submit suggestion: ${message}`);
 		} finally {
 			setLoading(false);
 		}

@@ -4,7 +4,7 @@ export interface ValidationResult {
 }
 
 export interface ValidationRule {
-  test: (value: any) => boolean;
+  test: (value: unknown) => boolean;
   message: string;
 }
 

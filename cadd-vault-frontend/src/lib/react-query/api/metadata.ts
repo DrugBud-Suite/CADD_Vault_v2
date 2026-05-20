@@ -1,5 +1,12 @@
 import { supabase } from '../../../supabase';
 
+interface TagRow { name: string; }
+interface LicenseRow { license: string | null; }
+interface FolderCategoryRow {
+  folders: { name: string } | null;
+  categories: { name: string } | null;
+}
+
 export interface FilterMetadata {
   allAvailableTags: string[];
   allAvailableLicenses: string[];
@@ -8,17 +15,6 @@ export interface FilterMetadata {
   datasetMaxStars: number;
   datasetMaxCitations: number;
   totalPackageCount: number;
-}
-
-export interface DatasetStatistics {
-  maxStars: number | null;
-  maxCitations: number | null;
-  totalCount: number;
-}
-
-export interface FolderCategoryData {
-  folders: string[];
-  categories: Record<string, string[]>;
 }
 
 export const metadataApi = {
@@ -51,19 +47,19 @@ export const metadataApi = {
     if (countResult.error) throw countResult.error;
 
     // Process tags
-    const allAvailableTags = tagsResult.data?.map((tag: any) => tag.name) || [];
+    const allAvailableTags = (tagsResult.data as TagRow[] | null)?.map((tag) => tag.name) || [];
 
     // Process licenses (get unique values)
     const allAvailableLicenses = Array.from(
-      new Set(licensesResult.data?.map((pkg: any) => pkg.license).filter(Boolean))
+      new Set((licensesResult.data as LicenseRow[] | null)?.map((pkg) => pkg.license).filter((l): l is string => l !== null && l !== undefined))
     ).sort();
 
     // Process folders and categories
-    const foldersData = foldersResult.data || [];
+    const foldersData = (foldersResult.data as unknown as FolderCategoryRow[] | null) || [];
     const folderCategoryMap: Record<string, string[]> = {};
-    foldersData.forEach((item: any) => {
-      const folderName = (item.folders as any)?.name;
-      const categoryName = (item.categories as any)?.name;
+    foldersData.forEach((item) => {
+      const folderName = item.folders?.name;
+      const categoryName = item.categories?.name;
       if (folderName && categoryName) {
         if (!folderCategoryMap[folderName]) {
           folderCategoryMap[folderName] = [];
@@ -89,81 +85,6 @@ export const metadataApi = {
       datasetMaxStars: starsResult.data?.[0]?.github_stars || 0,
       datasetMaxCitations: citationsResult.data?.[0]?.citations || 0,
       totalPackageCount: countResult.count || 0,
-    };
-  },
-
-  async getTags(): Promise<string[]> {
-    const { data, error } = await supabase
-      .from('tags')
-      .select('name')
-      .order('name');
-
-    if (error) throw error;
-    return data?.map((tag: any) => tag.name) || [];
-  },
-
-  async getLicenses(): Promise<string[]> {
-    const { data, error } = await supabase
-      .from('packages')
-      .select('license')
-      .not('license', 'is', null);
-
-    if (error) throw error;
-
-    return Array.from(
-      new Set(data?.map((pkg: any) => pkg.license).filter(Boolean))
-    ).sort();
-  },
-
-  async getFoldersAndCategories(): Promise<FolderCategoryData> {
-    const { data, error } = await supabase
-      .from('folder_categories')
-      .select(`
-        folders!inner(name),
-        categories!inner(name)
-      `)
-      .order('folders(name), categories(name)');
-
-    if (error) throw error;
-
-    const folderCategoryMap: Record<string, string[]> = {};
-    data?.forEach((item: any) => {
-      const folderName = (item.folders as any)?.name;
-      const categoryName = (item.categories as any)?.name;
-      if (folderName && categoryName) {
-        if (!folderCategoryMap[folderName]) {
-          folderCategoryMap[folderName] = [];
-        }
-        if (!folderCategoryMap[folderName].includes(categoryName)) {
-          folderCategoryMap[folderName].push(categoryName);
-        }
-      }
-    });
-
-    // Sort categories within each folder
-    Object.keys(folderCategoryMap).forEach(folder => {
-      folderCategoryMap[folder].sort();
-    });
-
-    const folders = Object.keys(folderCategoryMap).sort();
-    return { folders, categories: folderCategoryMap };
-  },
-
-  async getDatasetStats(): Promise<DatasetStatistics> {
-    const [starsResult, citationsResult, countResult] = await Promise.all([
-      supabase.from('packages').select('github_stars').not('github_stars', 'is', null).order('github_stars', { ascending: false }).limit(1),
-      supabase.from('packages').select('citations').not('citations', 'is', null).order('citations', { ascending: false }).limit(1),
-      supabase.from('packages').select('id', { count: 'exact', head: true })
-    ]);
-
-    if (starsResult.error) throw starsResult.error;
-    if (citationsResult.error) throw citationsResult.error;
-    if (countResult.error) throw countResult.error;
-
-    return {
-      maxStars: starsResult.data?.[0]?.github_stars || null,
-      maxCitations: citationsResult.data?.[0]?.citations || null,
-      totalCount: countResult.count || 0,
     };
   },
 };
