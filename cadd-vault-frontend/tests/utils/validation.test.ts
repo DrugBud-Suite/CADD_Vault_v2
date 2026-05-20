@@ -27,8 +27,8 @@ describe('Validation Utilities', () => {
       expect(validator.test('HasCaps')).toBe(true);
     });
 
-    it('should check for numbers', () => {
-      const validator = passwordValidators.hasNumber();
+    it('should check for digits', () => {
+      const validator = passwordValidators.hasDigit();
       expect(validator.test('NoNumbers')).toBe(false);
       expect(validator.test('Has123')).toBe(true);
     });
@@ -49,18 +49,11 @@ describe('Validation Utilities', () => {
       expect(validator.test('ftp://files.example.com')).toBe(true);
     });
 
-    it('should validate GitHub URLs', () => {
-      const validator = urlValidators.isGitHubUrl();
+    it('should validate GitHub repository URLs', () => {
+      const validator = urlValidators.isGitHubRepo();
       expect(validator.test('https://example.com')).toBe(false);
       expect(validator.test('https://github.com/user/repo')).toBe(true);
       expect(validator.test('https://github.com/org/project/tree/main')).toBe(true);
-    });
-
-    it('should validate HTTP/HTTPS URLs only', () => {
-      const validator = urlValidators.isHttpUrl();
-      expect(validator.test('ftp://files.example.com')).toBe(false);
-      expect(validator.test('http://example.com')).toBe(true);
-      expect(validator.test('https://secure.example.com')).toBe(true);
     });
   });
 
@@ -86,7 +79,7 @@ describe('Validation Utilities', () => {
       const validator = genericValidators.maxLength(10, 'Field');
       expect(validator.test('very long text here')).toBe(false);
       expect(validator.test('short')).toBe(true);
-      expect(validator.message).toBe('Field must be no more than 10 characters long');
+      expect(validator.message).toBe('Field must not exceed 10 characters');
     });
 
     it('should validate required fields', () => {

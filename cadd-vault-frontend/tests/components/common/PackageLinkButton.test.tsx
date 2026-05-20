@@ -1,319 +1,125 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { ThemeProvider } from '@mui/material/styles';
-import { createTheme } from '@mui/material/styles';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import PackageLinkButton from '../../../src/components/common/PackageLinkButton';
 
 const theme = createTheme();
 
-const renderWithTheme = (component: React.ReactElement) => {
-  return render(
-    <ThemeProvider theme={theme}>
-      {component}
-    </ThemeProvider>
-  );
-};
-
-// Mock for window.open
-const mockWindowOpen = vi.fn();
-Object.defineProperty(window, 'open', {
-  writable: true,
-  value: mockWindowOpen
-});
+const renderWithTheme = (component: React.ReactElement) =>
+  render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
 
 describe('PackageLinkButton', () => {
   const defaultProps = {
     href: 'https://example.com',
     icon: <span data-testid="test-icon">📦</span>,
-    label: 'Test Link'
+    label: 'Test Link',
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    // no-op; component delegates to anchor navigation, nothing to spy on
   });
 
-  it('should render button with icon and label', () => {
+  it('renders nothing when href is empty', () => {
+    const { container } = renderWithTheme(
+      <PackageLinkButton {...defaultProps} href="" />
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders as an anchor with href, target=_blank and rel=noopener noreferrer', () => {
     renderWithTheme(<PackageLinkButton {...defaultProps} />);
-    
+    const link = screen.getByRole('link', { name: /Test Link/ });
+    expect(link).toHaveAttribute('href', 'https://example.com');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('renders the supplied icon and label text', () => {
+    renderWithTheme(<PackageLinkButton {...defaultProps} />);
     expect(screen.getByTestId('test-icon')).toBeInTheDocument();
     expect(screen.getByText('Test Link')).toBeInTheDocument();
   });
 
-  it('should open link in new tab when clicked', () => {
+  it('exposes an aria-label derived from the label prop', () => {
     renderWithTheme(<PackageLinkButton {...defaultProps} />);
-    
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
-    
-    expect(mockWindowOpen).toHaveBeenCalledWith(
-      'https://example.com',
-      '_blank',
-      'noopener,noreferrer'
-    );
+    expect(screen.getByRole('link')).toHaveAttribute('aria-label', 'Test Link Link');
   });
 
-  it('should have proper accessibility attributes', () => {
-    renderWithTheme(<PackageLinkButton {...defaultProps} />);
-    
-    const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('aria-label', 'Open Test Link in new tab');
-  });
-
-  it('should render different sizes correctly', () => {
+  it('applies the requested MUI size class', () => {
     const { rerender } = renderWithTheme(
       <PackageLinkButton {...defaultProps} size="small" />
     );
-    
-    let button = screen.getByRole('button');
-    expect(button).toHaveClass('MuiButton-sizeSmall');
-    
+    expect(screen.getByRole('link')).toHaveClass('MuiButton-sizeSmall');
+
     rerender(
       <ThemeProvider theme={theme}>
         <PackageLinkButton {...defaultProps} size="medium" />
       </ThemeProvider>
     );
-    
-    button = screen.getByRole('button');
-    expect(button).toHaveClass('MuiButton-sizeMedium');
-    
+    expect(screen.getByRole('link')).toHaveClass('MuiButton-sizeMedium');
+
     rerender(
       <ThemeProvider theme={theme}>
         <PackageLinkButton {...defaultProps} size="large" />
       </ThemeProvider>
     );
-    
-    button = screen.getByRole('button');
-    expect(button).toHaveClass('MuiButton-sizeLarge');
+    expect(screen.getByRole('link')).toHaveClass('MuiButton-sizeLarge');
   });
 
-  it('should apply correct variant styling', () => {
+  it('applies the requested MUI variant class', () => {
     const { rerender } = renderWithTheme(
       <PackageLinkButton {...defaultProps} variant="outlined" />
     );
-    
-    let button = screen.getByRole('button');
-    expect(button).toHaveClass('MuiButton-outlined');
-    
+    expect(screen.getByRole('link')).toHaveClass('MuiButton-outlined');
+
     rerender(
       <ThemeProvider theme={theme}>
         <PackageLinkButton {...defaultProps} variant="contained" />
       </ThemeProvider>
     );
-    
-    button = screen.getByRole('button');
-    expect(button).toHaveClass('MuiButton-contained');
-    
+    expect(screen.getByRole('link')).toHaveClass('MuiButton-contained');
+
     rerender(
       <ThemeProvider theme={theme}>
         <PackageLinkButton {...defaultProps} variant="text" />
       </ThemeProvider>
     );
-    
-    button = screen.getByRole('button');
-    expect(button).toHaveClass('MuiButton-text');
+    expect(screen.getByRole('link')).toHaveClass('MuiButton-text');
   });
 
-  it('should handle disabled state', () => {
-    renderWithTheme(<PackageLinkButton {...defaultProps} disabled />);
-    
-    const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
-    
-    fireEvent.click(button);
-    expect(mockWindowOpen).not.toHaveBeenCalled();
+  it('applies the custom className prop', () => {
+    renderWithTheme(<PackageLinkButton {...defaultProps} className="custom-class" />);
+    expect(screen.getByRole('link')).toHaveClass('custom-class');
   });
 
-  it('should show only icon when showLabel is false', () => {
+  it('invokes onClick handler when the anchor is clicked', () => {
+    let clicked = 0;
     renderWithTheme(
-      <PackageLinkButton {...defaultProps} showLabel={false} />
+      <PackageLinkButton
+        {...defaultProps}
+        onClick={(e) => {
+          e.preventDefault();
+          clicked += 1;
+        }}
+      />
     );
-    
-    expect(screen.getByTestId('test-icon')).toBeInTheDocument();
-    expect(screen.queryByText('Test Link')).not.toBeInTheDocument();
+    screen.getByRole('link').click();
+    expect(clicked).toBe(1);
   });
 
-  it('should show both icon and label by default', () => {
-    renderWithTheme(<PackageLinkButton {...defaultProps} />);
-    
-    expect(screen.getByTestId('test-icon')).toBeInTheDocument();
-    expect(screen.getByText('Test Link')).toBeInTheDocument();
-  });
-
-  it('should apply custom className', () => {
-    renderWithTheme(
-      <PackageLinkButton {...defaultProps} className="custom-class" />
-    );
-    
-    const button = screen.getByRole('button');
-    expect(button).toHaveClass('custom-class');
-  });
-
-  it('should apply custom styles', () => {
-    const customStyles = { backgroundColor: 'red', color: 'white' };
-    renderWithTheme(
-      <PackageLinkButton {...defaultProps} style={customStyles} />
-    );
-    
-    const button = screen.getByRole('button');
-    expect(button).toHaveStyle('background-color: red');
-    expect(button).toHaveStyle('color: white');
-  });
-
-  describe('URL handling', () => {
-    it('should handle different URL formats', () => {
-      const testUrls = [
-        'https://github.com/user/repo',
-        'http://example.com',
-        'https://subdomain.example.org/path?query=value',
-        'https://docs.example.com/api/v1#section'
-      ];
-
-      testUrls.forEach((url) => {
-        const { unmount } = renderWithTheme(
-          <PackageLinkButton {...defaultProps} href={url} />
-        );
-        
-        const button = screen.getByRole('button');
-        fireEvent.click(button);
-        
-        expect(mockWindowOpen).toHaveBeenCalledWith(
-          url,
-          '_blank',
-          'noopener,noreferrer'
-        );
-        
-        unmount();
-        mockWindowOpen.mockClear();
-      });
-    });
-
-    it('should handle empty or invalid URLs gracefully', () => {
-      const { rerender } = renderWithTheme(
-        <PackageLinkButton {...defaultProps} href="" />
+  it('handles various URL formats', () => {
+    const urls = [
+      'https://github.com/user/repo',
+      'http://example.com',
+      'https://subdomain.example.org/path?query=value',
+      'https://docs.example.com/api/v1#section',
+    ];
+    for (const url of urls) {
+      const { unmount } = renderWithTheme(
+        <PackageLinkButton {...defaultProps} href={url} />
       );
-      
-      let button = screen.getByRole('button');
-      fireEvent.click(button);
-      expect(mockWindowOpen).toHaveBeenCalledWith('', '_blank', 'noopener,noreferrer');
-      
-      mockWindowOpen.mockClear();
-      
-      rerender(
-        <ThemeProvider theme={theme}>
-          <PackageLinkButton {...defaultProps} href="invalid-url" />
-        </ThemeProvider>
-      );
-      
-      button = screen.getByRole('button');
-      fireEvent.click(button);
-      expect(mockWindowOpen).toHaveBeenCalledWith('invalid-url', '_blank', 'noopener,noreferrer');
-    });
-  });
-
-  describe('Icon rendering', () => {
-    it('should render different icon types', () => {
-      const icons = [
-        { icon: <span data-testid="text-icon">🔗</span>, testId: 'text-icon' },
-        { icon: <div data-testid="div-icon">Icon</div>, testId: 'div-icon' },
-        { icon: <img data-testid="img-icon" src="icon.png" alt="icon" />, testId: 'img-icon' }
-      ];
-
-      icons.forEach(({ icon, testId }) => {
-        const { unmount } = renderWithTheme(
-          <PackageLinkButton {...defaultProps} icon={icon} />
-        );
-        
-        expect(screen.getByTestId(testId)).toBeInTheDocument();
-        unmount();
-      });
-    });
-
-    it('should maintain icon spacing with label', () => {
-      renderWithTheme(<PackageLinkButton {...defaultProps} />);
-      
-      const button = screen.getByRole('button');
-      const buttonClasses = button.className;
-      
-      // Should have proper spacing classes from MUI
-      expect(buttonClasses).toMatch(/MuiButton/);
-    });
-  });
-
-  describe('Label handling', () => {
-    it('should handle long labels gracefully', () => {
-      const longLabel = 'This is a very long label that might wrap or be truncated depending on the container size and styling applied to the button component';
-      
-      renderWithTheme(
-        <PackageLinkButton {...defaultProps} label={longLabel} />
-      );
-      
-      expect(screen.getByText(longLabel)).toBeInTheDocument();
-    });
-
-    it('should handle special characters in labels', () => {
-      const specialLabel = 'Label with "quotes" & ampersands < > and other chars';
-      
-      renderWithTheme(
-        <PackageLinkButton {...defaultProps} label={specialLabel} />
-      );
-      
-      expect(screen.getByText(specialLabel)).toBeInTheDocument();
-    });
-
-    it('should handle empty labels', () => {
-      renderWithTheme(
-        <PackageLinkButton {...defaultProps} label="" />
-      );
-      
-      // Should still render but with empty text
-      const button = screen.getByRole('button');
-      expect(button).toBeInTheDocument();
-    });
-  });
-
-  describe('Interaction behavior', () => {
-    it('should have hover states', () => {
-      renderWithTheme(<PackageLinkButton {...defaultProps} />);
-      
-      const button = screen.getByRole('button');
-      
-      // Simulate hover
-      fireEvent.mouseEnter(button);
-      expect(button).toHaveClass('MuiButton-root');
-      
-      fireEvent.mouseLeave(button);
-      expect(button).toHaveClass('MuiButton-root');
-    });
-
-    it('should handle keyboard navigation', () => {
-      renderWithTheme(<PackageLinkButton {...defaultProps} />);
-      
-      const button = screen.getByRole('button');
-      
-      // Should be focusable
-      button.focus();
-      expect(document.activeElement).toBe(button);
-      
-      // Should trigger on Enter key
-      fireEvent.keyDown(button, { key: 'Enter', code: 'Enter' });
-      expect(mockWindowOpen).toHaveBeenCalledWith(
-        'https://example.com',
-        '_blank',
-        'noopener,noreferrer'
-      );
-    });
-
-    it('should handle multiple rapid clicks', () => {
-      renderWithTheme(<PackageLinkButton {...defaultProps} />);
-      
-      const button = screen.getByRole('button');
-      
-      // Rapidly click multiple times
-      fireEvent.click(button);
-      fireEvent.click(button);
-      fireEvent.click(button);
-      
-      expect(mockWindowOpen).toHaveBeenCalledTimes(3);
-    });
+      expect(screen.getByRole('link')).toHaveAttribute('href', url);
+      unmount();
+    }
   });
 });

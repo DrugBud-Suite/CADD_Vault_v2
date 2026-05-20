@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist'] },
+  { ignores: ['dist', 'coverage'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
@@ -23,6 +23,16 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+    },
+  },
+  {
+    // Test files legitimately use `any` to build partial mocks of the
+    // Supabase fluent/thenable API; enforcing strict typing there adds
+    // noise without value. Production `src/` code stays strict.
+    files: ['tests/**/*.{ts,tsx}', '**/*.{test,spec}.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
     },
   },
 )

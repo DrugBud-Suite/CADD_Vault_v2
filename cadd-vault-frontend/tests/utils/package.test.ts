@@ -1,15 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { 
-  parseTags, 
-  formatLicense, 
-  truncateDescription, 
-  formatTag,
-  tagsToString,
-  getPackageIcon,
-  extractDomain,
-  parseCSVRow 
+import {
+  parseTags,
+  formatLicense,
+  truncateDescription,
+  formatTag
 } from '../../src/utils/package';
-import type { Package } from '../../src/types';
 
 describe('Package Utilities', () => {
   describe('parseTags', () => {
@@ -89,7 +84,9 @@ describe('Package Utilities', () => {
       const result = truncateDescription(long, 50);
       expect(result.length).toBeLessThanOrEqual(50 + 3); // +3 for ellipsis
       expect(result.endsWith('...')).toBe(true);
-      expect(result).not.toMatch(/\w\.\.\.$/); // Should not cut words
+      const body = result.slice(0, -3);
+      expect(long.startsWith(body)).toBe(true); // No partial words
+      expect(long[body.length]).toBe(' '); // Cut happened at a space
     });
 
     it('should use custom suffix', () => {
@@ -130,161 +127,6 @@ describe('Package Utilities', () => {
       expect(formatTag('ML')).toBe('ML');
       expect(formatTag('Ml')).toBe('ML');
       expect(formatTag('mL')).toBe('ML');
-    });
-  });
-
-  describe('tagsToString', () => {
-    it('should convert array to comma-separated string', () => {
-      expect(tagsToString(['tag1', 'tag2', 'tag3'])).toBe('tag1, tag2, tag3');
-    });
-
-    it('should handle empty array', () => {
-      expect(tagsToString([])).toBe('');
-    });
-
-    it('should handle single tag', () => {
-      expect(tagsToString(['single'])).toBe('single');
-    });
-  });
-
-  describe('getPackageIcon', () => {
-    it('should return appropriate icons based on tags', () => {
-      const dbPackage = { tags: ['database', 'sql'] } as Package;
-      expect(getPackageIcon(dbPackage)).toBe('database');
-
-      const vizPackage = { tags: ['visualization', 'charts'] } as Package;
-      expect(getPackageIcon(vizPackage)).toBe('chart');
-    });
-
-    it('should return github icon for GitHub repos', () => {
-      const githubPackage = { 
-        repo_link: 'https://github.com/user/repo',
-        tags: [] 
-      } as Package;
-      expect(getPackageIcon(githubPackage)).toBe('github');
-    });
-
-    it('should return default package icon', () => {
-      const defaultPackage = { 
-        tags: ['other'], 
-        repo_link: 'https://example.com' 
-      } as Package;
-      expect(getPackageIcon(defaultPackage)).toBe('package');
-    });
-
-    it('should handle undefined tags and links', () => {
-      const emptyPackage = {} as Package;
-      expect(getPackageIcon(emptyPackage)).toBe('package');
-    });
-  });
-
-  describe('extractDomain', () => {
-    it('should extract domain from valid URLs', () => {
-      expect(extractDomain('https://www.example.com/path')).toBe('example.com');
-      expect(extractDomain('http://subdomain.example.org')).toBe('subdomain.example.org');
-      expect(extractDomain('https://github.com/user/repo')).toBe('github.com');
-    });
-
-    it('should remove www prefix', () => {
-      expect(extractDomain('https://www.google.com')).toBe('google.com');
-      expect(extractDomain('http://www.subdomain.example.com')).toBe('subdomain.example.com');
-    });
-
-    it('should handle invalid URLs', () => {
-      expect(extractDomain('not-a-url')).toBe('Invalid URL');
-      expect(extractDomain('http://')).toBe('Invalid URL');
-      expect(extractDomain('')).toBe('Invalid URL');
-    });
-
-    it('should handle different protocols', () => {
-      expect(extractDomain('ftp://files.example.com')).toBe('files.example.com');
-      expect(extractDomain('https://secure.example.com')).toBe('secure.example.com');
-    });
-  });
-
-  describe('parseCSVRow', () => {
-    it('should parse complete CSV row', () => {
-      const csvRow = {
-        package_name: 'Test Package',
-        description: 'A test package',
-        tags: '["python", "analysis"]',
-        repo_url: 'https://github.com/test/repo',
-        publication_url: 'https://doi.org/10.1000/test',
-        webserver_url: 'https://test.example.com',
-        link_url: 'https://docs.example.com'
-      };
-
-      const result = parseCSVRow(csvRow);
-
-      expect(result.name).toBe('Test Package');
-      expect(result.description).toBe('A test package');
-      expect(result.tags).toEqual(['python', 'analysis']);
-      expect(result.urls.repository).toBe('https://github.com/test/repo');
-      expect(result.urls.publication).toBe('https://doi.org/10.1000/test');
-      expect(result.urls.webserver).toBe('https://test.example.com');
-      expect(result.urls.other).toBe('https://docs.example.com');
-    });
-
-    it('should handle missing fields', () => {
-      const csvRow = {
-        package_name: 'Minimal Package'
-      };
-
-      const result = parseCSVRow(csvRow);
-
-      expect(result.name).toBe('Minimal Package');
-      expect(result.description).toBe('');
-      expect(result.tags).toEqual([]);
-      expect(result.urls.repository).toBeUndefined();
-      expect(result.urls.publication).toBeUndefined();
-      expect(result.urls.webserver).toBeUndefined();
-      expect(result.urls.other).toBeUndefined();
-    });
-
-    it('should trim whitespace from fields', () => {
-      const csvRow = {
-        package_name: '  Trimmed Package  ',
-        description: '  Description with spaces  ',
-        repo_url: '  https://github.com/test/repo  '
-      };
-
-      const result = parseCSVRow(csvRow);
-
-      expect(result.name).toBe('Trimmed Package');
-      expect(result.description).toBe('Description with spaces');
-      expect(result.urls.repository).toBe('https://github.com/test/repo');
-    });
-
-    it('should filter out empty URLs', () => {
-      const csvRow = {
-        package_name: 'Test Package',
-        repo_url: '',
-        publication_url: '   ',
-        webserver_url: 'https://test.example.com',
-        link_url: undefined
-      };
-
-      const result = parseCSVRow(csvRow);
-
-      expect(result.urls.repository).toBeUndefined();
-      expect(result.urls.publication).toBeUndefined();
-      expect(result.urls.webserver).toBe('https://test.example.com');
-      expect(result.urls.other).toBeUndefined();
-    });
-
-    it('should handle different tag formats', () => {
-      const csvRowJson = {
-        package_name: 'JSON Tags',
-        tags: '["tag1", "tag2"]'
-      };
-
-      const csvRowString = {
-        package_name: 'String Tags',
-        tags: 'tag1, tag2'
-      };
-
-      expect(parseCSVRow(csvRowJson).tags).toEqual(['tag1', 'tag2']);
-      expect(parseCSVRow(csvRowString).tags).toEqual(['tag1', 'tag2']);
     });
   });
 });

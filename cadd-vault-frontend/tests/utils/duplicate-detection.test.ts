@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { 
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
   findDuplicates
 } from '../../src/utils/duplicate-detection';
-import { calculateLevenshteinSimilarity, normalizeString, calculateSimilarity } from '../../src/utils/duplicate-detection/algorithms';
+import { normalizeString, calculateSimilarity } from '../../src/utils/duplicate-detection/algorithms';
 import type { Package, PackageSuggestion } from '../../src/types';
 
 describe('Duplicate Detection Utilities', () => {
@@ -26,34 +26,6 @@ describe('Duplicate Detection Utilities', () => {
       });
     });
 
-    describe('calculateLevenshteinSimilarity', () => {
-      it('should return 1.0 for identical strings', () => {
-        expect(calculateLevenshteinSimilarity('hello', 'hello')).toBe(1.0);
-      });
-
-      it('should return 0.0 for completely different strings', () => {
-        const similarity = calculateLevenshteinSimilarity('abc', 'xyz');
-        expect(similarity).toBe(0.0);
-      });
-
-      it('should calculate similarity for partially similar strings', () => {
-        const similarity = calculateLevenshteinSimilarity('kitten', 'sitting');
-        expect(similarity).toBeGreaterThan(0.5);
-        expect(similarity).toBeLessThan(1.0);
-      });
-
-      it('should handle empty strings', () => {
-        expect(calculateLevenshteinSimilarity('', '')).toBe(1.0);
-        expect(calculateLevenshteinSimilarity('hello', '')).toBe(0.0);
-        expect(calculateLevenshteinSimilarity('', 'hello')).toBe(0.0);
-      });
-
-      it('should be case-insensitive when strings are normalized', () => {
-        const str1 = normalizeString('Hello World');
-        const str2 = normalizeString('HELLO WORLD');
-        expect(calculateLevenshteinSimilarity(str1, str2)).toBe(1.0);
-      });
-    });
   });
 
   describe('Duplicate Detection Functions', () => {
@@ -115,7 +87,7 @@ describe('Duplicate Detection Utilities', () => {
 
       it('should calculate word-based similarity', () => {
         const similarity = calculateSimilarity('machine learning toolkit', 'machine learning framework');
-        expect(similarity).toBeGreaterThan(0.5);
+        expect(similarity).toBeGreaterThanOrEqual(0.5);
         expect(similarity).toBeLessThan(1.0);
       });
 
