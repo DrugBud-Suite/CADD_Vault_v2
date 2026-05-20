@@ -26,25 +26,28 @@ dist-ssr
 
 *adminsdk*.json
 .env*
-node_modules/
 .roo/
 .serena/
 transformed_packages.csv
-supabase/
+# Track supabase/migrations/ and supabase/config.toml (DB source of truth);
+# ignore only local/generated Supabase CLI artifacts.
+supabase/.branches/
+supabase/.temp/
+supabase/.env
 schema.sql
 cadd_vault_suggestions_2025-05-20T23-07-31-371Z.csv
-cadd-vault-backend-scripts/__pycache__/models.cpython-310.pyc
-cadd-vault-backend-scripts/__pycache__/services.cpython-310.pyc
-cadd-vault-backend-scripts/__pycache__/test_integration.cpython-310-pytest-8.3.5.pyc
-cadd-vault-backend-scripts/__pycache__/test_runner.cpython-310-pytest-8.3.5.pyc
-cadd-vault-backend-scripts/__pycache__/tests_integration.cpython-310-pytest-8.3.5.pyc
-cadd-vault-backend-scripts/__pycache__/update_database.cpython-310.pyc
+
+# Database dumps & backups — never commit (contain auth.users emails + hashes)
+*.dump
+*.backup
+*.sql.gz
+local_db_backup_*
+packages_backup_*.sql
+# Python bytecode cache
+__pycache__/
+*.pyc
 cadd-vault-backend-scripts/*.csv
-cadd-vault-backend-scripts/tests/__pycache__/test_all.cpython-310-pytest-8.3.5.pyc
 Optimizing Supabase for a Data-Inte.txt
-__pycache__/simple_package_test.cpython-310-pytest-8.3.5.pyc
-__pycache__/test_package_fetch.cpython-310-pytest-8.3.5.pyc
-cadd-vault-backend-scripts/tests/__pycache__/test_database_connection.cpython-310-pytest-8.3.5.pyc
 CLAUDE.md
 supabase-backup/auth_and_storage_schema.sql
 supabase-backup/data.sql
@@ -52,6 +55,46 @@ supabase-backup/roles.sql
 Refactoring_Guide.md
 React_Query_Implementation_Guide.md
 GEMINI.md
-cadd-vault-backend-scripts/__pycache__/test_integration.cpython-310-pytest-6.2.5.pyc
-cadd-vault-backend-scripts/tests/__pycache__/test_all.cpython-310-pytest-6.2.5.pyc
 React_Virtual_Guide.md
+supabase-backup/cgilfqosnuwdmstrluzd.storage.zip
+supabase-backup/db_cluster-17-09-2025@00-27-39.backup.gz
+supabase-backup/restore-local.sh
+
+# --- Test & coverage artifacts ---
+coverage/
+htmlcov/
+.nyc_output/
+*.lcov
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+report.html
+
+# --- Python tooling caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+.eggs/
+build/
+
+# --- Python virtual environments ---
+venv/
+.venv/
+
+# --- Build & bundler caches ---
+*.tsbuildinfo
+.vite/
+.cache/
+.turbo/
+
+# --- OS files ---
+Thumbs.db
+Desktop.ini
+AGENTS.md
+EXPLANATION.md
